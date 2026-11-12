@@ -35,6 +35,14 @@ jobs:
         run: python3 -m unittest discover -s hack -p 'test_*.py'
       - name: Linux build and embedded module list
         run: bash hack/build.sh
+      - name: Verify executable version (release tags must match)
+        shell: bash
+        run: |
+          args=()
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            args=(--tag "$GITHUB_REF_NAME")
+          fi
+          python3 hack/check_version.py dist/sw "${args[@]}"
       - name: Verify bundled third-party notices against the binary
         run: python3 hack/notices.py
       - name: Refuse Kubernetes imports and linked modules

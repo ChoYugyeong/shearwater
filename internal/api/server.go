@@ -19,10 +19,16 @@ import (
 	"shearwater/internal/store"
 )
 
-// Version is the Shearwater version. GitVersion is what kubectl sees: the
-// Kubernetes API level we follow, with our own version as build metadata.
+// Version is the product release version, without the Git tag's leading "v".
+// This is the single source for CLI/help, server logs and Kubernetes metadata.
+// Bump it before a release; hack/check_version.py compares the built executable
+// with the intended tag so an old value cannot silently ship under a new tag.
+//
+// GitVersion starts with the Kubernetes API level, not the product version:
+// kubectl uses that prefix for compatibility checks. Our product version belongs
+// in build metadata; releasing Shearwater does not change the API level.
 const (
-	Version    = "0.0.1"
+	Version    = "0.1.0-alpha.2"
 	GitVersion = "v1.36.0+shearwater." + Version
 )
 

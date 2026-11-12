@@ -97,6 +97,18 @@ func TestAuthAndHealth(t *testing.T) {
 	c.want(c.do("GET", "/nope", ""), 404)
 }
 
+func TestVersionReportsProductAndCompatibility(t *testing.T) {
+	c := newClient(t)
+	r := c.want(c.do("GET", "/version", "", "Authorization", ""), 200)
+	// kubectl must still see Kubernetes 1.36, while operators can identify the
+	// Shearwater release behind that compatible API. This also catches a stale
+	// literal in the HTTP handler after the product version has been bumped.
+	if r.at("major") != "1" || r.at("minor") != "36" ||
+		r.at("gitVersion") != "v1.36.0+shearwater."+Version {
+		t.Fatalf("wrong product/API version: %s", r.raw)
+	}
+}
+
 func TestDiscoveryAndOpenAPI(t *testing.T) {
 	c := newClient(t)
 	if r := c.want(c.do("GET", "/api", ""), 200); r.at("kind") != "APIVersions" {

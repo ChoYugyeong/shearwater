@@ -8,6 +8,10 @@ Shearwater is an experimental single-node container orchestrator with a small Ku
 
 ## 처음 시작하기
 
+Go 없이 시작하려면 [알파 실행 파일 설치 안내](docs/install.md)를 따라 해.
+현재 릴리스는 **v0.1.0-alpha.2**이며, `sw version`도 `0.1.0-alpha.2`를 표시해.
+[릴리스 변경 사항과 버전 검증 방법](docs/releases.md)도 확인할 수 있어.
+
 처음이라면 **[설치부터 HTTP 응답까지 따라 하기](docs/quickstart.md)**를 사용해. Go 1.27.3과 kubectl 1.36.6, containerd·runc·iptables, cgroup v2와 IPv4 전달이 준비된 WSL에서는 다음 순서로 실행해. 기존 Shearwater 인스턴스가 없는 환경을 사용해.
 
 ```bash
