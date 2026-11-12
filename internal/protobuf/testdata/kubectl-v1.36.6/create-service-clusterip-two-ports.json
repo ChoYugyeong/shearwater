@@ -1,0 +1,33 @@
+{
+ "kind": "Service",
+ "apiVersion": "v1",
+ "metadata": {
+  "name": "two",
+  "labels": {
+   "app": "two"
+  }
+ },
+ "spec": {
+  "ports": [
+   {
+    "name": "80-8080",
+    "protocol": "TCP",
+    "port": 80,
+    "targetPort": 8080
+   },
+   {
+    "name": "443-https",
+    "protocol": "TCP",
+    "port": 443,
+    "targetPort": "https"
+   }
+  ],
+  "selector": {
+   "app": "two"
+  },
+  "type": "ClusterIP"
+ },
+ "status": {
+  "loadBalancer": {}
+ }
+}

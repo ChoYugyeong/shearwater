@@ -1,0 +1,26 @@
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+    "name": "m1-warning",
+    "labels": {
+      "app": "m1"
+    }
+  },
+  "spec": {
+    "containers": [
+      {
+        "name": "main",
+        "image": "nginx:1.27",
+        "livenessProbe": {
+          "exec": {
+            "command": [
+              "true"
+            ]
+          },
+          "periodSeconds": 10
+        }
+      }
+    ]
+  }
+}

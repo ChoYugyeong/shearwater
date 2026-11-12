@@ -1,0 +1,36 @@
+{
+ "kind": "Deployment",
+ "apiVersion": "apps/v1",
+ "metadata": {
+  "name": "web",
+  "labels": {
+   "app": "web"
+  }
+ },
+ "spec": {
+  "replicas": 1,
+  "selector": {
+   "matchLabels": {
+    "app": "web"
+   }
+  },
+  "template": {
+   "metadata": {
+    "labels": {
+     "app": "web"
+    }
+   },
+   "spec": {
+    "containers": [
+     {
+      "name": "nginx",
+      "image": "nginx:1.27",
+      "resources": {}
+     }
+    ]
+   }
+  },
+  "strategy": {}
+ },
+ "status": {}
+}

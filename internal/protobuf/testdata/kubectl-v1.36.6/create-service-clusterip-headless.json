@@ -1,0 +1,28 @@
+{
+ "kind": "Service",
+ "apiVersion": "v1",
+ "metadata": {
+  "name": "headless",
+  "labels": {
+   "app": "headless"
+  }
+ },
+ "spec": {
+  "ports": [
+   {
+    "name": "80-80",
+    "protocol": "TCP",
+    "port": 80,
+    "targetPort": 80
+   }
+  ],
+  "selector": {
+   "app": "headless"
+  },
+  "clusterIP": "None",
+  "type": "ClusterIP"
+ },
+ "status": {
+  "loadBalancer": {}
+ }
+}

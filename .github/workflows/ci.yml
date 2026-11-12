@@ -1,0 +1,106 @@
+name: Source checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Untrusted pull requests get read-only source access and no repository secrets.
+permissions:
+  contents: read
+
+concurrency:
+  group: source-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CGO_ENABLED: '0'
+      GOMAXPROCS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+          cache: true
+      - name: Verify dependency checksums
+        run: go mod verify
+      - name: Format, vet and unit tests (includes fake runtime)
+        run: bash hack/t.sh ./...
+      - name: Portable Python checks
+        run: python3 -m unittest discover -s hack -p 'test_*.py'
+      - name: Linux build and embedded module list
+        run: bash hack/build.sh
+      - name: Verify bundled third-party notices against the binary
+        run: python3 hack/notices.py
+      - name: Refuse Kubernetes imports and linked modules
+        shell: bash
+        run: |
+          # The parent containerd module declares dependencies for its CRI
+          # server too. Inspect packages and the actual sw binary, not that
+          # larger module graph, to enforce our client-only build boundary.
+          go list -deps ./cmd/sw > "$RUNNER_TEMP/shearwater-packages.txt"
+          if grep -E '^k8s\.io/' "$RUNNER_TEMP/shearwater-packages.txt"; then
+            echo 'Shearwater must not import k8s.io packages.' >&2
+            exit 1
+          fi
+          go version -m dist/sw > "$RUNNER_TEMP/shearwater-build.txt"
+          if grep -E '^[[:space:]]+dep[[:space:]]+k8s\.io/' "$RUNNER_TEMP/shearwater-build.txt"; then
+            echo 'k8s.io modules must not be linked into Shearwater.' >&2
+            exit 1
+          fi
+      - name: Verify checks did not rewrite tracked source
+        run: git diff --exit-code
+
+  api:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CGO_ENABLED: '0'
+      GOMAXPROCS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.27.3'
+      - name: Fetch the tested kubectl and verify its checksum
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/shearwater-bin"
+          cd "$RUNNER_TEMP/shearwater-bin"
+          curl --fail --silent --show-error --location -o kubectl https://dl.k8s.io/release/v1.36.6/bin/linux/amd64/kubectl
+          curl --fail --silent --show-error --location -o kubectl.sha256 https://dl.k8s.io/release/v1.36.6/bin/linux/amd64/kubectl.sha256
+          echo "$(cat kubectl.sha256)  kubectl" | sha256sum -c -
+          chmod 755 kubectl
+          echo "$RUNNER_TEMP/shearwater-bin" >> "$GITHUB_PATH"
+      - name: API M1 (Linux cases; Windows subset runs separately)
+        run: bash hack/m1-check.sh
+      - name: API M0
+        run: bash hack/m0-check.sh
+
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan reachable Git history with redacted output
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/gitleaks"
+          cd "$RUNNER_TEMP/gitleaks"
+          curl --fail --silent --show-error --location -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tar.gz' | sha256sum -c -
+          tar -xzf gitleaks.tar.gz
+          ./gitleaks git "$GITHUB_WORKSPACE" --log-opts=--all --redact=100 --no-banner
+
+# Privileged runtime tests need an explicitly isolated Linux/WSL environment.
+# They are documented in docs/alpha-release.md; this job does not claim to run them.

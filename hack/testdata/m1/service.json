@@ -1,0 +1,18 @@
+{
+  "apiVersion": "v1",
+  "kind": "Service",
+  "metadata": {
+    "name": "m1-svc"
+  },
+  "spec": {
+    "selector": {
+      "app": "m1"
+    },
+    "ports": [
+      {
+        "port": 80,
+        "targetPort": 80
+      }
+    ]
+  }
+}

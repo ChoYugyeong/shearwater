@@ -1,0 +1,15 @@
+/bin/
+/dist/
+*.db
+*.db-wal
+*.db-shm
+/.env
+# Local credentials and execution evidence are never part of a source release.
+*.pem
+*.key
+admin.token
+kubeconfig
+kubeconfig.*
+__pycache__/
+*.pyc
+/artifacts/

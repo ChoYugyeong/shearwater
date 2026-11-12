@@ -1,0 +1,27 @@
+{
+ "kind": "Service",
+ "apiVersion": "v1",
+ "metadata": {
+  "name": "np",
+  "labels": {
+   "app": "np"
+  }
+ },
+ "spec": {
+  "ports": [
+   {
+    "name": "80-80",
+    "protocol": "TCP",
+    "port": 80,
+    "targetPort": 80
+   }
+  ],
+  "selector": {
+   "app": "np"
+  },
+  "type": "NodePort"
+ },
+ "status": {
+  "loadBalancer": {}
+ }
+}

@@ -1,0 +1,59 @@
+{
+ "comment": "Selector watch transitions (design 5). A watch with a selector decides the event type from whether the object matched before and after the change. 'in' and 'out' are pod states that match / do not match the selector. The same table must hold for every selector.",
+ "transitions": [
+  {"from": "none", "to": "in",   "event": "ADDED",    "object": "after"},
+  {"from": "none", "to": "out",  "event": null},
+  {"from": "out",  "to": "in",   "event": "ADDED",    "object": "after"},
+  {"from": "in",   "to": "in",   "event": "MODIFIED", "object": "after"},
+  {"from": "in",   "to": "out",  "event": "DELETED",  "object": "before, carrying the resourceVersion of this change"},
+  {"from": "out",  "to": "out",  "event": null},
+  {"from": "in",   "to": "none", "event": "DELETED",  "object": "before, carrying the resourceVersion of the delete"},
+  {"from": "out",  "to": "none", "event": null}
+ ],
+ "selectors": [
+  {"name": "label equality",   "query": "labelSelector=app%3Dweb",
+   "in": {"labels": {"app": "web"}}, "out": {"labels": {"app": "other"}}},
+  {"name": "label set",        "query": "labelSelector=app+in+%28web%2Capi%29%2C%21canary",
+   "in": {"labels": {"app": "api"}}, "out": {"labels": {"app": "api", "canary": "1"}}},
+  {"name": "label missing",    "query": "labelSelector=app",
+   "in": {"labels": {"app": "x"}}, "out": {"labels": {}}},
+  {"name": "spec.nodeName",    "query": "fieldSelector=spec.nodeName%3Dn1",
+   "in": {"nodeName": "n1"}, "out": {"nodeName": ""}},
+  {"name": "status.phase",     "query": "fieldSelector=status.phase%3DRunning",
+   "in": {"phase": "Running"}, "out": {"phase": "Pending"}},
+  {"name": "status.phase not", "query": "fieldSelector=status.phase%21%3DRunning",
+   "in": {"phase": "Pending"}, "out": {"phase": "Running"}},
+  {"name": "label and field",  "query": "labelSelector=app%3Dweb&fieldSelector=status.phase%3DRunning",
+   "in": {"labels": {"app": "web"}, "phase": "Running"}, "out": {"labels": {"app": "web"}, "phase": "Pending"}}
+ ],
+ "sequences": [
+  {"name": "through every transition",
+   "steps": [
+    {"do": "create", "state": "out", "event": null},
+    {"do": "update", "state": "out", "event": null},
+    {"do": "update", "state": "in",  "event": "ADDED",    "object": "after"},
+    {"do": "update", "state": "in",  "event": "MODIFIED", "object": "after"},
+    {"do": "update", "state": "out", "event": "DELETED",  "object": "before"},
+    {"do": "update", "state": "in",  "event": "ADDED",    "object": "after"},
+    {"do": "delete",                 "event": "DELETED",  "object": "before"}
+   ]},
+  {"name": "created matching, deleted while not matching",
+   "steps": [
+    {"do": "create", "state": "in",  "event": "ADDED",    "object": "after"},
+    {"do": "update", "state": "out", "event": "DELETED",  "object": "before"},
+    {"do": "delete",                 "event": null}
+   ]}
+ ],
+ "metadataName": {
+  "comment": "metadata.name cannot change, so only none->in, in->in and in->none happen for the named object; every change to another object is out->out.",
+  "query": "fieldSelector=metadata.name%3Dp1",
+  "steps": [
+   {"do": "create", "name": "p2", "event": null},
+   {"do": "create", "name": "p1", "event": "ADDED"},
+   {"do": "update", "name": "p2", "event": null},
+   {"do": "update", "name": "p1", "event": "MODIFIED"},
+   {"do": "delete", "name": "p2", "event": null},
+   {"do": "delete", "name": "p1", "event": "DELETED"}
+  ]
+ }
+}

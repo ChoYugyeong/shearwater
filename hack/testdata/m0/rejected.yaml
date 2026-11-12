@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rejected
+spec:
+  hostNetwork: true
+  containers:
+  - name: main
+    image: nginx:1.27
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: no-image
+spec:
+  containers:
+  - name: main

@@ -1,0 +1,27 @@
+{
+ "kind": "Service",
+ "apiVersion": "v1",
+ "metadata": {
+  "name": "web",
+  "labels": {
+   "app": "web"
+  }
+ },
+ "spec": {
+  "ports": [
+   {
+    "name": "80-8080",
+    "protocol": "TCP",
+    "port": 80,
+    "targetPort": 8080
+   }
+  ],
+  "selector": {
+   "app": "web"
+  },
+  "type": "ClusterIP"
+ },
+ "status": {
+  "loadBalancer": {}
+ }
+}

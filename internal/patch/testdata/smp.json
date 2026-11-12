@@ -1,0 +1,10329 @@
+{
+ "comment": "Strategic merge patch cases (design 3.6). Each case applies patch to a base (or its own original). expected/error come from Kubernetes itself (see source). A case with oursError is one Shearwater refuses on purpose.",
+ "source": "expected/error produced on 2026-11-10 by k8s.io/apimachinery v0.36.6 strategicpatch.StrategicMergePatch, with panics reported as errors. The generator (a separate Go module, never part of sw) was removed from the repository on 2026-11-11; it is in git history as hack/oracle at commit 483e994. Do not edit expected/error by hand: a new case needs its answer from Kubernetes",
+ "bases": {
+  "deploy": {
+   "apiVersion": "apps/v1",
+   "kind": "Deployment",
+   "metadata": {
+    "name": "web",
+    "namespace": "default",
+    "labels": {
+     "app": "web",
+     "tier": "front"
+    },
+    "annotations": {
+     "note": "x"
+    },
+    "finalizers": [
+     "example.com/a",
+     "example.com/b"
+    ],
+    "ownerReferences": [
+     {
+      "apiVersion": "v1",
+      "kind": "Thing",
+      "name": "t1",
+      "uid": "u1"
+     },
+     {
+      "apiVersion": "v1",
+      "kind": "Thing",
+      "name": "t2",
+      "uid": "u2"
+     }
+    ]
+   },
+   "spec": {
+    "replicas": 2,
+    "selector": {
+     "matchLabels": {
+      "app": "web"
+     }
+    },
+    "strategy": {
+     "type": "RollingUpdate",
+     "rollingUpdate": {
+      "maxSurge": "25%",
+      "maxUnavailable": "25%"
+     }
+    },
+    "template": {
+     "metadata": {
+      "labels": {
+       "app": "web"
+      }
+     },
+     "spec": {
+      "containers": [
+       {
+        "name": "a",
+        "image": "a:1",
+        "command": [
+         "run",
+         "--fast"
+        ],
+        "env": [
+         {
+          "name": "X",
+          "value": "1"
+         },
+         {
+          "name": "Y",
+          "value": "2"
+         },
+         {
+          "name": "Z",
+          "value": "3"
+         }
+        ],
+        "ports": [
+         {
+          "containerPort": 80,
+          "protocol": "TCP"
+         },
+         {
+          "containerPort": 443,
+          "protocol": "TCP"
+         }
+        ],
+        "volumeMounts": [
+         {
+          "name": "data",
+          "mountPath": "/data"
+         },
+         {
+          "name": "tmp",
+          "mountPath": "/tmp"
+         }
+        ],
+        "resources": {
+         "limits": {
+          "cpu": "500m"
+         }
+        },
+        "livenessProbe": {
+         "httpGet": {
+          "path": "/healthz",
+          "port": 80
+         },
+         "periodSeconds": 10
+        }
+       },
+       {
+        "name": "b",
+        "image": "b:1",
+        "resources": {}
+       },
+       {
+        "name": "c",
+        "image": "c:1",
+        "resources": {}
+       }
+      ],
+      "volumes": [
+       {
+        "name": "data",
+        "hostPath": {
+         "path": "/srv/data"
+        }
+       },
+       {
+        "name": "tmp",
+        "emptyDir": {}
+       }
+      ],
+      "tolerations": [
+       {
+        "key": "k1",
+        "operator": "Exists"
+       }
+      ],
+      "nodeSelector": {
+       "disk": "ssd"
+      },
+      "restartPolicy": "Always"
+     }
+    }
+   },
+   "status": {
+    "replicas": 2,
+    "conditions": [
+     {
+      "type": "Available",
+      "status": "True",
+      "reason": "MinimumReplicasAvailable"
+     },
+     {
+      "type": "Progressing",
+      "status": "True",
+      "reason": "NewReplicaSetAvailable"
+     }
+    ]
+   }
+  },
+  "pod": {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "solo",
+    "namespace": "default",
+    "labels": {
+     "app": "solo"
+    }
+   },
+   "spec": {
+    "containers": [
+     {
+      "name": "main",
+      "image": "nginx:1.27",
+      "args": [
+       "-g",
+       "daemon off;"
+      ],
+      "env": [
+       {
+        "name": "MODE",
+        "value": "test"
+       }
+      ],
+      "resources": {}
+     }
+    ],
+    "restartPolicy": "Always"
+   },
+   "status": {
+    "phase": "Running",
+    "conditions": [
+     {
+      "type": "Ready",
+      "status": "True"
+     },
+     {
+      "type": "PodScheduled",
+      "status": "True"
+     }
+    ]
+   }
+  },
+  "svc": {
+   "apiVersion": "v1",
+   "kind": "Service",
+   "metadata": {
+    "name": "web",
+    "namespace": "default"
+   },
+   "spec": {
+    "type": "ClusterIP",
+    "selector": {
+     "app": "web",
+     "tier": "front"
+    },
+    "ports": [
+     {
+      "name": "http",
+      "port": 80,
+      "protocol": "TCP",
+      "targetPort": 8080
+     },
+     {
+      "name": "https",
+      "port": 443,
+      "protocol": "TCP",
+      "targetPort": "tls"
+     }
+    ]
+   }
+  }
+ },
+ "cases": [
+  {
+   "name": "scalar: set replicas",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "replicas": 5
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 5,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "scalar: null deletes the field",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "replicas": null
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "scalar: null for a field that is not there",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "paused": null
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "empty patch changes nothing",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {},
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "map: add and remove label keys",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "labels": {
+      "tier": null,
+      "env": "prod"
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "env": "prod"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "map: null removes the whole map",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "annotations": null
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "map: empty object changes nothing",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "labels": {}
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "map: $patch replace swaps the map",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "labels": {
+      "$patch": "replace",
+      "only": "this"
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "only": "this"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "map: $patch delete removes the object",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "strategy": {
+      "$patch": "delete"
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {},
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "map: nested object merges key by key",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": 1
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": 1,
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "map: new nested object is created",
+   "kind": "Pod",
+   "base": "pod",
+   "patch": {
+    "metadata": {
+     "annotations": {
+      "a": "1"
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "annotations": {
+      "a": "1"
+     },
+     "labels": {
+      "app": "solo"
+     },
+     "name": "solo",
+     "namespace": "default"
+    },
+    "spec": {
+     "containers": [
+      {
+       "args": [
+        "-g",
+        "daemon off;"
+       ],
+       "env": [
+        {
+         "name": "MODE",
+         "value": "test"
+        }
+       ],
+       "image": "nginx:1.27",
+       "name": "main",
+       "resources": {}
+      }
+     ],
+     "restartPolicy": "Always"
+    },
+    "status": {
+     "conditions": [
+      {
+       "status": "True",
+       "type": "Ready"
+      },
+      {
+       "status": "True",
+       "type": "PodScheduled"
+      }
+     ],
+     "phase": "Running"
+    }
+   }
+  },
+  {
+   "name": "list by key: change one container image",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "b",
+         "image": "b:2"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:2",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "list by key: add a container (appended)",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "d",
+         "image": "d:1"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "image": "d:1",
+         "name": "d"
+        },
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "list by key: $patch delete removes one container",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "b",
+         "$patch": "delete"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "list by key: delete an element that is not there",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "zz",
+         "$patch": "delete"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "list by key: null removes the whole list",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "volumes": null
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "list by key: empty list changes nothing",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": []
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "list by key: $patch replace swaps the list",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "$patch": "replace"
+        },
+        {
+         "name": "only",
+         "image": "only:1"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "image": "only:1",
+         "name": "only"
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "list by key: element without the merge key is an error",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "image": "x:1"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "error": "map: map[image:x:1] does not contain declared merge key: name"
+  },
+  {
+   "name": "list by key: same key twice in the patch",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "b",
+         "image": "b:2"
+        },
+        {
+         "name": "b",
+         "image": "b:3"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:3",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "list by key: same key twice in the original",
+   "kind": "Pod",
+   "original": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "name": "dup"
+    },
+    "spec": {
+     "containers": [
+      {
+       "name": "x",
+       "image": "x:1"
+      },
+      {
+       "name": "x",
+       "image": "x:2"
+      },
+      {
+       "name": "y",
+       "image": "y:1"
+      }
+     ]
+    }
+   },
+   "patch": {
+    "spec": {
+     "containers": [
+      {
+       "name": "x",
+       "image": "x:9"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "name": "dup"
+    },
+    "spec": {
+     "containers": [
+      {
+       "image": "x:9",
+       "name": "x"
+      },
+      {
+       "image": "x:2",
+       "name": "x"
+      },
+      {
+       "image": "y:1",
+       "name": "y"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "name": "apply: add, delete and reorder containers in one patch",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "$setElementOrder/containers": [
+        {
+         "name": "c"
+        },
+        {
+         "name": "d"
+        },
+        {
+         "name": "a"
+        }
+       ],
+       "containers": [
+        {
+         "name": "d",
+         "image": "d:1"
+        },
+        {
+         "name": "b",
+         "$patch": "delete"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        },
+        {
+         "image": "d:1",
+         "name": "d"
+        },
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "apply: reorder only",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "$setElementOrder/containers": [
+        {
+         "name": "c"
+        },
+        {
+         "name": "b"
+        },
+        {
+         "name": "a"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "apply: element added by someone else keeps its place relative to the rest",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "$setElementOrder/containers": [
+        {
+         "name": "c"
+        },
+        {
+         "name": "a"
+        }
+       ],
+       "containers": [
+        {
+         "name": "a",
+         "image": "a:2"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        },
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:2",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "apply: setElementOrder does not delete what it leaves out",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "$setElementOrder/containers": [
+        {
+         "name": "a"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "apply: setElementOrder names an element that exists nowhere",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "$setElementOrder/containers": [
+        {
+         "name": "a"
+        },
+        {
+         "name": "ghost"
+        },
+        {
+         "name": "b"
+        },
+        {
+         "name": "c"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "apply: patch element missing from setElementOrder is an error",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "$setElementOrder/containers": [
+        {
+         "name": "a"
+        },
+        {
+         "name": "b"
+        },
+        {
+         "name": "c"
+        }
+       ],
+       "containers": [
+        {
+         "name": "d",
+         "image": "d:1"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "error": "The order in patch list:\n[map[image:d:1 name:d]]\n doesn't match $setElementOrder list:\n[map[name:a] map[name:b] map[name:c]]\n"
+  },
+  {
+   "name": "apply: env delete and reorder inside one container",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "$setElementOrder/containers": [
+        {
+         "name": "a"
+        },
+        {
+         "name": "b"
+        },
+        {
+         "name": "c"
+        }
+       ],
+       "containers": [
+        {
+         "name": "a",
+         "$setElementOrder/env": [
+          {
+           "name": "Z"
+          },
+          {
+           "name": "X"
+          },
+          {
+           "name": "W"
+          }
+         ],
+         "env": [
+          {
+           "name": "W",
+           "value": "9"
+          },
+          {
+           "name": "Y",
+           "$patch": "delete"
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "Z",
+           "value": "3"
+          },
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "W",
+           "value": "9"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "apply: image change plus env removal (the shape kubectl sent in the trace)",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{}"
+     }
+    },
+    "spec": {
+     "template": {
+      "spec": {
+       "$setElementOrder/containers": [
+        {
+         "name": "a"
+        },
+        {
+         "name": "b"
+        },
+        {
+         "name": "c"
+        }
+       ],
+       "containers": [
+        {
+         "$setElementOrder/env": [
+          {
+           "name": "X"
+          },
+          {
+           "name": "Z"
+          }
+         ],
+         "env": [
+          {
+           "$patch": "delete",
+           "name": "Y"
+          }
+         ],
+         "image": "a:2",
+         "name": "a"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "kubectl.kubernetes.io/last-applied-configuration": "{}",
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:2",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "env: change a value",
+   "kind": "Pod",
+   "base": "pod",
+   "patch": {
+    "spec": {
+     "containers": [
+      {
+       "name": "main",
+       "env": [
+        {
+         "name": "MODE",
+         "value": "prod"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "labels": {
+      "app": "solo"
+     },
+     "name": "solo",
+     "namespace": "default"
+    },
+    "spec": {
+     "containers": [
+      {
+       "args": [
+        "-g",
+        "daemon off;"
+       ],
+       "env": [
+        {
+         "name": "MODE",
+         "value": "prod"
+        }
+       ],
+       "image": "nginx:1.27",
+       "name": "main",
+       "resources": {}
+      }
+     ],
+     "restartPolicy": "Always"
+    },
+    "status": {
+     "conditions": [
+      {
+       "status": "True",
+       "type": "Ready"
+      },
+      {
+       "status": "True",
+       "type": "PodScheduled"
+      }
+     ],
+     "phase": "Running"
+    }
+   }
+  },
+  {
+   "name": "env: null removes all variables of one container",
+   "kind": "Pod",
+   "base": "pod",
+   "patch": {
+    "spec": {
+     "containers": [
+      {
+       "name": "main",
+       "env": null
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "labels": {
+      "app": "solo"
+     },
+     "name": "solo",
+     "namespace": "default"
+    },
+    "spec": {
+     "containers": [
+      {
+       "args": [
+        "-g",
+        "daemon off;"
+       ],
+       "image": "nginx:1.27",
+       "name": "main",
+       "resources": {}
+      }
+     ],
+     "restartPolicy": "Always"
+    },
+    "status": {
+     "conditions": [
+      {
+       "status": "True",
+       "type": "Ready"
+      },
+      {
+       "status": "True",
+       "type": "PodScheduled"
+      }
+     ],
+     "phase": "Running"
+    }
+   }
+  },
+  {
+   "name": "env: value null leaves the variable with no value",
+   "kind": "Pod",
+   "base": "pod",
+   "patch": {
+    "spec": {
+     "containers": [
+      {
+       "name": "main",
+       "env": [
+        {
+         "name": "MODE",
+         "value": null
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "labels": {
+      "app": "solo"
+     },
+     "name": "solo",
+     "namespace": "default"
+    },
+    "spec": {
+     "containers": [
+      {
+       "args": [
+        "-g",
+        "daemon off;"
+       ],
+       "env": [
+        {
+         "name": "MODE"
+        }
+       ],
+       "image": "nginx:1.27",
+       "name": "main",
+       "resources": {}
+      }
+     ],
+     "restartPolicy": "Always"
+    },
+    "status": {
+     "conditions": [
+      {
+       "status": "True",
+       "type": "Ready"
+      },
+      {
+       "status": "True",
+       "type": "PodScheduled"
+      }
+     ],
+     "phase": "Running"
+    }
+   }
+  },
+  {
+   "name": "ports: merge key is containerPort",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 443,
+           "name": "tls"
+          },
+          {
+           "containerPort": 8080
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "name": "tls",
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 8080
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "ports: delete by containerPort",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "$patch": "delete"
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "volumeMounts: merge key is mountPath",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "a",
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "readOnly": true
+          },
+          {
+           "mountPath": "/extra",
+           "name": "tmp"
+          }
+         ]
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data",
+           "readOnly": true
+          },
+          {
+           "mountPath": "/extra",
+           "name": "tmp"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "primitive list: command is replaced whole",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "a",
+         "command": [
+          "run"
+         ]
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "primitive list: empty command",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "a",
+         "command": []
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "primitive list: args replaced on a pod",
+   "kind": "Pod",
+   "base": "pod",
+   "patch": {
+    "spec": {
+     "containers": [
+      {
+       "name": "main",
+       "args": [
+        "-t"
+       ]
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "labels": {
+      "app": "solo"
+     },
+     "name": "solo",
+     "namespace": "default"
+    },
+    "spec": {
+     "containers": [
+      {
+       "args": [
+        "-t"
+       ],
+       "env": [
+        {
+         "name": "MODE",
+         "value": "test"
+        }
+       ],
+       "image": "nginx:1.27",
+       "name": "main",
+       "resources": {}
+      }
+     ],
+     "restartPolicy": "Always"
+    },
+    "status": {
+     "conditions": [
+      {
+       "status": "True",
+       "type": "Ready"
+      },
+      {
+       "status": "True",
+       "type": "PodScheduled"
+      }
+     ],
+     "phase": "Running"
+    }
+   }
+  },
+  {
+   "name": "object list without a merge key: tolerations are replaced whole",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "tolerations": [
+        {
+         "key": "k2",
+         "operator": "Exists"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k2",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "stored-only object: probe merges key by key",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "a",
+         "livenessProbe": {
+          "periodSeconds": 30,
+          "httpGet": {
+           "path": "/live"
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/live",
+           "port": 80
+          },
+          "periodSeconds": 30
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "resources: limits is a map",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "a",
+         "resources": {
+          "limits": {
+           "memory": "64Mi",
+           "cpu": null
+          }
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "memory": "64Mi"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "volumes: merge key is name",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "volumes": [
+        {
+         "name": "data",
+         "hostPath": {
+          "path": "/srv/other"
+         }
+        },
+        {
+         "name": "cache",
+         "emptyDir": {}
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/other"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "cache"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "volumes: retainKeys swaps the volume source",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "$setElementOrder/volumes": [
+        {
+         "name": "data"
+        },
+        {
+         "name": "tmp"
+        }
+       ],
+       "volumes": [
+        {
+         "$retainKeys": [
+          "hostPath",
+          "name"
+         ],
+         "hostPath": {
+          "path": "/var/tmp"
+         },
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "hostPath": {
+          "path": "/var/tmp"
+         },
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "volumes: without retainKeys both sources remain",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "volumes": [
+        {
+         "name": "tmp",
+         "hostPath": {
+          "path": "/var/tmp"
+         }
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "hostPath": {
+          "path": "/var/tmp"
+         },
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "volumes: retainKeys must list every key in the patch",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "volumes": [
+        {
+         "$retainKeys": [
+          "name"
+         ],
+         "hostPath": {
+          "path": "/var/tmp"
+         },
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "error": "invalid patch format of retainKeys"
+  },
+  {
+   "name": "strategy: retainKeys drops rollingUpdate when the type changes",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "strategy": {
+      "$retainKeys": [
+       "type"
+      ],
+      "type": "Recreate"
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "type": "Recreate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "strategy: without retainKeys rollingUpdate stays",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "strategy": {
+      "type": "Recreate"
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "Recreate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "strategy: retainKeys with a rollingUpdate change",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "strategy": {
+      "$retainKeys": [
+       "rollingUpdate",
+       "type"
+      ],
+      "rollingUpdate": {
+       "maxSurge": "50%"
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "50%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "strategy: retainKeys on a field that does not declare it",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "selector": {
+      "$retainKeys": [
+       "matchLabels"
+      ],
+      "matchLabels": {
+       "app": "web"
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "finalizers: plain list merges (adds the missing one)",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "finalizers": [
+      "example.com/c",
+      "example.com/a"
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/c",
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "finalizers: deleteFromPrimitiveList removes one",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "$deleteFromPrimitiveList/finalizers": [
+      "example.com/a"
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "finalizers: delete one, add one, set the order",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "$deleteFromPrimitiveList/finalizers": [
+      "example.com/a"
+     ],
+     "$setElementOrder/finalizers": [
+      "example.com/c",
+      "example.com/b"
+     ],
+     "finalizers": [
+      "example.com/c"
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/c",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "finalizers: null removes them all",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "finalizers": null
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "finalizers: deleteFromPrimitiveList of a value that is not there",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "$deleteFromPrimitiveList/finalizers": [
+      "example.com/zz"
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "deleteFromPrimitiveList on a list that is replaced whole",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "a",
+         "$deleteFromPrimitiveList/command": [
+          "--fast"
+         ]
+        }
+       ]
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "ownerReferences: merge key is uid",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "metadata": {
+     "ownerReferences": [
+      {
+       "uid": "u2",
+       "$patch": "delete"
+      },
+      {
+       "uid": "u3",
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t3"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t3",
+       "uid": "u3"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "conditions: merge key is type",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "status": {
+     "conditions": [
+      {
+       "type": "Progressing",
+       "status": "False",
+       "reason": "ProgressDeadlineExceeded"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "ProgressDeadlineExceeded",
+       "status": "False",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "pod conditions: merge key is type",
+   "kind": "Pod",
+   "base": "pod",
+   "patch": {
+    "status": {
+     "conditions": [
+      {
+       "type": "Ready",
+       "status": "False"
+      },
+      {
+       "type": "ContainersReady",
+       "status": "False"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "labels": {
+      "app": "solo"
+     },
+     "name": "solo",
+     "namespace": "default"
+    },
+    "spec": {
+     "containers": [
+      {
+       "args": [
+        "-g",
+        "daemon off;"
+       ],
+       "env": [
+        {
+         "name": "MODE",
+         "value": "test"
+        }
+       ],
+       "image": "nginx:1.27",
+       "name": "main",
+       "resources": {}
+      }
+     ],
+     "restartPolicy": "Always"
+    },
+    "status": {
+     "conditions": [
+      {
+       "status": "False",
+       "type": "Ready"
+      },
+      {
+       "status": "False",
+       "type": "ContainersReady"
+      },
+      {
+       "status": "True",
+       "type": "PodScheduled"
+      }
+     ],
+     "phase": "Running"
+    }
+   }
+  },
+  {
+   "name": "service ports: merge key is port",
+   "kind": "Service",
+   "base": "svc",
+   "patch": {
+    "spec": {
+     "ports": [
+      {
+       "port": 80,
+       "targetPort": 9090
+      },
+      {
+       "port": 8443,
+       "name": "alt",
+       "targetPort": 8443
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": {
+     "name": "web",
+     "namespace": "default"
+    },
+    "spec": {
+     "ports": [
+      {
+       "name": "http",
+       "port": 80,
+       "protocol": "TCP",
+       "targetPort": 9090
+      },
+      {
+       "name": "alt",
+       "port": 8443,
+       "targetPort": 8443
+      },
+      {
+       "name": "https",
+       "port": 443,
+       "protocol": "TCP",
+       "targetPort": "tls"
+      }
+     ],
+     "selector": {
+      "app": "web",
+      "tier": "front"
+     },
+     "type": "ClusterIP"
+    }
+   }
+  },
+  {
+   "name": "service ports: delete and reorder",
+   "kind": "Service",
+   "base": "svc",
+   "patch": {
+    "spec": {
+     "$setElementOrder/ports": [
+      {
+       "port": 8443
+      },
+      {
+       "port": 80
+      }
+     ],
+     "ports": [
+      {
+       "port": 8443,
+       "name": "alt",
+       "protocol": "TCP",
+       "targetPort": 8443
+      },
+      {
+       "port": 443,
+       "$patch": "delete"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": {
+     "name": "web",
+     "namespace": "default"
+    },
+    "spec": {
+     "ports": [
+      {
+       "name": "alt",
+       "port": 8443,
+       "protocol": "TCP",
+       "targetPort": 8443
+      },
+      {
+       "name": "http",
+       "port": 80,
+       "protocol": "TCP",
+       "targetPort": 8080
+      }
+     ],
+     "selector": {
+      "app": "web",
+      "tier": "front"
+     },
+     "type": "ClusterIP"
+    }
+   }
+  },
+  {
+   "name": "service selector: a map, keys merge",
+   "kind": "Service",
+   "base": "svc",
+   "patch": {
+    "spec": {
+     "selector": {
+      "tier": null,
+      "version": "v2"
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": {
+     "name": "web",
+     "namespace": "default"
+    },
+    "spec": {
+     "ports": [
+      {
+       "name": "http",
+       "port": 80,
+       "protocol": "TCP",
+       "targetPort": 8080
+      },
+      {
+       "name": "https",
+       "port": 443,
+       "protocol": "TCP",
+       "targetPort": "tls"
+      }
+     ],
+     "selector": {
+      "app": "web",
+      "version": "v2"
+     },
+     "type": "ClusterIP"
+    }
+   }
+  },
+  {
+   "name": "directive: unknown $patch value",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "strategy": {
+      "$patch": "merge",
+      "type": "Recreate"
+     }
+    }
+   },
+   "error": "unknown patch type: merge in map: map[$patch:merge type:Recreate]"
+  },
+  {
+   "name": "directive: unknown $patch value inside a list",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": [
+        {
+         "name": "a",
+         "$patch": "merge",
+         "image": "a:2"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "error": "merging lists cannot yet be specified in the patch"
+  },
+  {
+   "name": "directive: unknown $ key",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "$unknown/replicas": 3
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "$unknown/replicas": 3,
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   },
+   "oursError": true,
+   "why": "Kubernetes stores the key as a field and the typed decode drops it; Shearwater refuses an unknown directive (design 3.6)"
+  },
+  {
+   "name": "type mismatch: object where a list is",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "containers": {
+        "name": "a"
+       }
+      }
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": {
+        "name": "a"
+       },
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "type mismatch: list where an object is",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": [
+      1
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": [
+      1
+     ]
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "field the schema does not know",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "notAField": {
+      "x": 1
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "apps/v1",
+    "kind": "Deployment",
+    "metadata": {
+     "annotations": {
+      "note": "x"
+     },
+     "finalizers": [
+      "example.com/a",
+      "example.com/b"
+     ],
+     "labels": {
+      "app": "web",
+      "tier": "front"
+     },
+     "name": "web",
+     "namespace": "default",
+     "ownerReferences": [
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t1",
+       "uid": "u1"
+      },
+      {
+       "apiVersion": "v1",
+       "kind": "Thing",
+       "name": "t2",
+       "uid": "u2"
+      }
+     ]
+    },
+    "spec": {
+     "notAField": {
+      "x": 1
+     },
+     "replicas": 2,
+     "selector": {
+      "matchLabels": {
+       "app": "web"
+      }
+     },
+     "strategy": {
+      "rollingUpdate": {
+       "maxSurge": "25%",
+       "maxUnavailable": "25%"
+      },
+      "type": "RollingUpdate"
+     },
+     "template": {
+      "metadata": {
+       "labels": {
+        "app": "web"
+       }
+      },
+      "spec": {
+       "containers": [
+        {
+         "command": [
+          "run",
+          "--fast"
+         ],
+         "env": [
+          {
+           "name": "X",
+           "value": "1"
+          },
+          {
+           "name": "Y",
+           "value": "2"
+          },
+          {
+           "name": "Z",
+           "value": "3"
+          }
+         ],
+         "image": "a:1",
+         "livenessProbe": {
+          "httpGet": {
+           "path": "/healthz",
+           "port": 80
+          },
+          "periodSeconds": 10
+         },
+         "name": "a",
+         "ports": [
+          {
+           "containerPort": 80,
+           "protocol": "TCP"
+          },
+          {
+           "containerPort": 443,
+           "protocol": "TCP"
+          }
+         ],
+         "resources": {
+          "limits": {
+           "cpu": "500m"
+          }
+         },
+         "volumeMounts": [
+          {
+           "mountPath": "/data",
+           "name": "data"
+          },
+          {
+           "mountPath": "/tmp",
+           "name": "tmp"
+          }
+         ]
+        },
+        {
+         "image": "b:1",
+         "name": "b",
+         "resources": {}
+        },
+        {
+         "image": "c:1",
+         "name": "c",
+         "resources": {}
+        }
+       ],
+       "nodeSelector": {
+        "disk": "ssd"
+       },
+       "restartPolicy": "Always",
+       "tolerations": [
+        {
+         "key": "k1",
+         "operator": "Exists"
+        }
+       ],
+       "volumes": [
+        {
+         "hostPath": {
+          "path": "/srv/data"
+         },
+         "name": "data"
+        },
+        {
+         "emptyDir": {},
+         "name": "tmp"
+        }
+       ]
+      }
+     }
+    },
+    "status": {
+     "conditions": [
+      {
+       "reason": "MinimumReplicasAvailable",
+       "status": "True",
+       "type": "Available"
+      },
+      {
+       "reason": "NewReplicaSetAvailable",
+       "status": "True",
+       "type": "Progressing"
+      }
+     ],
+     "replicas": 2
+    }
+   }
+  },
+  {
+   "name": "setElementOrder for a list that is not a merge list",
+   "kind": "Deployment",
+   "base": "deploy",
+   "patch": {
+    "spec": {
+     "template": {
+      "spec": {
+       "$setElementOrder/tolerations": [
+        {
+         "key": "k1"
+        }
+       ]
+      }
+     }
+    }
+   },
+   "error": "panic: runtime error: hash of unhashable type map[string]interface {}",
+   "oursError": true,
+   "why": "the library panics here; Shearwater answers with an error instead"
+  },
+  {
+   "name": "new list: delete directives are dropped when the list is not there yet",
+   "kind": "Pod",
+   "base": "pod",
+   "patch": {
+    "spec": {
+     "volumes": [
+      {
+       "name": "v",
+       "emptyDir": {}
+      },
+      {
+       "name": "w",
+       "$patch": "delete"
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "labels": {
+      "app": "solo"
+     },
+     "name": "solo",
+     "namespace": "default"
+    },
+    "spec": {
+     "containers": [
+      {
+       "args": [
+        "-g",
+        "daemon off;"
+       ],
+       "env": [
+        {
+         "name": "MODE",
+         "value": "test"
+        }
+       ],
+       "image": "nginx:1.27",
+       "name": "main",
+       "resources": {}
+      }
+     ],
+     "restartPolicy": "Always",
+     "volumes": [
+      {
+       "emptyDir": {},
+       "name": "v"
+      }
+     ]
+    },
+    "status": {
+     "conditions": [
+      {
+       "status": "True",
+       "type": "Ready"
+      },
+      {
+       "status": "True",
+       "type": "PodScheduled"
+      }
+     ],
+     "phase": "Running"
+    }
+   }
+  },
+  {
+   "name": "new map: nulls inside are dropped",
+   "kind": "Pod",
+   "base": "pod",
+   "patch": {
+    "metadata": {
+     "annotations": {
+      "a": "1",
+      "b": null
+     }
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "annotations": {
+      "a": "1"
+     },
+     "labels": {
+      "app": "solo"
+     },
+     "name": "solo",
+     "namespace": "default"
+    },
+    "spec": {
+     "containers": [
+      {
+       "args": [
+        "-g",
+        "daemon off;"
+       ],
+       "env": [
+        {
+         "name": "MODE",
+         "value": "test"
+        }
+       ],
+       "image": "nginx:1.27",
+       "name": "main",
+       "resources": {}
+      }
+     ],
+     "restartPolicy": "Always"
+    },
+    "status": {
+     "conditions": [
+      {
+       "status": "True",
+       "type": "Ready"
+      },
+      {
+       "status": "True",
+       "type": "PodScheduled"
+      }
+     ],
+     "phase": "Running"
+    }
+   }
+  },
+  {
+   "name": "list by key: appended element with a null member",
+   "kind": "Pod",
+   "base": "pod",
+   "patch": {
+    "spec": {
+     "containers": [
+      {
+       "name": "side",
+       "image": "side:1",
+       "workingDir": null
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "labels": {
+      "app": "solo"
+     },
+     "name": "solo",
+     "namespace": "default"
+    },
+    "spec": {
+     "containers": [
+      {
+       "image": "side:1",
+       "name": "side",
+       "workingDir": null
+      },
+      {
+       "args": [
+        "-g",
+        "daemon off;"
+       ],
+       "env": [
+        {
+         "name": "MODE",
+         "value": "test"
+        }
+       ],
+       "image": "nginx:1.27",
+       "name": "main",
+       "resources": {}
+      }
+     ],
+     "restartPolicy": "Always"
+    },
+    "status": {
+     "conditions": [
+      {
+       "status": "True",
+       "type": "Ready"
+      },
+      {
+       "status": "True",
+       "type": "PodScheduled"
+      }
+     ],
+     "phase": "Running"
+    }
+   }
+  },
+  {
+   "name": "type change: a string target port replaced by a number",
+   "kind": "Service",
+   "base": "svc",
+   "patch": {
+    "spec": {
+     "ports": [
+      {
+       "port": 443,
+       "targetPort": 8443
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Service",
+    "metadata": {
+     "name": "web",
+     "namespace": "default"
+    },
+    "spec": {
+     "ports": [
+      {
+       "name": "http",
+       "port": 80,
+       "protocol": "TCP",
+       "targetPort": 8080
+      },
+      {
+       "name": "https",
+       "port": 443,
+       "protocol": "TCP",
+       "targetPort": 8443
+      }
+     ],
+     "selector": {
+      "app": "web",
+      "tier": "front"
+     },
+     "type": "ClusterIP"
+    }
+   }
+  },
+  {
+   "name": "apply: setElementOrder for a list the object does not have",
+   "kind": "Pod",
+   "base": "pod",
+   "patch": {
+    "spec": {
+     "$setElementOrder/volumes": [
+      {
+       "name": "v"
+      }
+     ],
+     "volumes": [
+      {
+       "name": "v",
+       "emptyDir": {}
+      }
+     ]
+    }
+   },
+   "expected": {
+    "apiVersion": "v1",
+    "kind": "Pod",
+    "metadata": {
+     "labels": {
+      "app": "solo"
+     },
+     "name": "solo",
+     "namespace": "default"
+    },
+    "spec": {
+     "containers": [
+      {
+       "args": [
+        "-g",
+        "daemon off;"
+       ],
+       "env": [
+        {
+         "name": "MODE",
+         "value": "test"
+        }
+       ],
+       "image": "nginx:1.27",
+       "name": "main",
+       "resources": {}
+      }
+     ],
+     "restartPolicy": "Always",
+     "volumes": [
+      {
+       "emptyDir": {},
+       "name": "v"
+      }
+     ]
+    },
+    "status": {
+     "conditions": [
+      {
+       "status": "True",
+       "type": "Ready"
+      },
+      {
+       "status": "True",
+       "type": "PodScheduled"
+      }
+     ],
+     "phase": "Running"
+    }
+   }
+  }
+ ]
+}

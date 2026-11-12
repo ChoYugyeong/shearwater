@@ -1,0 +1,62 @@
+{
+ "kind": "Pod",
+ "apiVersion": "v1",
+ "metadata": {
+  "name": "solo-copy",
+  "namespace": "default",
+  "labels": {
+   "app": "solo"
+  }
+ },
+ "spec": {
+  "volumes": [
+   {
+    "name": "scratch",
+    "emptyDir": {}
+   }
+  ],
+  "containers": [
+   {
+    "name": "main",
+    "image": "nginx:1.28",
+    "command": [
+     "nginx",
+     "-g",
+     "daemon off;"
+    ],
+    "ports": [
+     {
+      "containerPort": 80,
+      "protocol": "TCP"
+     }
+    ],
+    "env": [
+     {
+      "name": "MODE",
+      "value": "test"
+     },
+     {
+      "name": "EMPTY"
+     }
+    ],
+    "resources": {
+     "limits": {
+      "cpu": "500m",
+      "memory": "64Mi"
+     }
+    },
+    "volumeMounts": [
+     {
+      "name": "scratch",
+      "mountPath": "/scratch"
+     }
+    ],
+    "imagePullPolicy": "IfNotPresent"
+   }
+  ],
+  "restartPolicy": "Always",
+  "terminationGracePeriodSeconds": 30,
+  "shareProcessNamespace": false
+ },
+ "status": {}
+}

@@ -1,0 +1,18 @@
+{
+  "apiVersion": "v1",
+  "kind": "Pod",
+  "metadata": {
+    "name": "m1-pod",
+    "labels": {
+      "app": "m1"
+    }
+  },
+  "spec": {
+    "containers": [
+      {
+        "name": "main",
+        "image": "nginx:1.27"
+      }
+    ]
+  }
+}

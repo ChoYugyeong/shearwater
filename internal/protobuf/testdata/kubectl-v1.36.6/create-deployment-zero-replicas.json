@@ -1,0 +1,41 @@
+{
+ "kind": "Deployment",
+ "apiVersion": "apps/v1",
+ "metadata": {
+  "name": "zero",
+  "labels": {
+   "app": "zero"
+  }
+ },
+ "spec": {
+  "replicas": 0,
+  "selector": {
+   "matchLabels": {
+    "app": "zero"
+   }
+  },
+  "template": {
+   "metadata": {
+    "labels": {
+     "app": "zero"
+    }
+   },
+   "spec": {
+    "containers": [
+     {
+      "name": "nginx",
+      "image": "nginx:1.27",
+      "ports": [
+       {
+        "containerPort": 8080
+       }
+      ],
+      "resources": {}
+     }
+    ]
+   }
+  },
+  "strategy": {}
+ },
+ "status": {}
+}

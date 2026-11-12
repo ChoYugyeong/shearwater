@@ -1,0 +1,39 @@
+# A self-contained first application: no host files or separate source project.
+# Deployment keeps one Pod running. Service gives that Pod a stable IPv4 address.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: web
+          # Pin the bytes used by the stage-1 verification (nginx 1.27 image).
+          # This is a reproducible example, not a promise of ongoing image updates.
+          image: docker.io/library/nginx@sha256:6784fb0834aa7dbbe12e3d7471e69c290df3e6ba810dc38b34ae33d3c1c05f7d
+          ports:
+            - name: http
+              containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: default
+spec:
+  # A Pod's label must match this selector to receive a new TCP connection.
+  selector:
+    app: web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

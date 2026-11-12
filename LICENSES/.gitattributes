@@ -1,0 +1,6 @@
+# Preserve the exact upstream license/notice/patent document bytes.
+# Upstream trailing blank lines are part of the audited bytes, not our style.
+*.txt -text -whitespace
+manifest.json text eol=lf
+SHA256SUMS text eol=lf
+.gitattributes text eol=lf

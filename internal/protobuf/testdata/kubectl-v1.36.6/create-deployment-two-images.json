@@ -1,0 +1,41 @@
+{
+ "kind": "Deployment",
+ "apiVersion": "apps/v1",
+ "metadata": {
+  "name": "pair",
+  "labels": {
+   "app": "pair"
+  }
+ },
+ "spec": {
+  "replicas": 2,
+  "selector": {
+   "matchLabels": {
+    "app": "pair"
+   }
+  },
+  "template": {
+   "metadata": {
+    "labels": {
+     "app": "pair"
+    }
+   },
+   "spec": {
+    "containers": [
+     {
+      "name": "nginx",
+      "image": "nginx:1.27",
+      "resources": {}
+     },
+     {
+      "name": "busybox",
+      "image": "busybox:1.36",
+      "resources": {}
+     }
+    ]
+   }
+  },
+  "strategy": {}
+ },
+ "status": {}
+}
