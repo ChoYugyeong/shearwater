@@ -4,9 +4,9 @@ Shearwater에서 **서버**는 `kubectl` 요청을 받고 저장된 설정대로
 
 ## 시작 전 준비
 
-alpha.4 개발 버전의 후속 명령은 [자동 시작과 오류 복구](automatic-start.md),
+alpha.4의 후속 명령은 [자동 시작과 오류 복구](automatic-start.md),
 [백업과 복원](backup-restore.md), [프로브](health-probes.md), [MCP·계획 배포](agent-mcp.md)에
-초보자용 예제와 제한을 정리했어. 공개 alpha.3에는 이 후속 명령이 없어.
+초보자용 예제와 제한을 정리했어. alpha.3에는 이 후속 명령이 없어.
 
 - 명령은 WSL Ubuntu-24.04에서 실행해. 바이너리는 일반 사용자로 [README의 명령](../README.md#처음-시작하기)을 따라 빌드해.
 - Pod를 실행하려면 기존 containerd 소켓과 `runc`, `iptables`, IPv4 전달, cgroup v2가 필요해. Shearwater는 containerd에서 전용 이름표 `shearwater`를 사용해. Docker가 같은 containerd를 사용해도 설정 파일은 변경하지 않아.
@@ -101,7 +101,7 @@ alpha.3의 `sw get`, `logs`, `events`, `why`를 사용하는 상세 예제·출�
 
 ## 검증 재현
 
-alpha.4 개발 기능의 범위·복구 실측·API 전용 MCP 검사 방법은
+alpha.4 기능의 범위·복구 실측·API 전용 MCP 검사 방법은
 [후속 운영 기능 검증](next-verification.md)에 있어. 실제 앱을 유지한 채 개발하려면
 root가 필요 없는 검사부터 실행하고, 컨테이너·재부팅 실험은 격리 환경으로 분리해.
 

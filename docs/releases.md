@@ -1,5 +1,28 @@
 # 릴리스와 버전 확인
 
+## v0.1.0-alpha.4
+
+자동 시작과 복구를 위한 `sw service`, 일관된 DB·인증 백업과 새 폴더 복원을 위한
+`sw backup/restore`, HTTP/HTTPS·TCP·exec 방식의 startup/readiness/liveness 프로브를 추가했어.
+`sw mcp`는 기본 조회 전용이고, `--allow-write`를 붙이면 계획·배포를 연결할 수 있어.
+배포는 `sw plan`의 정확한 내용을 확인해 `sw approve`로 로컬에서 승인한 뒤
+`sw apply`로 한 번 실행해. 여러 객체의 변경은 원자적 트랜잭션이 아니며 부분 결과를 기록해.
+
+처음 쓰면 [자동 시작](automatic-start.md), [백업과 복원](backup-restore.md),
+[상태 검사](health-probes.md), [AI 연결과 승인](agent-mcp.md)을 순서대로 봐.
+개발 당시 검사 범위는 [운영 기능 실측](next-verification.md), 최종 공개 소스로 다시 빌드한
+릴리스 파일의 검사 결과는 GitHub alpha.4 릴리스 본문에 기록해.
+
+**업데이트 전 확인:** alpha.3에서 무시하던 기존 DB의 프로브도 이제 실행돼.
+기존 Pod/Deployment의 프로브 경로·포트·명령·시간 제한을 먼저 확인해.
+새 프로브가 잘못된 앱을 재시작하는 것을 실행 파일 교체 자체의 장애와 혼동하지 마.
+SQLite 스키마는 1을 유지하고, 프로브 없는 앱의 기존 태스크를 인계할 수 있어.
+alpha.3로 실행 파일을 되돌리면 새 프로브 정책도 실행되지 않는다는 점을 기억해.
+
+systemd는 Linux/WSL 배포판 안의 sw를 관리해. Windows 로그인 때 WSL을 켜거나
+배포판을 계속 살아 있게 만드는 기능은 아니야. MCP도 OS 권한 분리나 RBAC를 제공하지 않아.
+백업의 볼륨 포함 조건·제외 항목과 각 기능의 제한은 위 안내에 명시했어.
+
 ## v0.1.0-alpha.3
 
 `sw get`, `logs`, `events`, `why`를 추가했어.
@@ -59,7 +82,7 @@ Git 태그에만 붙는 앞의 `v`는 그 값에 넣지 않아. Git이 없는 �
 bash hack/t.sh ./...
 python3 -m unittest discover -s hack -p 'test_*.py'
 bash hack/build.sh
-python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.3
+python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.4
 python3 hack/notices.py
 ```
 

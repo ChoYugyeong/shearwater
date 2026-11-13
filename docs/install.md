@@ -1,8 +1,8 @@
-# Shearwater v0.1.0-alpha.3 설치와 첫 웹 앱
+# Shearwater v0.1.0-alpha.4 설치와 첫 웹 앱
 
 이 안내는 **WSL 2 / Ubuntu 24.04 / x86_64(amd64)**에서 처음 실행하는 사람을 위한 거야. 내려받은 바이너리를 사용하므로 **Go 설치나 소스 빌드는 필요 없어**. ARM64, Windows 네이티브 실행 파일, 다른 Linux 배포판은 이번 바이너리의 검증 대상이 아니야.
 
-Shearwater는 신뢰하는 로컬 관리자가 사용하는 **실험적 알파**야. 단일 노드·IPv4·TCP ClusterIP를 지원해. DNS·RBAC·NetworkPolicy는 없고, 프로브와 securityContext는 저장만 해. Ready는 컨테이너 실행 여부이며 앱의 응답 여부는 아래 curl로 확인해.
+Shearwater는 신뢰하는 로컬 관리자가 사용하는 **실험적 알파**야. 단일 노드·IPv4·TCP ClusterIP를 지원해. DNS·RBAC·NetworkPolicy는 없고, securityContext는 저장만 해. 설정된 프로브는 실행하고 startup/readiness 결과를 Ready에 반영해. 프로브 없는 앱의 실제 응답은 아래 curl로 확인해.
 
 ## 1. WSL과 준비물 확인
 
@@ -44,7 +44,7 @@ IPv4 전달 값이 0이고 이 호스트를 Pod 네트워크용으로 쓰기로 
 ```bash
 (
   set -euo pipefail
-  version=v0.1.0-alpha.3
+  version=v0.1.0-alpha.4
   base="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
   archive="shearwater-${version}-linux-amd64.tar.gz"
   install_dir="$HOME/.local/share/shearwater/$version"
@@ -67,24 +67,26 @@ IPv4 전달 값이 0이고 이 호스트를 Pod 네트워크용으로 쓰기로 
 
 `...tar.gz: OK`와 `sw: OK`가 나와야 해. 해시가 다르면 실행하지 말고 다운로드 상태를 확인해. SHA256SUMS는 같은 릴리스의 파일 무결성을 확인하는 자료이며 별도의 디지털 서명은 아니야.
 
-묶음에는 `sw`, `sw.sha256`, 이 안내(`INSTALL-ko.md`), 진단 안내(`TROUBLESHOOTING-ko.md`), `BUILDINFO.txt`, `examples/web.yaml`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, `LICENSES/`가 들어 있어. 이미지·containerd·kubectl은 포함하지 않아. 바이너리를 다시 배포할 때 라이선스 고지도 함께 전달해.
+묶음에는 `sw`, `sw.sha256`, 이 안내(`INSTALL-ko.md`), 진단 안내(`TROUBLESHOOTING-ko.md`), 새 기능 안내 4개, `BUILDINFO.txt`, `examples/web.yaml`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, `LICENSES/`가 들어 있어. 이미지·containerd·kubectl은 포함하지 않아. 바이너리를 다시 배포할 때 라이선스 고지도 함께 전달해.
 
 **버전 확인:** 다음처럼 실제 릴리스 버전이 나와야 해. 다른 값이 나오면 실행 파일 경로를 먼저 확인해. 동봉 `BUILDINFO.txt`에는 공개 소스 커밋과 빌드 정보, 파일 체크섬도 있어.
 
 ```bash
-"$HOME/.local/share/shearwater/v0.1.0-alpha.3/sw" version
-# sw 0.1.0-alpha.3 (Kubernetes API v1.36.0+shearwater.0.1.0-alpha.3)
+"$HOME/.local/share/shearwater/v0.1.0-alpha.4/sw" version
+# sw 0.1.0-alpha.4 (Kubernetes API v1.36.0+shearwater.0.1.0-alpha.4)
 ```
 
 앞의 숫자는 Shearwater 제품 버전이고, `v1.36.0`은 Kubernetes API 호환 수준이야. 처음 배포한 alpha.1은 `sw 0.0.1`을 표시했지만 alpha.2부터 이 불일치를 고쳤어.
 
-### 기존 alpha.1 또는 alpha.2를 쓰고 있다면
+### 기존 alpha.1, alpha.2 또는 alpha.3를 쓰고 있다면
 
 위 다운로드는 새 버전 폴더에 설치하므로 기존 파일을 보존해. **기존 서버를 켜 둔 채 4절의 새 서버를 시작하면 안 돼.** 먼저 현재 서버의 실행 파일 경로와 `--data-dir`, `--config-dir`, `--run-dir`, `--log-dir`, `--containerd-socket`, `--node-name`, `--listen` 값을 기록해. 기본값을 썼는지 기억이 안 나면 기존 실행 절차부터 확인해.
 
 교체 전에 SQLite의 일관된 백업과 인증·볼륨 등 앱 데이터의 복구 자료를 확보해.
 실행 중인 SQLite의 DB 파일만 복사하면 WAL의 최근 변경을 놓칠 수 있으므로 SQLite backup API 같은 일관된 백업 방식을 사용해.
 기존 실행 파일도 보존해 두면 문제 발생 시 데이터는 유지하면서 파일만 되돌릴 수 있어.
+
+alpha.3에서 저장만 하던 **기존 프로브도 alpha.4에서 실행돼**. `sw get pods --full`과 `sw get deployments --full`로 설정을 읽고 실제 경로·포트·명령이 맞는지 먼저 확인해. 프로브가 있는 앱은 별도 QA에서 실행해 본 뒤 교체해. 구버전으로 실행 파일을 되돌리면 프로브 실행도 사라져.
 
 기존 실행 파일로 `sw down`을 실행해 서버만 멈춘 뒤, 새 실행 파일로 **같은 경로·소켓·노드 이름·주소**를 전달해 `sw up` 해. 이때 `down --all`은 사용하지 않아. 이번 버전은 DB 형식을 바꾸지 않았고 실행 중인 컨테이너를 인계해. 이어서 `sw status`, `sw doctor`, 앱의 HTTP 응답과 로그를 확인해. `sw version`은 로컬 파일의 버전이고, `kubectl --kubeconfig /실제/kubeconfig get --raw /version`은 서버 버전이므로 둘 다 확인해.
 
@@ -121,8 +123,8 @@ PATH는 현재 터미널에만 적용돼. 새 터미널에서 이 kubectl을 쓰
 다음 변수와 함수도 현재 터미널에서만 유지돼. 새 터미널에서 작업을 이어갈 때 다시 선언해.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.3/sw"
-example="$HOME/.local/share/shearwater/v0.1.0-alpha.3/examples/web.yaml"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.4/sw"
+example="$HOME/.local/share/shearwater/v0.1.0-alpha.4/examples/web.yaml"
 kubectl_bin="$(command -v kubectl)"
 k() { sudo "$kubectl_bin" --kubeconfig /etc/shearwater/kubeconfig "$@"; }
 
@@ -170,7 +172,7 @@ sudo "$sw" why "pod/$pod" -n default
 읽을 수 있어. 컨테이너가 여러 개면 `-c NAME`을 지정해. `why`가 성공해도 앱 정상
 판정은 아니야. 상태·이벤트·제한된 로그를 잘 수집했다는 뜻이고 HTTP 응답은 따로 확인해.
 자세한 출력 해석과 오류 해결은 동봉 `TROUBLESHOOTING-ko.md` 또는
-[온라인 진단 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.3/docs/troubleshooting.md)를 봐.
+[온라인 진단 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.4/docs/troubleshooting.md)를 봐.
 
 ## 6. 재시작과 종료
 
@@ -195,7 +197,7 @@ sudo "$sw" down --all --node-name=shearwater
 
 실제 WSL 재부팅 후에는 containerd·IPv4 전달을 확인하고 같은 경로와 옵션으로 up을 실행해. 처음부터 다른 데이터 경로를 쓰면 기존 상태를 이어받는 복구가 아니야.
 
-## 막혔을 때
+## 7. 막혔을 때
 
 | 증상 | 먼저 확인할 것 |
 |---|---|
@@ -206,4 +208,10 @@ sudo "$sw" down --all --node-name=shearwater
 | Ready인데 HTTP 실패 | 실제 앱 준비 시간, Service selector, EndpointSlice와 로그 |
 | 다른 터미널에서 명령 실패 | sw/example/kubectl_bin 변수, k 함수, PATH를 다시 선언했는지 |
 
-자세한 [호환 범위](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.3/docs/compatibility.md), [운영 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.3/docs/operations.md), [보안 제보](https://github.com/ChoYugyeong/shearwater/security/advisories/new)를 참고해.
+자세한 [호환 범위](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.4/docs/compatibility.md), [운영 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.4/docs/operations.md), [보안 제보](https://github.com/ChoYugyeong/shearwater/security/advisories/new)를 참고해.
+
+## 8. alpha.4의 새 운영 기능
+
+자동 시작·복구는 `sw service`, 백업·새 경로 복원은 `sw backup/restore`, AI 연결은 `sw mcp`야. 기본 MCP는 조회 전용이고 변경은 계획을 검토한 뒤 로컬에서 정확한 해시로 승인해야 해. 실행 파일 교체만으로 서비스 설치나 Windows 로그인 설정을 만들지는 않아.
+
+동봉된 `AUTOMATIC-START-ko.md`, `BACKUP-RESTORE-ko.md`, `HEALTH-PROBES-ko.md`, `AGENT-MCP-ko.md`에서 예제와 제한을 읽어. `--include-volumes`는 앱을 중지한 상태에서만 사용하고, 온라인 백업만으로 앱 볼륨까지 보호됐다고 판단하지 마.

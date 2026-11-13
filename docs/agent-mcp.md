@@ -1,6 +1,6 @@
 # AI에게 조회와 검토한 배포를 연결하기
 
-alpha.4 개발 버전의 `sw mcp`는 표준 입력/출력(stdio)으로 MCP 메시지를 주고받아.
+alpha.4의 `sw mcp`는 표준 입력/출력(stdio)으로 MCP 메시지를 주고받아.
 네트워크에 별도 MCP 포트를 열지 않고, 기존 로컬 HTTPS API와 인증 파일을 사용해.
 MCP SDK나 Kubernetes 모듈을 추가하지 않고 JSON-RPC 처리를 직접 구현했어.
 

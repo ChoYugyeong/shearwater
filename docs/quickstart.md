@@ -85,7 +85,7 @@ k rollout status deployment/web --timeout=120s
 k get pods,service,endpointslices -o wide
 ```
 
-처음 이미지를 받는 시간은 네트워크에 따라 달라져. `ImagePullBackOff`가 보이면 `k describe pod <이름>`으로 메시지를 확인해. `Ready`가 되어도 nginx가 HTTP를 받기까지 잠깐의 간격이 있을 수 있어. 프로브는 아직 실행하지 않으므로 다음 HTTP 검사가 실제 서비스 확인 단계야.
+처음 이미지를 받는 시간은 네트워크에 따라 달라져. `ImagePullBackOff`가 보이면 `k describe pod <이름>`으로 메시지를 확인해. 이 기본 예제에는 readiness 프로브가 없어 `Ready`가 되어도 nginx가 HTTP를 받기까지 잠깐의 간격이 있을 수 있어. 다음 HTTP 검사로 실제 응답을 확인하고, 필요하면 [상태 검사](health-probes.md)를 추가해.
 
 ## 4. IP로 접속하고 로그 읽기
 

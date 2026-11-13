@@ -1,7 +1,7 @@
 # `sw get / logs / events / why`로 문제 찾기
 
-이 문서는 **`0.1.0-alpha.3`**의 진단 명령을 설명해.
-alpha.2 실행 파일에는 이 네 명령이 없어. [설치 안내](install.md)로 alpha.3를 받거나
+이 문서는 **`0.1.0-alpha.4`**의 진단 명령을 설명해.
+alpha.2 실행 파일에는 이 네 명령이 없어. [설치 안내](install.md)로 alpha.4를 받거나
 [개발 빌드 방법](../README.md)으로 만든 `dist/sw`를 사용해.
 진단용 실행 파일을 받거나 빌드했다고 실행 중인 서버가 자동 교체되지는 않아.
 네 명령은 기존 로컬 서버의 HTTPS API를 **조회만** 해. Pod를 재시작하거나 설정·DB를 수정하지 않아.
@@ -13,7 +13,7 @@ alpha.2 실행 파일에는 이 네 명령이 없어. [설치 안내](install.md
 `sw` 변수를 그 `dist/sw`의 절대 경로로 바꿔. `web`은 예시이므로 실제 이름으로 바꿔.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.3/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.4/sw"
 sudo "$sw" status
 sudo "$sw" get pods -A
 sudo "$sw" get pods -n default -l app=web
@@ -199,7 +199,7 @@ UID와 Pod 리비전을 대조하지만 로그·이벤트 파일 전체를 잠�
 
 **`why` 종료 코드 0은 진단 수집에 성공했다는 뜻**이야. 앱이 실패해도 성공적으로
 그 이유를 보여 주면 0이야. 자동화에서는 JSON의 상태·findings를 직접 판단해.
-공개 alpha.3의 Ready는 실행 중인 컨테이너 기준이야. alpha.4 개발 버전은
+공개 alpha.3의 Ready는 실행 중인 컨테이너 기준이야. alpha.4는
 **설정된 startup/readiness 프로브 결과도 Ready에 반영**해. [프로브 점검](health-probes.md)을 봐.
 실제 응답은 별도로 확인해야 해. Service 연결 문제는 [연결 점검 순서](service-networking.md#연결이-안-될-때-확인할-순서)를 봐.
 
