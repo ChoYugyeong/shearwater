@@ -1,12 +1,21 @@
 # 릴리스와 버전 확인
 
-## 미발행: 0.1.0-alpha.3-dev
+## v0.1.0-alpha.3
 
-로컬 개발 버전에 `sw get`, `logs`, `events`, `why`를 추가했어.
+`sw get`, `logs`, `events`, `why`를 추가했어.
 기존 API를 읽기만 하며 대상 UID와 컨테이너 실행 시도를 확인해 진단 기록이
 섞이지 않도록 해. 명령 사용법·제한은 [문제 해결 안내](troubleshooting.md),
-실제 장애와 회귀 검사 결과는 [검증 기록](diagnostics-verification.md)에 있어.
-아직 새 GitHub 태그·실행 파일을 발행한 것은 아니야. 공개 설치 버전은 아래 alpha.2야.
+개발 단계의 실제 장애와 회귀 검사 결과는 [검증 기록](diagnostics-verification.md)에 있어.
+alpha.3 릴리스 파일을 다시 빌드한 뒤 수행한 검사는 GitHub 릴리스 본문에 별도로 기록해.
+
+`get`은 요약/전체 JSON, `logs`는 한 번 읽는 현재/직전 로그, `events`는 UID별 최근 기록,
+`why`는 관찰한 상태·이벤트·제한된 로그와 다음 확인을 제공해. `logs`/`why`의 대상은
+현재 Pod이며 Ready가 앱 응답을 보장하는 것은 아니야. `why`의 종료 코드 0은 진단을
+수집했다는 뜻이고 앱이 정상이라는 뜻은 아니야.
+
+이번 버전은 SQLite 스키마·Pod 실행·네트워크 방식을 바꾸지 않았어. 기존 서버의
+실행 파일을 바꿀 때는 [설치 안내의 업데이트 절차](install.md)를 따라 같은 데이터·
+인증·노드 옵션을 쓰고 서버만 교체해. 기존 alpha.1/alpha.2 태그와 파일은 그대로 유지해.
 
 ## v0.1.0-alpha.2
 
@@ -50,7 +59,7 @@ Git 태그에만 붙는 앞의 `v`는 그 값에 넣지 않아. Git이 없는 �
 bash hack/t.sh ./...
 python3 -m unittest discover -s hack -p 'test_*.py'
 bash hack/build.sh
-python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.2
+python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.3
 python3 hack/notices.py
 ```
 

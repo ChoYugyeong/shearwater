@@ -9,13 +9,11 @@ Shearwater is an experimental single-node container orchestrator with a small Ku
 ## 처음 시작하기
 
 Go 없이 시작하려면 [알파 실행 파일 설치 안내](docs/install.md)를 따라 해.
-현재 릴리스는 **v0.1.0-alpha.2**이며, `sw version`도 `0.1.0-alpha.2`를 표시해.
+현재 릴리스는 **v0.1.0-alpha.3**이며, `sw version`도 `0.1.0-alpha.3`를 표시해.
 [릴리스 변경 사항과 버전 검증 방법](docs/releases.md)도 확인할 수 있어.
 
-이 소스 브랜치에는 다음 릴리스용 `0.1.0-alpha.3-dev` 진단 명령도 있어.
-`sw get/logs/events/why`로 목록·앱 로그·이벤트·실패 이유를 조회하는
-[초보자용 문제 해결 안내](docs/troubleshooting.md)를 추가했어.
-이 명령을 쓰려면 현재 소스를 빌드해야 하며 공개 alpha.2 실행 파일에는 아직 없어.
+alpha.3부터 `sw get/logs/events/why`로 목록·앱 로그·이벤트·실패 이유를 조회할 수 있어.
+[초보자용 문제 해결 안내](docs/troubleshooting.md)에 각 명령의 예제와 오류 해석을 정리했어.
 
 처음이라면 **[설치부터 HTTP 응답까지 따라 하기](docs/quickstart.md)**를 사용해. Go 1.27.3과 kubectl 1.36.6, containerd·runc·iptables, cgroup v2와 IPv4 전달이 준비된 WSL에서는 다음 순서로 실행해. 기존 Shearwater 인스턴스가 없는 환경을 사용해.
 
@@ -36,6 +34,10 @@ sudo "$(command -v kubectl)" --kubeconfig /etc/shearwater/kubeconfig rollout sta
 | Deployment가 만든 Pod와 Service 보기 | `sw tree` |
 | 문제가 있는 가지에 집중하기 | `sw tree --problems` |
 | containerd·네트워크·로그 확인하기 | `sw doctor` |
+| 객체 목록·상세 보기 | `sw get pods -A` / `sw get pod/NAME --full` |
+| 현재·직전 앱 로그 읽기 | `sw logs pod/NAME` / `sw logs pod/NAME --previous` |
+| 현재 객체의 이벤트 읽기 | `sw events --for=pod/NAME` |
+| Pod의 실패 이유와 다음 확인 보기 | `sw why pod/NAME` |
 | 서버를 잠시 멈추기 | `sw down` |
 | Pod와 전용 네트워크도 내리기 | `sw down --all` |
 

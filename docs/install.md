@@ -1,4 +1,4 @@
-# Shearwater v0.1.0-alpha.2 설치와 첫 웹 앱
+# Shearwater v0.1.0-alpha.3 설치와 첫 웹 앱
 
 이 안내는 **WSL 2 / Ubuntu 24.04 / x86_64(amd64)**에서 처음 실행하는 사람을 위한 거야. 내려받은 바이너리를 사용하므로 **Go 설치나 소스 빌드는 필요 없어**. ARM64, Windows 네이티브 실행 파일, 다른 Linux 배포판은 이번 바이너리의 검증 대상이 아니야.
 
@@ -44,7 +44,7 @@ IPv4 전달 값이 0이고 이 호스트를 Pod 네트워크용으로 쓰기로 
 ```bash
 (
   set -euo pipefail
-  version=v0.1.0-alpha.2
+  version=v0.1.0-alpha.3
   base="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
   archive="shearwater-${version}-linux-amd64.tar.gz"
   install_dir="$HOME/.local/share/shearwater/$version"
@@ -67,22 +67,30 @@ IPv4 전달 값이 0이고 이 호스트를 Pod 네트워크용으로 쓰기로 
 
 `...tar.gz: OK`와 `sw: OK`가 나와야 해. 해시가 다르면 실행하지 말고 다운로드 상태를 확인해. SHA256SUMS는 같은 릴리스의 파일 무결성을 확인하는 자료이며 별도의 디지털 서명은 아니야.
 
-묶음에는 `sw`, `sw.sha256`, 이 안내, `BUILDINFO.txt`, `examples/web.yaml`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, `LICENSES/`가 들어 있어. 이미지·containerd·kubectl은 포함하지 않아. 바이너리를 다시 배포할 때 라이선스 고지도 함께 전달해.
+묶음에는 `sw`, `sw.sha256`, 이 안내(`INSTALL-ko.md`), 진단 안내(`TROUBLESHOOTING-ko.md`), `BUILDINFO.txt`, `examples/web.yaml`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, `LICENSES/`가 들어 있어. 이미지·containerd·kubectl은 포함하지 않아. 바이너리를 다시 배포할 때 라이선스 고지도 함께 전달해.
 
 **버전 확인:** 다음처럼 실제 릴리스 버전이 나와야 해. 다른 값이 나오면 실행 파일 경로를 먼저 확인해. 동봉 `BUILDINFO.txt`에는 공개 소스 커밋과 빌드 정보, 파일 체크섬도 있어.
 
 ```bash
-"$HOME/.local/share/shearwater/v0.1.0-alpha.2/sw" version
-# sw 0.1.0-alpha.2 (Kubernetes API v1.36.0+shearwater.0.1.0-alpha.2)
+"$HOME/.local/share/shearwater/v0.1.0-alpha.3/sw" version
+# sw 0.1.0-alpha.3 (Kubernetes API v1.36.0+shearwater.0.1.0-alpha.3)
 ```
 
 앞의 숫자는 Shearwater 제품 버전이고, `v1.36.0`은 Kubernetes API 호환 수준이야. 처음 배포한 alpha.1은 `sw 0.0.1`을 표시했지만 alpha.2부터 이 불일치를 고쳤어.
 
-### 기존 alpha.1을 쓰고 있다면
+### 기존 alpha.1 또는 alpha.2를 쓰고 있다면
 
 위 다운로드는 새 버전 폴더에 설치하므로 기존 파일을 보존해. **기존 서버를 켜 둔 채 4절의 새 서버를 시작하면 안 돼.** 먼저 현재 서버의 실행 파일 경로와 `--data-dir`, `--config-dir`, `--run-dir`, `--log-dir`, `--containerd-socket`, `--node-name`, `--listen` 값을 기록해. 기본값을 썼는지 기억이 안 나면 기존 실행 절차부터 확인해.
 
+교체 전에 SQLite의 일관된 백업과 인증·볼륨 등 앱 데이터의 복구 자료를 확보해.
+실행 중인 SQLite의 DB 파일만 복사하면 WAL의 최근 변경을 놓칠 수 있으므로 SQLite backup API 같은 일관된 백업 방식을 사용해.
+기존 실행 파일도 보존해 두면 문제 발생 시 데이터는 유지하면서 파일만 되돌릴 수 있어.
+
 기존 실행 파일로 `sw down`을 실행해 서버만 멈춘 뒤, 새 실행 파일로 **같은 경로·소켓·노드 이름·주소**를 전달해 `sw up` 해. 이때 `down --all`은 사용하지 않아. 이번 버전은 DB 형식을 바꾸지 않았고 실행 중인 컨테이너를 인계해. 이어서 `sw status`, `sw doctor`, 앱의 HTTP 응답과 로그를 확인해. `sw version`은 로컬 파일의 버전이고, `kubectl --kubeconfig /실제/kubeconfig get --raw /version`은 서버 버전이므로 둘 다 확인해.
+
+서버 교체 동안 API와 Service 프록시는 잠깐 멈출 수 있어. 컨테이너가 유지되는 것과
+모든 요청의 무중단은 같은 의미가 아니야. `get pods`에서 UID·IP·재시작 수를 비교하고,
+앱의 저장 데이터도 앱에 맞는 방법으로 확인해.
 
 ## 3. kubectl 준비
 
@@ -113,8 +121,8 @@ PATH는 현재 터미널에만 적용돼. 새 터미널에서 이 kubectl을 쓰
 다음 변수와 함수도 현재 터미널에서만 유지돼. 새 터미널에서 작업을 이어갈 때 다시 선언해.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.2/sw"
-example="$HOME/.local/share/shearwater/v0.1.0-alpha.2/examples/web.yaml"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.3/sw"
+example="$HOME/.local/share/shearwater/v0.1.0-alpha.3/examples/web.yaml"
 kubectl_bin="$(command -v kubectl)"
 k() { sudo "$kubectl_bin" --kubeconfig /etc/shearwater/kubeconfig "$@"; }
 
@@ -143,6 +151,26 @@ sudo "$sw" tree
 ```
 
 페이지에 `Welcome to nginx!`, 로그에 `GET / HTTP`가 나오면 성공이야. 예제의 Deployment가 Pod 한 개를 유지하고, Service는 `app: web` 라벨의 Pod로 TCP 연결을 전달해. ClusterIP는 내부 주소이며 위 curl은 WSL에서 실행해. Windows 브라우저 접속이나 `http://web/` DNS 이름, `kubectl port-forward`는 이 예제에서 제공하지 않아.
+
+### 새 진단 명령 네 개
+
+`sw`만으로도 목록·앱 로그·이벤트·실패 이유를 조회할 수 있어. 다음 `pod` 변수는
+위 nginx 예제의 실제 Pod 이름을 읽는 거야. 운영 중인 다른 앱에서는 그 이름과
+네임스페이스(`-n`)로 바꿔. 이 네 명령은 서버를 변경하지 않아.
+
+```bash
+sudo "$sw" get pods -n default -l app=web
+pod=$(k get pods -l app=web -o jsonpath='{.items[0].metadata.name}')
+sudo "$sw" logs "pod/$pod" -n default --tail=20
+sudo "$sw" events --for="pod/$pod" -n default
+sudo "$sw" why "pod/$pod" -n default
+```
+
+`logs`는 기본 마지막 50줄/64 KiB를 한 번 읽고 끝나며 `--previous`로 직전 실행 로그를
+읽을 수 있어. 컨테이너가 여러 개면 `-c NAME`을 지정해. `why`가 성공해도 앱 정상
+판정은 아니야. 상태·이벤트·제한된 로그를 잘 수집했다는 뜻이고 HTTP 응답은 따로 확인해.
+자세한 출력 해석과 오류 해결은 동봉 `TROUBLESHOOTING-ko.md` 또는
+[온라인 진단 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.3/docs/troubleshooting.md)를 봐.
 
 ## 6. 재시작과 종료
 
@@ -178,4 +206,4 @@ sudo "$sw" down --all --node-name=shearwater
 | Ready인데 HTTP 실패 | 실제 앱 준비 시간, Service selector, EndpointSlice와 로그 |
 | 다른 터미널에서 명령 실패 | sw/example/kubectl_bin 변수, k 함수, PATH를 다시 선언했는지 |
 
-자세한 [호환 범위](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.2/docs/compatibility.md), [운영 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.2/docs/operations.md), [보안 제보](https://github.com/ChoYugyeong/shearwater/security/advisories/new)를 참고해.
+자세한 [호환 범위](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.3/docs/compatibility.md), [운영 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.3/docs/operations.md), [보안 제보](https://github.com/ChoYugyeong/shearwater/security/advisories/new)를 참고해.

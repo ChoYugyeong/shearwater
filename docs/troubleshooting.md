@@ -1,17 +1,19 @@
 # `sw get / logs / events / why`로 문제 찾기
 
-이 문서는 **아직 릴리스하지 않은 `0.1.0-alpha.3-dev` 소스**의 진단 명령을 설명해.
-공개된 alpha.2 실행 파일에는 이 네 명령이 없어. [개발 빌드 방법](../README.md)으로
-만든 `dist/sw`를 사용해. 진단용 실행 파일을 빌드했다고 실행 중인 서버가 교체되지는 않아.
+이 문서는 **`0.1.0-alpha.3`**의 진단 명령을 설명해.
+alpha.2 실행 파일에는 이 네 명령이 없어. [설치 안내](install.md)로 alpha.3를 받거나
+[개발 빌드 방법](../README.md)으로 만든 `dist/sw`를 사용해.
+진단용 실행 파일을 받거나 빌드했다고 실행 중인 서버가 자동 교체되지는 않아.
 네 명령은 기존 로컬 서버의 HTTPS API를 **조회만** 해. Pod를 재시작하거나 설정·DB를 수정하지 않아.
 
 ## 1. 어떤 순서로 볼까?
 
 처음에는 전체 상태 → 문제 Pod → 그 Pod의 이유 순서가 좋아. 아래는 WSL의 Bash에서
-저장소 루트에 있고 `dist/sw`를 빌드한 경우야. `web`은 예시이므로 실제 이름으로 바꿔.
+[설치 안내](install.md)의 사용자 폴더에 설치한 경우야. 소스에서 빌드했다면
+`sw` 변수를 그 `dist/sw`의 절대 경로로 바꿔. `web`은 예시이므로 실제 이름으로 바꿔.
 
 ```bash
-sw="$PWD/dist/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.3/sw"
 sudo "$sw" status
 sudo "$sw" get pods -A
 sudo "$sw" get pods -n default -l app=web

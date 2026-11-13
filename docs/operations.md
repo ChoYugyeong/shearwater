@@ -86,7 +86,7 @@ kubectl --kubeconfig "$instance/etc/kubeconfig" get namespaces
 
 ## 문제가 생겼을 때
 
-개발 버전의 `sw get`, `logs`, `events`, `why`를 사용하는 상세 예제·출력 해석은
+alpha.3의 `sw get`, `logs`, `events`, `why`를 사용하는 상세 예제·출력 해석은
 [문제 해결 안내](troubleshooting.md)에 있어. alpha.2 실행 파일을 사용 중이라면
 아래 kubectl 명령을 사용해. 조회용 새 CLI를 빌드하는 일과 서버 교체는 별개야.
 
