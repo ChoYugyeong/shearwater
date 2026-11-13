@@ -4,6 +4,10 @@ Shearwater에서 **서버**는 `kubectl` 요청을 받고 저장된 설정대로
 
 ## 시작 전 준비
 
+alpha.4 개발 버전의 후속 명령은 [자동 시작과 오류 복구](automatic-start.md),
+[백업과 복원](backup-restore.md), [프로브](health-probes.md), [MCP·계획 배포](agent-mcp.md)에
+초보자용 예제와 제한을 정리했어. 공개 alpha.3에는 이 후속 명령이 없어.
+
 - 명령은 WSL Ubuntu-24.04에서 실행해. 바이너리는 일반 사용자로 [README의 명령](../README.md#처음-시작하기)을 따라 빌드해.
 - Pod를 실행하려면 기존 containerd 소켓과 `runc`, `iptables`, IPv4 전달, cgroup v2가 필요해. Shearwater는 containerd에서 전용 이름표 `shearwater`를 사용해. Docker가 같은 containerd를 사용해도 설정 파일은 변경하지 않아.
 - 명령 예제의 `sw`는 빌드한 파일의 경로로 바꿔. 기본 위치에 실제 Pod를 실행하는 예제는 WSL의 root에서 실행해. Windows PowerShell에서 `wsl.exe -d Ubuntu-24.04 -u root`로 들어갈 수 있어.
@@ -97,6 +101,10 @@ alpha.3의 `sw get`, `logs`, `events`, `why`를 사용하는 상세 예제·출�
 
 ## 검증 재현
 
+alpha.4 개발 기능의 범위·복구 실측·API 전용 MCP 검사 방법은
+[후속 운영 기능 검증](next-verification.md)에 있어. 실제 앱을 유지한 채 개발하려면
+root가 필요 없는 검사부터 실행하고, 컨테이너·재부팅 실험은 격리 환경으로 분리해.
+
 WSL 일반 사용자로 `. hack/env.sh` 뒤 `bash hack/t.sh ./...`를 실행하고 `go build`로 바이너리를 만들어. 아래 두 스크립트는 기존 Shearwater 워크로드가 없는 WSL에서 root로 **하나씩** 실행해.
 
 ```bash
@@ -115,3 +123,6 @@ bash hack/measure.sh /absolute/sw /absolute/kubectl
 | `cmd/sw/doctor.go`, `internal/runtime/host_linux.go` | DB 파일시스템·주소 범위 검사와 전용 네트워크 정리 범위 |
 | `internal/node/pod.go`, `internal/objects/events.go` | 실행 중인 태스크의 인계, 종료 시각 복구, 상태가 바뀔 때만 진단 이벤트 기록 |
 | `hack/e2e-stage1.sh`, `hack/measure.py` | 검증용 인스턴스의 생성부터 정리까지, 측정에 포함하는 값과 제외하는 값 |
+| `cmd/sw/service.go`, `cmd/sw/backup.go` | 자동 시작과 서버 인계, 일관된 DB 복사, 기존 데이터를 덮어쓰지 않는 복원 |
+| `internal/apis/probe.go`, `internal/node/probes.go`, `internal/runtime/probe.go` | 설정 검증 → 검사 일정과 상태 전이 → 실제 컨테이너 검사 |
+| `cmd/sw/plan.go`, `cmd/sw/mcp.go`, `hack/mcp-check.py` | 변경 계획을 저장·검토·승인하고 한 번만 적용하는 흐름과 실제 stdio 검증 |

@@ -67,7 +67,7 @@ func diagnosticWhy(ctx context.Context, c *agentClient, o diagnosticOptions) ([]
 		}
 		report := podExplanation{Namespace: p.Metadata.Namespace, Name: p.Metadata.Name, UID: p.Metadata.UID, Revision: p.Metadata.ResourceVersion,
 			Summary: agent.CompactObject(p), Phase: p.Status.Phase, Containers: p.Status.ContainerStatuses, Findings: agent.PodFindings(p), Events: events, Logs: []logExcerpt{},
-			LimitNote: "Read-only observations, not a frozen history. Logs are bounded per excerpt. Ready does not verify application responses; probes are stored only."}
+			LimitNote: "Read-only observations, not a frozen history. Logs are bounded per excerpt. Configured readiness/startup probes affect Ready; no probe means no application response check."}
 		for _, name := range containers {
 			cs := containerStatus(p, name)
 			if cs == nil || cs.ContainerID == "" {

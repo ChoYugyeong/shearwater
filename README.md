@@ -2,7 +2,7 @@
 
 Shearwater는 작은 컨테이너 서비스를 운영하는 단일 바이너리 `sw`야. `kubectl`로 Pod, Deployment, Service를 다루고, containerd가 실행을 맡고, SQLite가 상태를 보관해. 필요한 API·컨트롤러·네트워크 부분을 직접 구현하고, `sw`는 Kubernetes Go 패키지(`k8s.io/*`)를 import하거나 바이너리에 포함하지 않아. containerd 네이티브 클라이언트를 사용하며 CRI·CNI 플러그인을 사용하지 않아. 참고·적응한 프로토콜과 패치 구현의 출처는 NOTICE에 적었어.
 
-**현재 단계는 실험적 알파**야. 실제로 검증한 운영 환경은 **WSL 2의 Ubuntu 24.04, Linux amd64, 단일 노드, IPv4, TCP ClusterIP**야. 관리자 한 명이 신뢰하는 앱을 실험하는 용도이며, Kubernetes 인증 제품이나 운영 서비스용 보안 격리 도구가 아니야. 특히 **프로브와 securityContext는 저장만 하고 실행에 반영하지 않아.** Ready는 앱의 정상 응답 여부가 아니라 컨테이너 실행 여부를 뜻해. [지원 범위](docs/compatibility.md)를 먼저 확인해.
+**현재 단계는 실험적 알파**야. 실제로 검증한 운영 환경은 **WSL 2의 Ubuntu 24.04, Linux amd64, 단일 노드, IPv4, TCP ClusterIP**야. 관리자 한 명이 신뢰하는 앱을 실험하는 용도이며, Kubernetes 인증 제품이나 운영 서비스용 보안 격리 도구가 아니야. **securityContext는 여전히 저장만 해.** 개발 버전은 설정된 프로브를 실행하며 readiness가 없으면 실행 중인 컨테이너를 Ready로 봐. [지원 범위](docs/compatibility.md)를 먼저 확인해.
 
 Shearwater is an experimental single-node container orchestrator with a small Kubernetes-compatible API, native containerd integration, and SQLite storage. The tested runtime target is WSL 2 / Ubuntu 24.04 / amd64. See the Korean [quickstart](docs/quickstart.md) and [compatibility table](docs/compatibility.md) for the exact limits.
 
@@ -14,6 +14,12 @@ Go 없이 시작하려면 [알파 실행 파일 설치 안내](docs/install.md)�
 
 alpha.3부터 `sw get/logs/events/why`로 목록·앱 로그·이벤트·실패 이유를 조회할 수 있어.
 [초보자용 문제 해결 안내](docs/troubleshooting.md)에 각 명령의 예제와 오류 해석을 정리했어.
+
+이 소스의 **alpha.4 개발 버전**에는 [자동 시작](docs/automatic-start.md),
+[백업·복원](docs/backup-restore.md), [앱 상태 검사](docs/health-probes.md),
+[MCP 조회와 계획·승인·배포](docs/agent-mcp.md)가 추가됐어.
+공개 alpha.3 실행 파일에는 이 후속 기능이 없으므로 소스 버전과 릴리스 버전을 구분해.
+[개발 버전 실측과 재현 방법](docs/next-verification.md)에 장애·복구·배포 검증 범위를 정리했어.
 
 처음이라면 **[설치부터 HTTP 응답까지 따라 하기](docs/quickstart.md)**를 사용해. Go 1.27.3과 kubectl 1.36.6, containerd·runc·iptables, cgroup v2와 IPv4 전달이 준비된 WSL에서는 다음 순서로 실행해. 기존 Shearwater 인스턴스가 없는 환경을 사용해.
 
@@ -49,6 +55,7 @@ sudo "$(command -v kubectl)" --kubeconfig /etc/shearwater/kubeconfig rollout sta
 . hack/env.sh
 bash hack/t.sh ./...       # 소스 수정 없이 포맷·정적 검사·Go 테스트
 bash hack/build.sh         # dist/sw와 SHA256, 포함 모듈 정보 출력
+python3 hack/mcp-check.py "$PWD/dist/sw"  # 별도 API에서 MCP·계획·승인·배포 확인, root 불필요
 ```
 
 [기여 방법](CONTRIBUTING.md) · [보안 범위와 제보](SECURITY.md) · [공개 알파 검사 절차](docs/alpha-release.md) · [실제 재부팅·부하 기록](docs/reboot-soak.md)

@@ -12,6 +12,7 @@
       {
         "name": "main",
         "image": "nginx:1.27",
+        "securityContext": {"runAsNonRoot": true},
         "livenessProbe": {
           "exec": {
             "command": [

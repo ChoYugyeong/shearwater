@@ -38,6 +38,7 @@ type Agent struct {
 	Version  string       // reported as the kubelet version
 	Now      func() time.Time
 	Logf     func(format string, args ...any)
+	ProbeRun func(context.Context, *apis.Probe, *apis.Container, string, string) error // injectable action, not the scheduling policy
 
 	ctx context.Context
 
@@ -45,10 +46,11 @@ type Agent struct {
 	mu       sync.Mutex
 	keys     map[string]store.Key // pod uid -> key, pods bound to this node
 	work     map[string]*work
-	fails    map[string]int  // "uid/container" -> pulls or starts that failed in a row
-	holds    map[string]hold // "uid/container" -> no new start before this time
-	resets   map[string]int  // "uid/container" -> the last attempt that ran long enough to clear the delay
-	termSent map[string]bool // container IDs that got SIGTERM for a delete
+	fails    map[string]int         // "uid/container" -> pulls or starts that failed in a row
+	holds    map[string]hold        // "uid/container" -> no new start before this time
+	resets   map[string]int         // "uid/container" -> the last attempt that ran long enough to clear the delay
+	termSent map[string]bool        // container IDs that got SIGTERM for a delete
+	probes   map[string]*probeState // uid/container; one Pod worker owns each value
 
 	hostOK    bool
 	hostAt    time.Time
@@ -79,6 +81,7 @@ func (a *Agent) init() {
 		a.keys, a.work = map[string]store.Key{}, map[string]*work{}
 		a.fails, a.resets, a.termSent = map[string]int{}, map[string]int{}, map[string]bool{}
 		a.holds = map[string]hold{}
+		a.probes = map[string]*probeState{}
 	}
 	if a.ctx == nil {
 		a.ctx = context.Background()
@@ -302,5 +305,6 @@ func (a *Agent) forgetPod(uid string, containers []apis.Container) {
 		delete(a.fails, uid+"/"+c.Name)
 		delete(a.holds, uid+"/"+c.Name)
 		delete(a.resets, uid+"/"+c.Name)
+		delete(a.probes, uid+"/"+c.Name)
 	}
 }

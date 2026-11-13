@@ -220,7 +220,7 @@ func TestWhyPreservesMissingEvidenceAndExitDetails(t *testing.T) {
 	if err := runDiagnostic("why", append([]string{"pod/web", "-n=demo"}, flags...), &out); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"previous exit=7", "app marker", "unavailable:", "previous log not found", "probes are stored"} {
+	for _, want := range []string{"previous exit=7", "app marker", "unavailable:", "previous log not found", "Configured readiness"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("missing %q: %s", want, out.String())
 		}

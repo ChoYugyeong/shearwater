@@ -11,7 +11,7 @@ Shearwater는 Kubernetes API의 일부를 구현한 단일 노드 오케스트�
 | Service / EndpointSlice | IPv4 ClusterIP 예약, Ready Pod 선택, 이름 포트, TCP 프록시 | DNS·UDP·NodePort·LoadBalancer 미구현, headless DNS 미제공 |
 | 리소스 | CPU/메모리 limits 적용 | requests는 저장만 하고 배치에 쓰지 않음 |
 | 볼륨 | emptyDir, hostPath와 type 검사·OrCreate 생성 | PVC/CSI 같은 영속 볼륨 체계 미구현 |
-| readiness/liveness/startup probe | 필드를 저장하고 경고 | 프로브 실행 없음. Ready = 컨테이너 실행 중 |
+| readiness/liveness/startup probe | HTTP/HTTPS·TCP·exec 검사, Ready/Service 연동, 유예 종료·재시작 | alpha.4 개발 버전. gRPC·host override 미지원. [상태 검사](health-probes.md) |
 | securityContext | 필드를 저장하고 경고 | 실행은 런타임 기본 보안 설정. 정책이 적용되지 않음 |
 | nodeSelector, affinity, tolerations, priority | 필드를 저장하고 경고 | 노드 한 개, 해당 배치 정책 평가 없음 |
 | 인증 | 자체 CA 기반 TLS, 로컬 관리자 토큰 | RBAC·사용자/서비스 계정 분리 없음 |
@@ -28,7 +28,12 @@ Shearwater는 Kubernetes API의 일부를 구현한 단일 노드 오케스트�
 - **대역은 고정**: Pod `10.244.0.0/24`, Service `10.96.0.0/16`. 기존 경로와 겹치면 시작을 거절해. 전용 장치는 `sw-br0`, `sw-svc0`이고 컨테이너 네임스페이스는 `shearwater`야.
 - **한 네트워크 공간에 한 인스턴스**: 다른 WSL 배포판도 같은 호스트 네트워크를 볼 수 있어. 두 번 설치해도 별도 클러스터가 되는 것은 아니야.
 - **SQLite는 Linux 파일시스템**: 기본 `/var/lib/shearwater`. `/mnt/c`에서 데이터베이스를 운영하지 마. 소스 자체는 `/mnt/c`에 둘 수 있어.
-- **재시작은 수동**: 부팅 뒤 containerd가 준비되면 같은 경로와 옵션으로 `sw up`을 실행해. OS 부팅 시 자동 실행 서비스 설치는 포함하지 않아.
+- **재시작**: 기본은 `sw up`. alpha.4 개발 버전의 선택적 `sw service install`로 WSL 시작과 sw 오류 종료 후 자동 복구를 등록할 수 있어. Windows 로그인 때 WSL 자체를 시작하는 기능은 별도야.
 - **서버 중단**: 실행 중인 앱 컨테이너는 계속 돌 수 있지만 API·Service 프록시·자동 조정은 멈춰. `sw down --all`은 앱도 내리고 DB·볼륨·로그는 보존해.
 
 이 문서의 저장만 하는 필드 목록은 `internal/apis/grades.go`, 명령별 차이는 [운영 안내](operations.md), 구현 결정은 `design-stage1.md`에 근거해. 새 기능이 들어오면 코드·경고·표를 함께 바꿔야 해.
+
+후속 기능은 [백업·복원 범위](backup-restore.md)와 [MCP·배포 계획의 범위](agent-mcp.md)를 봐.
+MCP는 기본 조회 전용이고 로컬 관리자의 OS 권한을 격리하지 않아. 계획 배포는 JSON 생성/전체 교체이며
+로컬에서 정확한 계획을 승인해야 해. 객체 여러 개의 변경을 한 트랜잭션으로 묶지는 않아.
+공개 alpha.3의 동작과 이 개발 브랜치의 프로브 동작을 혼동하지 마.

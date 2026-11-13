@@ -19,9 +19,18 @@ func (a *Agent) podDir(uid string) string { return filepath.Join(a.DataDir, "pod
 // pod that is fine causes no disk writes.
 func writeIfChanged(path string, data []byte) error {
 	if have, err := os.ReadFile(path); err == nil && bytes.Equal(have, data) {
-		return nil
+		if info, err := os.Stat(path); err == nil && info.Mode().Perm() == 0644 {
+			return nil
+		}
+		return os.Chmod(path, 0644)
 	}
-	return os.WriteFile(path, data, 0o644)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return err
+	}
+	// These generated files are mounted as /etc/hosts and /etc/hostname.
+	// They are not secrets: non-root application users must be able to read
+	// them even when sw was launched with a private host umask.
+	return os.Chmod(path, 0644)
 }
 
 // ensurePodFiles makes the pod's directory with the files every container
@@ -51,6 +60,13 @@ func (a *Agent) ensurePodFiles(pod *apis.Pod, ip string) (volumes map[string]str
 	if resolv := filepath.Join(dir, "resolv.conf"); !exists(resolv) {
 		data, _ := os.ReadFile("/etc/resolv.conf")
 		if err := os.WriteFile(resolv, data, 0o644); err != nil {
+			return nil, err
+		}
+	}
+	if info, err := os.Stat(filepath.Join(dir, "resolv.conf")); err != nil {
+		return nil, err
+	} else if info.Mode().Perm() != 0644 {
+		if err = os.Chmod(filepath.Join(dir, "resolv.conf"), 0644); err != nil {
 			return nil, err
 		}
 	}

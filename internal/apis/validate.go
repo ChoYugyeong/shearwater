@@ -175,6 +175,11 @@ func validatePodSpec(s *PodSpec, path string, errs *ErrorList) {
 	for i := range s.Containers {
 		c := &s.Containers[i]
 		f := fmt.Sprintf("%s.containers[%d]", path, i)
+		for kind, raw := range map[string]json.RawMessage{"readiness": c.ReadinessProbe, "liveness": c.LivenessProbe, "startup": c.StartupProbe} {
+			if _, err := ParseProbe(raw, kind, c); err != nil {
+				errs.invalid(f+"."+kind+"Probe", string(raw), err.Error())
+			}
+		}
 		switch {
 		case c.Name == "":
 			errs.required(f + ".name")

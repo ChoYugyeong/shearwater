@@ -23,8 +23,9 @@ func TestPodFindingsDescribeEvidenceWithoutInventingCause(t *testing.T) {
 		t.Fatal(f)
 	}
 	p.Status.ContainerStatuses[0].State = apis.ContainerState{Running: &apis.ContainerStateRunning{}}
+	p.Status.ContainerStatuses[0].Ready = true
 	f = PodFindings(p)
-	if len(f) != 1 || f[0].Code != "NoFailureReported" || !strings.Contains(f[0].Next, "probes are stored") {
+	if len(f) != 1 || f[0].Code != "NoFailureReported" || !strings.Contains(f[0].Next, "Configured readiness") {
 		t.Fatal(f)
 	}
 }

@@ -63,6 +63,9 @@ func PodFindings(p *apis.Pod) []Finding {
 		findings = append(findings, Finding{"Unscheduled", "The Pod has not been assigned to a node.", "Run sw status and sw doctor; check that the server has a containerd node agent."})
 	}
 	for _, cs := range p.Status.ContainerStatuses {
+		if cs.State.Running != nil && !cs.Ready {
+			findings = append(findings, Finding{"ContainerNotReady", cs.Name + ": process is running but is not ready for Service traffic.", "Check startup/readiness probe settings and Unhealthy events; a running process can still reject requests."})
+		}
 		if w := cs.State.Waiting; w != nil {
 			next := "Read the event and runtime error below; use sw doctor to check the node."
 			switch w.Reason {
@@ -99,7 +102,7 @@ func PodFindings(p *apis.Pod) []Finding {
 		findings = append(findings, Finding{"NoContainerStatus", "The node has not reported container state yet.", "Check events and sw doctor, then inspect this Pod again."})
 	}
 	if len(findings) == 0 {
-		findings = append(findings, Finding{"NoFailureReported", "No failure is reported in current container status.", "Verify the application's HTTP/TCP response. Ready describes containers here; probes are stored but not executed."})
+		findings = append(findings, Finding{"NoFailureReported", "No failure is reported in current container status.", "Verify the application's HTTP/TCP response. Configured readiness/startup probes affect Ready; without a readiness probe a running container may still be unhealthy."})
 	}
 	return findings
 }

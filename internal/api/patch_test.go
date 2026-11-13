@@ -245,14 +245,14 @@ func TestStoredOnlyWarnings(t *testing.T) {
 		"livenessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"100m"}}}]}}`
 	r := c.want(c.do("POST", pods, body), 201)
 	w := strings.Join(r.header.Values("Warning"), "\n")
-	if !strings.Contains(w, "spec.containers[0].livenessProbe: stored, but has no effect") || !strings.Contains(w, "spec.containers[0].resources.requests") {
+	if strings.Contains(w, "livenessProbe") || !strings.Contains(w, "spec.containers[0].resources.requests") {
 		t.Fatalf("stored-only fields must warn on create: %q", w)
 	}
 	if strings.Contains(w, "dnsPolicy") {
 		t.Fatalf("dnsPolicy: ClusterFirst is what kubectl run always sends and must not warn: %q", w)
 	}
 	if r.at("spec", "containers").([]any)[0].(map[string]any)["livenessProbe"] == nil {
-		t.Fatalf("the stored-only field was not stored")
+		t.Fatalf("the supported probe was not stored")
 	}
 	// A later change that does not touch them stays quiet; one that adds another warns about that one only.
 	r = c.want(c.patch(pods+"/probed", mergeType, `{"metadata":{"labels":{"a":"b"}}}`), 200)

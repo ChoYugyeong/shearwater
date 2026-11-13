@@ -20,7 +20,6 @@ func (f StoredField) Warning() string {
 
 const (
 	noteScheduling = "there is one node and no scheduling rules are evaluated"
-	noteProbe      = "probes are not run yet (planned for stage 3); Ready means the container is running"
 	noteSecurity   = "containers run with the runtime's default security settings"
 )
 
@@ -57,15 +56,6 @@ func StoredOnly(o Object) []StoredField {
 			cp := fmt.Sprintf("%s.containers[%d]", path, i)
 			if len(c.Resources.Requests) > 0 {
 				add(cp+".resources.requests", c.Resources.Requests, "only limits are enforced; requests are not used for placement")
-			}
-			if !rawEmpty(c.LivenessProbe) {
-				add(cp+".livenessProbe", c.LivenessProbe, noteProbe)
-			}
-			if !rawEmpty(c.ReadinessProbe) {
-				add(cp+".readinessProbe", c.ReadinessProbe, noteProbe)
-			}
-			if !rawEmpty(c.StartupProbe) {
-				add(cp+".startupProbe", c.StartupProbe, noteProbe)
 			}
 			if !rawEmpty(c.SecurityContext) {
 				add(cp+".securityContext", c.SecurityContext, noteSecurity)

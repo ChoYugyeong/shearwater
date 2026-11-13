@@ -35,6 +35,8 @@ jobs:
         run: python3 -m unittest discover -s hack -p 'test_*.py'
       - name: Linux build and embedded module list
         run: bash hack/build.sh
+      - name: MCP stdio, exact approval and real API deployment (no runtime)
+        run: python3 hack/mcp-check.py "$PWD/dist/sw"
       - name: Verify executable version (release tags must match)
         shell: bash
         run: |

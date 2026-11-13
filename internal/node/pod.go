@@ -325,6 +325,9 @@ func (a *Agent) reconcile(ctx context.Context, pod *apis.Pod, actual []runtime.C
 			}
 		}
 		cs, again := a.syncContainer(ctx, pod, c, attempts, prev, podErr, mounts, alreadyStarted)
+		if cs.State.Running != nil {
+			cs, again = a.checkProbes(ctx, pod, c, cs, st.PodIP)
+		}
 		if ctx.Err() != nil {
 			return failureRetry, ctx.Err()
 		}
@@ -521,7 +524,13 @@ func (a *Agent) syncContainer(ctx context.Context, pod *apis.Pod, c *apis.Contai
 	}
 
 	if last != nil {
-		restart := pod.Spec.RestartPolicy == "Always" || (pod.Spec.RestartPolicy == "OnFailure" && last.ExitCode != 0)
+		// A liveness failure remains a failure even if the application's TERM
+		// handler exits with code zero. Preserve this reason across sw restarts.
+		forced := a.probeStopReason(pod, c, cs.ContainerID)
+		if forced != "" {
+			last.Reason = forced
+		}
+		restart := pod.Spec.RestartPolicy == "Always" || (pod.Spec.RestartPolicy == "OnFailure" && (last.ExitCode != 0 || forced != ""))
 		if !restart {
 			cs.State = apis.ContainerState{Terminated: last}
 			return cs, 0

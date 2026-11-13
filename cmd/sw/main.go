@@ -40,6 +40,13 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw server      run the API server in the foreground
   sw kubeconfig  print a kubeconfig for kubectl
   sw version     print the version
+  sw service     render/install/manage an automatic systemd service
+  sw backup      snapshot the database and credentials, optionally cold volumes
+  sw restore     verify a backup and restore into a new directory
+  sw plan        prepare a reviewed deployment plan
+  sw approve     approve the exact plan hash locally
+  sw apply       execute an approved plan, checking for concurrent changes
+  sw mcp         serve diagnostics and optional reviewed deployment over stdio
 
 Run "sw COMMAND -h" for the flags of a command.
 `
@@ -62,6 +69,18 @@ func main() {
 	switch cmd, args := os.Args[1], os.Args[2:]; cmd {
 	case "up":
 		err = runUp(args)
+	case "supervise":
+		err = runSupervise(args)
+	case "service":
+		err = runService(args, os.Stdout)
+	case "backup":
+		err = runBackup(args, os.Stdout)
+	case "restore":
+		err = runRestore(args, os.Stdout)
+	case "plan", "approve", "apply":
+		err = runPlanCommand(cmd, args, os.Stdout)
+	case "mcp":
+		err = runMCP(args, os.Stdin, os.Stdout)
 	case "down":
 		err = runDown(args)
 	case "status":
@@ -181,6 +200,11 @@ func runServer(args []string) error {
 	if err := os.MkdirAll(*dataDir, 0o700); err != nil {
 		return err
 	}
+	dbLock, err := fileLock(*dataDir, "database.lock")
+	if err != nil {
+		return err
+	}
+	defer dbLock.Close()
 	st, err := store.Open(filepath.Join(*dataDir, "state.db"))
 	if err != nil {
 		return err

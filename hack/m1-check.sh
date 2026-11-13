@@ -184,7 +184,7 @@ create_warning() {
   cat "$RUN/warning.txt"; return "$rc"
 }
 has "stored-only field Warning" 'Warning:' create_warning
-has "warning names livenessProbe" livenessProbe cat "$RUN/warning.txt"
+has "warning names stored-only securityContext" securityContext cat "$RUN/warning.txt"
 reject "server-side apply rejected with guidance" 'apply' k apply --server-side -f "$T/apply-06-volume.json"
 ok "SSA trace is 415" python3 - "$RUN/trace.jsonl" <<'PY'
 import json,sys

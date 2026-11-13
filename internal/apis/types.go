@@ -50,11 +50,12 @@ type Container struct {
 	VolumeMounts    []VolumeMount        `json:"volumeMounts,omitempty" patchStrategy:"merge" patchMergeKey:"mountPath"`
 	ImagePullPolicy string               `json:"imagePullPolicy,omitempty"`
 
-	// stored only
+	// Probes retain their JSON representation for existing database compatibility;
+	// ParseProbe validates and supplies execution defaults at the boundary.
 	LivenessProbe   json.RawMessage `json:"livenessProbe,omitempty"`
 	ReadinessProbe  json.RawMessage `json:"readinessProbe,omitempty"`
 	StartupProbe    json.RawMessage `json:"startupProbe,omitempty"`
-	SecurityContext json.RawMessage `json:"securityContext,omitempty"`
+	SecurityContext json.RawMessage `json:"securityContext,omitempty"` // stored only
 
 	// rejected when set
 	EnvFrom json.RawMessage `json:"envFrom,omitempty"`

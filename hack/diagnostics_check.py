@@ -160,7 +160,11 @@ def main():
         check('ambiguous container requires an explicit choice', result.returncode != 0 and 'INVALID retry=never' in result.stderr and not result.stdout)
         check('container selection returns the requested output', 'right-marker' in diag('logs', 'pod/multi', '-c=right').stdout)
         check('tail zero and byte limit are honored', diag('logs', 'pod/multi', '-c=left', '--tail=0').stdout == '' and len(diag('logs', 'pod/multi', '-c=left', '--limit-bytes=4').stdout.encode()) <= 4)
-        check('healthy process is not presented as a verified healthy app', 'probes are stored' in diag('why', 'pod/multi', '-c=left').stdout)
+        # These containers have no probes. Adding probe execution must not turn
+        # a running process into an assertion that the app answered a request.
+        explanation = diag('why', 'pod/multi', '-c=left').stdout
+        check('healthy process is not presented as a verified healthy app',
+              'no probe means no application response check' in explanation and 'probes are stored' not in explanation)
 
         selected = json.loads(diag('get', 'pods', '-l=suite=diagnostics', '--full').stdout)
         check('get supports labels and full API JSON', len(selected['items']) == 6)
