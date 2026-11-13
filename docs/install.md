@@ -4,6 +4,9 @@
 
 Shearwater는 신뢰하는 로컬 관리자가 사용하는 **실험적 알파**야. 단일 노드·IPv4·TCP ClusterIP를 지원해. DNS·RBAC·NetworkPolicy는 없고, securityContext는 저장만 해. 설정된 프로브는 실행하고 startup/readiness 결과를 Ready에 반영해. 프로브 없는 앱의 실제 응답은 아래 curl로 확인해.
 
+무엇을 확인할지 먼저 정하고 싶다면 [첫 체험 안내](first-try.md)를 봐.
+아래는 새 설치 절차야. 이미 실행 중인 인스턴스가 있다면 **기존 버전 업데이트** 단락을 먼저 읽어.
+
 ## 1. WSL과 준비물 확인
 
 Windows PowerShell에서 배포판을 확인하고 Ubuntu에 들어가.
@@ -117,6 +120,21 @@ kubectl version --client
 ```
 
 PATH는 현재 터미널에만 적용돼. 새 터미널에서 이 kubectl을 쓰려면 위 `export PATH=...` 줄을 다시 실행해.
+
+## 실행 파일 경로를 기억하기
+
+이 안내는 `sw`를 시스템 PATH에 등록하거나 `/opt/shearwater/current/sw`를 만들지 않아.
+따라서 그냥 `sw version`이 안 된다고 설치 실패는 아니야. 새 Ubuntu 터미널에서는 아래처럼
+설치된 파일을 지정해. 다른 곳에 설치했다면 실제 경로로 바꿔.
+
+```bash
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.4/sw"
+test -x "$sw" && "$sw" version
+printf 'MCP에 지정할 Linux 절대 경로: %s\n' "$sw"
+```
+
+MCP 설정에도 이 **Linux 절대 경로**를 넣어. Windows의 `C:\...` 경로나 `$HOME`이라는
+문자열을 그대로 넣는 것은 같은 뜻이 아니야. [AI 연결 안내](agent-mcp.md)에 Windows 명령이 있어.
 
 ## 4. 서버 시작과 웹 앱 배포
 

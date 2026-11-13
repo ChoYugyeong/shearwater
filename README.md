@@ -1,10 +1,14 @@
 # Shearwater
 
-Shearwater는 작은 컨테이너 서비스를 운영하는 단일 바이너리 `sw`야. `kubectl`로 Pod, Deployment, Service를 다루고, containerd가 실행을 맡고, SQLite가 상태를 보관해. 필요한 API·컨트롤러·네트워크 부분을 직접 구현하고, `sw`는 Kubernetes Go 패키지(`k8s.io/*`)를 import하거나 바이너리에 포함하지 않아. containerd 네이티브 클라이언트를 사용하며 CRI·CNI 플러그인을 사용하지 않아. 참고·적응한 프로토콜과 패치 구현의 출처는 NOTICE에 적었어.
+Shearwater는 **한 대의 Linux 환경에서 작은 앱을 띄우고, 문제를 확인하고, 변경 내용을 검토한 뒤 배포하는** 실험적 컨테이너 운영 도구야. `sw why`로 관측된 실패 이유를 읽고, MCP로 AI에 조회를 연결하고, 정확한 변경 계획을 로컬에서 승인해 실행할 수 있어. 개인 개발자와 오케스트레이터 동작을 공부하는 사람이 직접 시험해 볼 수 있게 코드와 재현 절차를 공개했어.
+
+**처음 써 본다면 [첫 체험 안내](docs/first-try.md)**에서 앱 응답 → 의도적인 실패 진단 → 선택적인 AI 연결과 승인 배포를 확인해. 새 OS를 준비하는 시간까지 포함한 설치 소요 시간이나 다른 도구보다 쉽다는 주장은 아직 검증하지 않았어. [체험 기록 양식](docs/first-try-feedback.md)에 막힌 지점을 남겨 줘.
+
+실행 파일은 `sw` 하나지만 containerd·runc와 네트워크 도구는 별도로 필요해. `kubectl`로 Pod, Deployment, Service를 다루고, containerd가 실행을 맡고, SQLite가 상태를 보관해. 필요한 API·컨트롤러·네트워크 부분을 직접 구현하며, `sw`에는 Kubernetes Go 패키지(`k8s.io/*`)가 포함되지 않아. containerd 네이티브 클라이언트를 사용하고 CRI·CNI 플러그인은 사용하지 않아. 참고·적응한 구현의 출처는 NOTICE에 적었어.
 
 **현재 단계는 실험적 알파**야. 실제로 검증한 운영 환경은 **WSL 2의 Ubuntu 24.04, Linux amd64, 단일 노드, IPv4, TCP ClusterIP**야. 관리자 한 명이 신뢰하는 앱을 실험하는 용도이며, Kubernetes 인증 제품이나 운영 서비스용 보안 격리 도구가 아니야. **securityContext는 여전히 저장만 해.** alpha.4는 설정된 프로브를 실행하며 readiness가 없으면 실행 중인 컨테이너를 Ready로 봐. [지원 범위](docs/compatibility.md)를 먼저 확인해.
 
-Shearwater is an experimental single-node container orchestrator with a small Kubernetes-compatible API, native containerd integration, and SQLite storage. The tested runtime target is WSL 2 / Ubuntu 24.04 / amd64. See the Korean [quickstart](docs/quickstart.md) and [compatibility table](docs/compatibility.md) for the exact limits.
+Shearwater is an experimental single-node container orchestrator for trying small apps, diagnosing failures, and reviewing changes before deployment, with optional MCP access for AI tools. It provides a small Kubernetes-compatible API, native containerd integration, and SQLite storage. The tested runtime target is WSL 2 / Ubuntu 24.04 / amd64. Runtime dependencies are installed separately. The [first-try guide](docs/first-try.md) and [compatibility table](docs/compatibility.md) are currently in Korean.
 
 ## 처음 시작하기
 
