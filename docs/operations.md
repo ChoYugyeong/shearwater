@@ -86,6 +86,10 @@ kubectl --kubeconfig "$instance/etc/kubeconfig" get namespaces
 
 ## 문제가 생겼을 때
 
+개발 버전의 `sw get`, `logs`, `events`, `why`를 사용하는 상세 예제·출력 해석은
+[문제 해결 안내](troubleshooting.md)에 있어. alpha.2 실행 파일을 사용 중이라면
+아래 kubectl 명령을 사용해. 조회용 새 CLI를 빌드하는 일과 서버 교체는 별개야.
+
 1. `sw doctor`로 어떤 검사에서 막혔는지 확인해. `server.log`의 위치와 최근 오류가 출력돼.
 2. `sw status`로 서버·노드를 보고 `sw tree --problems`로 앱의 문제가 어디에 있는지 좁혀.
 3. `kubectl describe pod <이름>`의 Events에서 배치와 시작을 확인하고, `kubectl logs <이름>` 또는 `kubectl logs <이름> --previous`로 현재 또는 직전 컨테이너 로그를 확인해. 반복 이벤트는 묶이고 그 Pod가 삭제되면 정리돼.

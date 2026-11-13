@@ -1,5 +1,13 @@
 # 릴리스와 버전 확인
 
+## 미발행: 0.1.0-alpha.3-dev
+
+로컬 개발 버전에 `sw get`, `logs`, `events`, `why`를 추가했어.
+기존 API를 읽기만 하며 대상 UID와 컨테이너 실행 시도를 확인해 진단 기록이
+섞이지 않도록 해. 명령 사용법·제한은 [문제 해결 안내](troubleshooting.md),
+실제 장애와 회귀 검사 결과는 [검증 기록](diagnostics-verification.md)에 있어.
+아직 새 GitHub 태그·실행 파일을 발행한 것은 아니야. 공개 설치 버전은 아래 alpha.2야.
+
 ## v0.1.0-alpha.2
 
 첫 알파의 실행 파일은 GitHub 릴리스 이름이 `v0.1.0-alpha.1`이었지만

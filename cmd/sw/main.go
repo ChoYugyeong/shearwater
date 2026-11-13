@@ -33,6 +33,10 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw status      show server, node and Pod health
   sw tree        show how workloads, Pods and Services are related
   sw doctor      diagnose the host and the local server
+  sw get         list resources or inspect TYPE/NAME (--full for JSON)
+  sw logs        read current or previous Pod container logs
+  sw events      show recent events, optionally for one object's UID
+  sw why         explain a Pod's state with events and bounded log excerpts
   sw server      run the API server in the foreground
   sw kubeconfig  print a kubeconfig for kubectl
   sw version     print the version
@@ -66,6 +70,8 @@ func main() {
 		err = runTree(args)
 	case "doctor":
 		err = runDoctor(args)
+	case "get", "logs", "events", "why":
+		err = runDiagnostic(cmd, args, os.Stdout)
 	case "server":
 		err = runServer(args)
 	case "kubeconfig":

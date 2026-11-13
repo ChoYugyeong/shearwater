@@ -82,6 +82,24 @@ func TestInspectReadsExistingAPIOverHTTPS(t *testing.T) {
 	if output.Len() != 0 {
 		t.Fatalf("failed command wrote partial output %q", output.String())
 	}
+	// Exercise the new commands against the real SQLite-backed API as well.
+	// Their GET requests must not advance the revision or write client files.
+	for _, tt := range []struct {
+		command string
+		args    []string
+		want    string
+	}{
+		{"get", []string{"pod/waiting"}, "Pending"},
+		{"events", []string{"--for=pod/waiting"}, "No matching Event records"},
+		{"why", []string{"pod/waiting"}, "Unscheduled"},
+	} {
+		output.Reset()
+		if err := runDiagnostic(tt.command, append(tt.args, flags...), &output); err != nil || !strings.Contains(output.String(), tt.want) {
+			t.Fatalf("%s: %q, %v", tt.command, output.String(), err)
+		}
+	}
+	output.Reset()
+	assertInspectError(t, runDiagnostic("logs", append([]string{"pod/waiting"}, flags...), &output), "UNSUPPORTED", "never")
 	if after, err := st.Rev(); err != nil || after != before {
 		t.Fatalf("reading changed the revision from %d to %d, error %v", before, after, err)
 	}
