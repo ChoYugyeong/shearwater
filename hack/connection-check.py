@@ -40,9 +40,18 @@ flags = ['--config-dir=' + str(root/'config'), '--data-dir=' + str(root/'data'),
          '--node-name=connection-check']
 kflags = [args.kubectl, '--kubeconfig=' + str(root/'config/kubeconfig'), '--request-timeout=15s']
 ctr = ['ctr', '--address', args.containerd_socket, '--namespace', 'shearwater']
-clock = lambda: time.clock_gettime(time.CLOCK_MONOTONIC_RAW)
+# Go's elapsed timers use CLOCK_MONOTONIC on Linux. MONOTONIC_RAW can advance
+# at a different rate while a WSL guest clock is being corrected. Mixing them
+# made a real 30-second drain appear to end in about 27 seconds. Use the same
+# clock for deadlines, request pacing and reported latency; retain both clock
+# samples so a later reader can identify the measurement basis.
+clock = time.monotonic
+def clock_sample():
+    return {'monotonic':clock(), 'raw':time.clock_gettime(time.CLOCK_MONOTONIC_RAW), 'wall':time.time()}
+
 body = b'x'*1023 + b'\n'
 report = {'passed': False, 'phases': [], 'actions': [], 'httpRetries': 0,
+          'clock': {'duration':'CLOCK_MONOTONIC', 'start':clock_sample()},
           'binarySHA256': hashlib.sha256(Path(args.sw).read_bytes()).hexdigest()}
 
 def save():
@@ -214,8 +223,24 @@ def await_drain(uid):
         time.sleep(.1)
     raise AssertionError('old Pod never entered drain')
 
+def settled_single_pod():
+    # Rollout readiness alone is not proof that the retired Pod has disappeared.
+    # A new experiment must pin its connection to the one current Pod, rather
+    # than accidentally timing an already draining Pod from the previous test.
+    deadline=clock()+90
+    while clock()<deadline:
+        pods=data('pods')
+        if len(pods)==1:
+            pod=pods[0];meta=pod['metadata'];annotations=meta.get('annotations',{})
+            if (not meta.get('deletionTimestamp') and not annotations.get('shearwater.io/connection-drain')
+                    and annotations.get('test.shearwater/revision')==str(revision)
+                    and any(c['type']=='Ready' and c['status']=='True' for c in pod['status'].get('conditions',[]))):
+                return meta['uid']
+        time.sleep(.1)
+    raise AssertionError('previous rollout did not settle to one current Ready Pod')
+
 def slow_download_during_rollout():
-    deploy(1);old=data('pods')[0]['metadata']['uid']
+    deploy(1);old=settled_single_pod()
     connection=http.client.HTTPConnection(vip,80,timeout=3)
     connection.request('GET','/stream.bin');response=connection.getresponse()
     assert response.status==200 and response.getheader('Content-Length')==str(1024*1024)
@@ -241,7 +266,7 @@ def slow_download_during_rollout():
         'sha256':hashlib.sha256(received[0]).hexdigest(),'seconds':clock()-started_at,'errors':0});save()
 
 def bounded_drain():
-    deploy(1);old=data('pods')[0]['metadata']['uid']
+    deploy(1);old=settled_single_pod()
     connection=http.client.HTTPConnection(vip,80,timeout=2)
     connection.request('GET','/');r=connection.getresponse();assert r.read()==body
     # Events belong to their Pod and are garbage-collected with it. Watch
@@ -363,5 +388,6 @@ finally:
             assert not cmd(ctr+['containers','list','-q']).strip()
             report['cleanup']=True
         except Exception: report['cleanupFailure']=traceback.format_exc()
+    report['clock']['end']=clock_sample()
     save()
 raise SystemExit(0 if report['passed'] and report.get('cleanup') else 1)
