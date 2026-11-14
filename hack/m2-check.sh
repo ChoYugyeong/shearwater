@@ -12,8 +12,11 @@ socket=${SW_CONTAINERD_SOCKET:-/run/containerd/containerd.sock}
 [[ $socket == /* ]] || { echo 'SW_CONTAINERD_SOCKET must be absolute' >&2; exit 2; }
 port=${SW_M2_PORT:-16445}
 ctr_sw() { ctr --namespace shearwater --address "$socket" "$@"; }
-[[ -z $(ctr_sw containers list -q) ]] || {
-  echo "shearwater already has containers; stop the test here" >&2
+# A failed query must not look like an empty namespace. Only proceed when the
+# selected daemon answered and has neither containers nor tasks.
+containers=$(ctr_sw containers list -q) && tasks=$(ctr_sw tasks list -q) &&
+  [[ -z $containers && -z $tasks ]] || {
+  echo "shearwater runtime is busy or unavailable; stop the test here" >&2
   exit 1
 }
 mkdir -p /var/lib/shearwater/check /run/shearwater

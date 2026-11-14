@@ -112,6 +112,11 @@ bash hack/e2e-stage1.sh /absolute/sw /absolute/kubectl
 bash hack/measure.sh /absolute/sw /absolute/kubectl
 ```
 
+QA 전용 containerd를 사용한다면 `SW_CONTAINERD_SOCKET=/absolute/qa-containerd.sock`을
+지정해. `m2-check.sh`, `m3-check.sh`와 `measure.sh`도 이 소켓을 사전 검사·서버 실행·
+태스크 조회에 일관되게 사용해. 주소를 바꾸는 것만으로 네트워크가 격리되지는 않으므로,
+기존 앱과 같은 Pod/Service 대역을 공유하지 않는 별도 네트워크 공간도 준비해야 해.
+
 두 스크립트는 `/var/lib/shearwater/check/` 아래에 별도 데이터와 로그를 만들고, 검증용 인스턴스만 정지해. 출력의 `Evidence:` 경로를 보면 돼. 측정 스크립트는 처음 `sw up`부터 HTTPS `/readyz`까지 시간을 재고, Pod 10개가 Ready가 된 뒤 60초 동안 서버의 CPU·RSS·디스크 쓰기를 잰다. **RSS**는 그 프로세스가 현재 물리 메모리에 올린 페이지의 크기야. CPU는 논리 코어 하나를 100%로 보고, 파일 변경은 DB·WAL·서버 로그의 알림과 크기·수정 시각, `/proc/<pid>/io`의 쓰기 바이트를 함께 본다. 파일 알림은 합쳐질 수 있어서 쓰기 횟수로 환산하지 않아. [Linux 프로세스 통계](https://docs.kernel.org/filesystems/proc.html) · [inotify 설명](https://man7.org/linux/man-pages/man7/inotify.7.html)
 
 ## 코드를 따라가려면

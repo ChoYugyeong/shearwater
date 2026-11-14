@@ -7,8 +7,19 @@ set -euo pipefail
 }
 sw=$1 kubectl=$2
 port=${SW_M3_PORT:-16446}
-[[ -z $(ctr --namespace shearwater containers list -q) ]] || {
-  echo "shearwater already has containers; stop the test here" >&2
+socket=${SW_CONTAINERD_SOCKET:-/run/containerd/containerd.sock}
+[[ $socket == /* ]] || { echo 'SW_CONTAINERD_SOCKET must be absolute' >&2; exit 2; }
+# Use the same daemon for safety checks, the server, and cleanup. A separate
+# socket is essential in QA: checking the default socket could inspect another
+# runtime or mistake a failed query for an empty namespace.
+ctr_sw() { ctr --address "$socket" --namespace shearwater "$@"; }
+empty_runtime() {
+  local ids tasks
+  ids=$(ctr_sw containers list -q) && tasks=$(ctr_sw tasks list -q) &&
+    [[ -z $ids && -z $tasks ]]
+}
+empty_runtime || {
+  echo "shearwater runtime is busy or unavailable; stop the test here" >&2
   exit 1
 }
 mkdir -p /var/lib/shearwater/check /run/shearwater
@@ -17,6 +28,7 @@ net=$(mktemp -d /run/shearwater/m3.XXXXXXXX)
 echo "Evidence: $run"
 k() { KUBECONFIG="$run/kubeconfig" "$kubectl" --request-timeout=90s "$@"; }
 "$sw" server --runtime=containerd --node-name=m3-check --listen="127.0.0.1:$port" \
+  --containerd-socket="$socket" \
   --data-dir="$run/data" --config-dir="$run/etc" --run-dir="$net" --log-dir="$run/log" \
   >"$run/server.log" 2>&1 &
 srv=$!
@@ -25,7 +37,7 @@ cleanup() {
   if [[ -s $run/kubeconfig ]] && kill -0 "$srv" 2>/dev/null; then
     k delete deployment,replicaset,pod --all --grace-period=1 --wait=false >/dev/null 2>&1 || true
     for _ in {1..10}; do
-      if [[ -z $(ctr --namespace shearwater containers list -q) ]]; then
+      if empty_runtime; then
         break
       fi
       sleep 1

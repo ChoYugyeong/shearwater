@@ -31,8 +31,20 @@ def run(args, **kwargs):
     return subprocess.run(args, text=True, check=True, **kwargs)
 
 
+def containerd_socket():
+    """Keep observations and the measured server on the same explicit daemon.
+
+    QA uses a private socket. Falling back to the host socket for just the
+    safety check or task count would measure a different instance.
+    """
+    address = os.environ.get("SW_CONTAINERD_SOCKET", "/run/containerd/containerd.sock")
+    if not Path(address).is_absolute():
+        raise ValueError("SW_CONTAINERD_SOCKET must be absolute")
+    return address
+
+
 def ctr_ids(kind):
-    return set(run(["ctr", "--namespace", "shearwater", kind, "list", "-q"],
+    return set(run(["ctr", "--address", containerd_socket(), "--namespace", "shearwater", kind, "list", "-q"],
                    capture_output=True).stdout.split())
 
 
@@ -177,6 +189,7 @@ def measure(sw, kubectl):
     port = int(os.environ.get("SW_MEASURE_PORT", "16450"))
     seconds = max(60, int(os.environ.get("SW_MEASURE_SECONDS", "60")))
     flags = [f"--listen=127.0.0.1:{port}", "--node-name=measure-check",
+             "--containerd-socket=" + containerd_socket(),
              f"--data-dir={data}", f"--config-dir={config}", f"--log-dir={log}", f"--run-dir={tmp}"]
     print(f"Evidence: {evidence}", flush=True)
     k = [kubectl, "--kubeconfig", str(config / "kubeconfig"), "--request-timeout=15s"]
