@@ -1,5 +1,24 @@
 # 릴리스와 버전 확인
 
+## v0.1.0-alpha.6
+
+Windows에서만 localhost 연결이 멈추는 경우를 위한 선택적 TCP 중계와 자동 감독
+프로그램을 공개해. 앱 연결마다 WSL/Hyper-V 소켓을 만들지 않고 WSL의 NAT IPv4로
+전달해. 로그인 시 감독 프로그램을 시작하는 예약 작업 설치 도구, 중복 실행 잠금,
+종료 후 대기·재연결, 제한된 로그와 상태 조회를 함께 제공해.
+
+Linux/amd64 실행 파일과 별도의 `windows-forward.zip`을 SHA-256 목록과 함께
+배포해. Windows용 네이티브 sw 실행 파일은 아니며 양쪽에 Python 3.11 이상이
+필요해. [접속 원리·한계](windows-localhost.md), [설치·중지·복구](automatic-start.md)를 봐.
+Linux systemd가 sw를 시작하고 Windows 감독 프로그램이 WSL과 중계를 유지해.
+Windows 로그인이 되기 전부터 실행하는 시스템 서비스는 아니야.
+
+`sw version`·API·Node의 제품 버전은 `0.1.0-alpha.6`으로 맞췄어. SQLite 스키마와
+Pod 실행·Service 전달 방식은 alpha.5와 같아. 기존 경로와 설정으로 서버만
+교체해 앱을 인계하고, 중계 패키지는 별도의 새 버전 폴더로 교체해.
+개발 단계 재부팅 기록을 이번 릴리스 실측으로 합산하지 않아. 공개 소스 재빌드,
+첨부 파일 다운로드 검증과 실제 운영 재부팅 결과는 GitHub alpha.6 릴리스 본문에 기록해.
+
 ## v0.1.0-alpha.5
 
 Service TCP 전달을 Linux 커널 DNAT·conntrack으로 옮겨 같은 호스트에서 sw만 멈춰도 살아 있는 Pod로 연결을 전달해. 롤링 교체·ReplicaSet 축소는 새 연결을 제외한 다음 기존 Service 연결을 최대 30초 기다리고 원래 종료 유예를 시작해. Pod 자기 Service 연결, Service 삭제와 IP 재사용, 규칙/종료 대기의 일관된 상태 확인도 보완했어.
@@ -90,7 +109,7 @@ Git 태그에만 붙는 앞의 `v`는 그 값에 넣지 않아. Git이 없는 �
 bash hack/t.sh ./...
 python3 -m unittest discover -s hack -p 'test_*.py'
 bash hack/build.sh
-python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.5
+python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.6
 python3 hack/notices.py
 ```
 

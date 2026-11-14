@@ -102,8 +102,10 @@ alpha.5는 커널에 Service 전달 규칙을 남겨, 같은 호스트에서 sw�
 
 ## Windows 로그인부터 중계까지 자동으로 시작하기
 
-Windows 보조 스크립트는 `sw` 바이너리와 별도의 저장소 도구야. alpha.5 실행
-파일만 내려받으면 이 스크립트까지 설치되는 것은 아니야. Windows와 WSL에 Python
+Windows 보조 스크립트는 `sw` 바이너리와 별도야. alpha.6 릴리스의
+`shearwater-v0.1.0-alpha.6-windows-forward.zip`에 스크립트와 이 안내를 동봉해.
+Linux 압축에도 같은 `hack/` 보조 파일을 넣었어. 내려받기만 하면 자동 설치되지는 않아.
+Windows와 WSL에 Python
 3.11 이상이 이미 있고, WSL 2 NAT·eth0 단일 IPv4 환경인 경우를 대상으로 해.
 추가 Python 패키지는 필요 없어. 먼저 [수동 중계](windows-localhost.md)로 별도
 포트에서 접속을 확인한 뒤 자동 시작을 설정해.
@@ -136,8 +138,29 @@ ID로 종료 요청을 전달해. 잠금 파일은 지우지 마. 프로세스�
 
 ### 1. 고정 경로에 파일 준비하기
 
-다음 예시는 저장소 `C:\Dev\shearwater`, 실행 패키지
-`C:\Dev\shearwater-runtime\forward\v1`을 사용해. 설치 위치가 다르면 모든 경로를
+먼저 Windows PowerShell에서 ZIP과 체크섬을 받아 확인해. 아래는 새 다운로드
+폴더만 만들고, 기존 파일은 덮어쓰지 않아. 다운로드한 코드를 바로 실행하지 않아.
+
+```powershell
+$version = 'v0.1.0-alpha.6'
+$ErrorActionPreference = 'Stop'
+$archive = "shearwater-$version-windows-forward.zip"
+$download = Join-Path $env:TEMP ('shearwater-alpha6-' + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $download | Out-Null
+$base = "https://github.com/ChoYugyeong/shearwater/releases/download/$version"
+Invoke-WebRequest "$base/$archive" -OutFile "$download\$archive"
+Invoke-WebRequest "$base/SHA256SUMS" -OutFile "$download\SHA256SUMS"
+$lines = @(Get-Content "$download\SHA256SUMS" | Where-Object { $_ -match ('^[0-9a-f]{64}  ' + [regex]::Escape($archive) + '$') })
+if ($lines.Count -ne 1) { throw '체크섬 항목을 찾을 수 없어.' }
+if ((Get-FileHash "$download\$archive" -Algorithm SHA256).Hash -ine $lines[0].Substring(0,64)) { throw '체크섬 불일치' }
+Expand-Archive -LiteralPath "$download\$archive" -DestinationPath $download
+$repo = Join-Path $download "shearwater-$version-windows-forward"
+```
+
+`$repo`는 이 ZIP을 푼 폴더야. 그 아래 `hack`에 스크립트 3개가 있어. 소스
+저장소를 이미 받았다면 `$repo = 'C:\Dev\shearwater'`처럼 그 경로로 지정해도 돼.
+이후 실행 패키지는 고정 경로
+`C:\Dev\shearwater-runtime\forward\v1`에 복사해. 설치 위치가 다르면 모든 경로를
 같이 바꿔. 이미 설치했다면 이 준비 단계를 반복하지 말고 아래 상태 확인으로 가.
 버전별 폴더를 사용하는 이유는 실행 중인 파일을 덮어쓰지 않고 교체·복귀할 수
 있게 하려는 거야. 검증 폴더나 다운로드 임시 폴더에 실행 파일을 두지 마.
@@ -145,7 +168,7 @@ ID로 종료 요청을 전달해. 잠금 파일은 지우지 마. 프로세스�
 일반 PowerShell에서 실행해.
 
 ```powershell
-$repo = 'C:\Dev\shearwater'
+# $repo는 위에서 검증한 ZIP의 압축 해제 폴더 또는 소스 저장소야.
 $relayRoot = 'C:\Dev\shearwater-runtime\forward'
 $package = Join-Path $relayRoot 'v1'
 if (Test-Path -LiteralPath $relayRoot) { throw '기존 설치가 있어. 상태와 설정부터 확인해.' }
@@ -155,13 +178,14 @@ Copy-Item -LiteralPath "$repo\hack\wsl-forward.py","$repo\hack\wsl-forward-autos
 ```
 
 Linux 파일은 WSL 안의 `/opt/shearwater/windows-forward/v1`에 놓아.
-아래는 Ubuntu Bash에서 실행하는 예시야. 기존 폴더가 있으면 덮어쓰지 말고 먼저
+아래는 Windows에 복사한 고정 패키지를 Ubuntu Bash에서 읽는 예시야.
+기존 폴더가 있으면 덮어쓰지 말고 먼저
 내용을 확인해. 루트 권한은 이 전용 경로의 생성과 읽기 권한 설정에 사용해.
 
 ```bash
 test ! -e /opt/shearwater/windows-forward/v1 || { echo '기존 설치를 먼저 확인해'; exit 1; }
 sudo install -d -m 0755 /opt/shearwater/windows-forward/v1
-sudo install -m 0644 /mnt/c/Dev/shearwater/hack/wsl-forward.py \
+sudo install -m 0644 /mnt/c/Dev/shearwater-runtime/forward/v1/wsl-forward.py \
   /opt/shearwater/windows-forward/v1/wsl-forward.py
 python3 --version
 ```
@@ -303,9 +327,9 @@ Enable-ScheduledTask -TaskName Shearwater-Windows-Forward | Out-Null
 Start-ScheduledTask -TaskName Shearwater-Windows-Forward
 ```
 
-### 실제 재부팅 검증 결과와 범위
+### 개발 단계의 실제 재부팅 검증 결과와 범위
 
-2026-11-15에 Ubuntu-24.04만 실행 중인 환경에서 `wsl.exe --shutdown`으로 WSL VM을
+alpha.6 공개 전 개발 검증에서, 2026-11-15에 Ubuntu-24.04만 실행 중인 환경에서 `wsl.exe --shutdown`으로 WSL VM을
 실제로 종료했어. Linux 커널 boot ID가 달라진 것으로 새 부팅을 확인했어.
 감독 프로그램이 WSL을 깨웠고 Linux 서비스가 sw를 시작했어. 복구를 기다리는 동안
 수동 `wsl` 실행이나 `sw up`, 중계 시작 명령은 사용하지 않았어.
@@ -330,3 +354,7 @@ Start-ScheduledTask -TaskName Shearwater-Windows-Forward
 [WSL 종료 명령의 범위](https://learn.microsoft.com/en-us/windows/wsl/basic-commands)도
 확인해. 재부팅 중 연결은 끊기며, 자동 복구는 무중단이나 일정한 복구 시간의
 보장이 아니야.
+
+alpha.6의 공개 소스로 다시 빌드한 릴리스 파일의 운영 교체·재부팅 결과는
+[alpha.6 릴리스](https://github.com/ChoYugyeong/shearwater/releases/tag/v0.1.0-alpha.6)에
+별도로 기록해. 위 개발 기록을 릴리스 재검증 결과로 대신하지 않아.

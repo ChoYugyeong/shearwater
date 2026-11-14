@@ -122,7 +122,18 @@ Go 전체·Python 40·M1 103/0·M0 47/0·실제 장애 16개를 확인했어.
 확인한다. 실제 앱은 alpha.2로 유지한다. 공개 push·태그·릴리스·서버 교체는 후속 사용자
 지시가 있을 때만 한다. 아래 공개 준비 지침은 과거 기록이며 현재 배포 상태로 해석하지 않는다.
 
-# 핸드오프 (2026-11-12, 공개 알파 준비)
+# 핸드오프
+
+## 최신: alpha.6 Windows 중계·자동 시작
+
+alpha.6은 alpha.5의 Go 동작과 DB 스키마를 유지하고, Windows NAT TCP 중계와
+로그인·WSL 종료 후 자동 복구 도구를 공개해. 현재 사용법은 README,
+docs/install.md, docs/automatic-start.md, docs/windows-localhost.md를 먼저 봐.
+제품 버전 기준은 internal/api/server.go의 Version이야. 최종 공개 소스 빌드·
+다운로드 검증·운영 재부팅 결과는 GitHub alpha.6 릴리스 본문과 BUILDINFO에 기록해.
+아래의 과거 승인·배포 전 상태는 역사 기록이며 현재 공개 여부 판단에 쓰지 마.
+
+## 이전: 2026-11-12 공개 알파 준비
 
 ## 가장 최근 작업
 

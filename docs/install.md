@@ -1,4 +1,4 @@
-# Shearwater v0.1.0-alpha.5 설치와 첫 웹 앱
+# Shearwater v0.1.0-alpha.6 설치와 첫 웹 앱
 
 이 안내는 **WSL 2 / Ubuntu 24.04 / x86_64(amd64)**에서 처음 실행하는 사람을 위한 거야. 내려받은 바이너리를 사용하므로 **Go 설치나 소스 빌드는 필요 없어**. ARM64, Windows 네이티브 실행 파일, 다른 Linux 배포판은 이번 바이너리의 검증 대상이 아니야.
 
@@ -56,7 +56,7 @@ IPv4 전달 값이 0이고 이 호스트를 Pod 네트워크용으로 쓰기로 
 ```bash
 (
   set -euo pipefail
-  version=v0.1.0-alpha.5
+  version=v0.1.0-alpha.6
   base="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
   archive="shearwater-${version}-linux-amd64.tar.gz"
   install_dir="$HOME/.local/share/shearwater/$version"
@@ -84,8 +84,8 @@ IPv4 전달 값이 0이고 이 호스트를 Pod 네트워크용으로 쓰기로 
 **버전 확인:** 다음처럼 실제 릴리스 버전이 나와야 해. 다른 값이 나오면 실행 파일 경로를 먼저 확인해. 동봉 `BUILDINFO.txt`에는 공개 소스 커밋과 빌드 정보, 파일 체크섬도 있어.
 
 ```bash
-"$HOME/.local/share/shearwater/v0.1.0-alpha.5/sw" version
-# sw 0.1.0-alpha.5 (Kubernetes API v1.36.0+shearwater.0.1.0-alpha.5)
+"$HOME/.local/share/shearwater/v0.1.0-alpha.6/sw" version
+# sw 0.1.0-alpha.6 (Kubernetes API v1.36.0+shearwater.0.1.0-alpha.6)
 ```
 
 앞의 숫자는 Shearwater 제품 버전이고, `v1.36.0`은 Kubernetes API 호환 수준이야. 처음 배포한 alpha.1은 `sw 0.0.1`을 표시했지만 alpha.2부터 이 불일치를 고쳤어.
@@ -137,7 +137,7 @@ PATH는 현재 터미널에만 적용돼. 새 터미널에서 이 kubectl을 쓰
 설치된 파일을 지정해. 다른 곳에 설치했다면 실제 경로로 바꿔.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.5/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.6/sw"
 test -x "$sw" && "$sw" version
 printf 'MCP에 지정할 Linux 절대 경로: %s\n' "$sw"
 ```
@@ -150,8 +150,8 @@ MCP 설정에도 이 **Linux 절대 경로**를 넣어. Windows의 `C:\...` 경�
 다음 변수와 함수도 현재 터미널에서만 유지돼. 새 터미널에서 작업을 이어갈 때 다시 선언해.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.5/sw"
-example="$HOME/.local/share/shearwater/v0.1.0-alpha.5/examples/web.yaml"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.6/sw"
+example="$HOME/.local/share/shearwater/v0.1.0-alpha.6/examples/web.yaml"
 export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
 k() {
@@ -203,7 +203,7 @@ sudo "$sw" why "pod/$pod" -n default
 읽을 수 있어. 컨테이너가 여러 개면 `-c NAME`을 지정해. `why`가 성공해도 앱 정상
 판정은 아니야. 상태·이벤트·제한된 로그를 잘 수집했다는 뜻이고 HTTP 응답은 따로 확인해.
 자세한 출력 해석과 오류 해결은 동봉 `TROUBLESHOOTING-ko.md` 또는
-[온라인 진단 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.5/docs/troubleshooting.md)를 봐.
+[온라인 진단 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.6/docs/troubleshooting.md)를 봐.
 
 ## 6. 재시작과 종료
 
@@ -239,7 +239,7 @@ sudo "$sw" down --all --node-name=shearwater
 | Ready인데 HTTP 실패 | 실제 앱 준비 시간, Service selector, EndpointSlice와 로그 |
 | 다른 터미널에서 명령 실패 | sw/example/kubectl_bin 변수, k 함수, PATH를 다시 선언했는지 |
 
-자세한 [호환 범위](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.5/docs/compatibility.md), [운영 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.5/docs/operations.md), [보안 제보](https://github.com/ChoYugyeong/shearwater/security/advisories/new)를 참고해.
+자세한 [호환 범위](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.6/docs/compatibility.md), [운영 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.6/docs/operations.md), [보안 제보](https://github.com/ChoYugyeong/shearwater/security/advisories/new)를 참고해.
 
 ## 8. alpha.4의 새 운영 기능
 
@@ -250,3 +250,24 @@ sudo "$sw" down --all --node-name=shearwater
 ## 9. alpha.5의 연결 유지
 
 롤링 교체에서는 새 연결 대상에서 이전 Pod를 제외하고 기존 Service 연결을 최대 30초 기다려. 그 다음 원래 Pod 종료 유예를 시작해. 30초보다 긴 연결, Pod 직접 IP, 강제 삭제, 앱/호스트/WSL 재부팅은 기존 연결 유지 보장 대상이 아니야. [원리와 진단·재현](connection-continuity.md), [개발 단계 실측](connection-verification.md), [릴리스 기록](releases.md)을 함께 봐.
+
+## 10. alpha.6의 Windows 중계와 자동 시작
+
+Windows localhost만 멈출 때 쓸 선택적 TCP 중계와 로그인 자동 시작 도구를
+별도 `shearwater-v0.1.0-alpha.6-windows-forward.zip`에 제공해. Linux 압축에도
+같은 `hack/` 파일이 있어. Windows·WSL에 Python 3.11 이상이 필요하고, NAT의
+단일 eth0 IPv4 환경용이야. Windows 네이티브 sw 바이너리가 아니야.
+
+[자동 시작 안내](automatic-start.md)의 ZIP 체크섬 확인 → 고정 경로 복사 → Linux
+서비스 확인 → 예약 작업 등록 순서로 진행해. 동봉 `WINDOWS-LOCALHOST-ko.md`에는
+실패 구간을 나누는 방법이 있어. 재부팅 중에는 연결이 끊기며, 자동 시작을 해제할
+때는 감독 프로그램부터 정상 종료해야 WSL이 다시 켜지는 것을 막을 수 있어.
+
+이미 systemd로 운영하는 sw는 위의 수동 `down/up`과 섞어 관리하지 마. 기존
+서비스 파일을 백업하고, 같은 옵션의 새 버전 경로로 `ExecStart`만 바꾼 뒤
+`sudo systemctl daemon-reload`와 `sudo systemctl restart shearwater.service`를 사용해. 서비스 이름이 다르면
+해당 이름을 사용해. 이때 앱 삭제·DB 복원·인증 재생성을 하지 않아.
+기존 Windows 중계는 그 실행의 `stop`으로 정상 종료한 뒤 새 버전의 고정 패키지로
+예약 작업의 실행 경로를 변경해. 동명 작업은 설치 도구가 자동 덮어쓰기하지 않으니
+먼저 `Export-ScheduledTask`로 보관하고 실제 실행 인수를 확인해. 현재 쓰는
+중계를 멈추는 동안 Windows 입구가 잠시 끊길 수 있어.
