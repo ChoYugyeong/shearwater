@@ -13,7 +13,7 @@ alpha.2 실행 파일에는 이 네 명령이 없어. [설치 안내](install.md
 `sw` 변수를 그 `dist/sw`의 절대 경로로 바꿔. `web`은 예시이므로 실제 이름으로 바꿔.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.4/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.5/sw"
 sudo "$sw" status
 sudo "$sw" get pods -A
 sudo "$sw" get pods -n default -l app=web

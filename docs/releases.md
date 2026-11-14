@@ -1,5 +1,13 @@
 # 릴리스와 버전 확인
 
+## v0.1.0-alpha.5
+
+Service TCP 전달을 Linux 커널 DNAT·conntrack으로 옮겨 같은 호스트에서 sw만 멈춰도 살아 있는 Pod로 연결을 전달해. 롤링 교체·ReplicaSet 축소는 새 연결을 제외한 다음 기존 Service 연결을 최대 30초 기다리고 원래 종료 유예를 시작해. Pod 자기 Service 연결, Service 삭제와 IP 재사용, 규칙/종료 대기의 일관된 상태 확인도 보완했어.
+
+[연결 유지 안내](connection-continuity.md)에는 원리·제한·진단 방법을, [개발 검증 기록](connection-verification.md)에는 동일 후보의 정상 HTTP 112,000건/오류0 및 시험 방식 보완 내역을 남겼어. 이 수치를 릴리스 바이너리의 재검증과 섞지 마. 최종 공개 소스·실행 파일의 재검증 결과는 GitHub alpha.5 릴리스 본문과 빌드 정보에 기록해.
+
+**첫 교체의 경계:** alpha.4 프로세스가 소유한 기존 소켓은 이전되지 않아. 최초 교체 중 연결은 닫힐 수 있어. 이후 서버 재시작에도 유지되는 전달 방식과 구분해야 해. 30초보다 긴 연결, Pod 직접 IP, 강제 삭제·앱/호스트 장애는 무중단 보장 대상이 아니야. schema1·기존 Pod·앱 데이터·인증은 같은 경로로 인계해. 이전 버전으로 복구할 때는 새 Service 커널 규칙도 원복해야 하므로 파일 교체만으로 충분하다고 가정하지 마.
+
 ## v0.1.0-alpha.4
 
 자동 시작과 복구를 위한 `sw service`, 일관된 DB·인증 백업과 새 폴더 복원을 위한
@@ -82,7 +90,7 @@ Git 태그에만 붙는 앞의 `v`는 그 값에 넣지 않아. Git이 없는 �
 bash hack/t.sh ./...
 python3 -m unittest discover -s hack -p 'test_*.py'
 bash hack/build.sh
-python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.4
+python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.5
 python3 hack/notices.py
 ```
 

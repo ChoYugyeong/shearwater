@@ -1,12 +1,10 @@
 # 처음 써 보고 판단하기
 
-Shearwater alpha.4가 내 작업에 도움이 되는지 직접 확인하는 안내야.
+Shearwater alpha.5가 내 작업에 도움이 되는지 직접 확인하는 안내야.
 한 대의 Linux 환경에서 작은 앱을 띄우고, 실패 이유를 읽고, 변경 계획을 승인해 배포하는
 흐름을 체험해. **실제 서비스나 중요한 데이터를 옮기는 절차는 아니야.**
 
-이 안내는 alpha.4 실행 파일로 따라 할 수 있는 후속 문서야. 기존 alpha.4 압축에
-이 페이지가 들어 있지는 않아. 압축 안 `INSTALL-ko.md`보다 이 저장소의 [설치 안내](install.md)가
-최신이므로 그 안내를 따라 해. 정확한 기능 범위는
+이 안내는 alpha.5 실행 파일 기준이야. 압축의 `INSTALL-ko.md`와 저장소의 [설치 안내](install.md)를 따라 해. 정확한 기능 범위는
 [호환표](compatibility.md)를 함께 봐. 끝나면 [체험 기록](first-try-feedback.md)을 남겨 줘.
 
 ## 시작할 수 있는 환경인지 확인하기
@@ -47,7 +45,7 @@ A에서 켠 서버는 유지해. 다음 예제는 `default/sw-try-crash`라는 *
 **Ubuntu Bash**에서 필요한 경로를 다시 선언해. 설치 위치나 kubeconfig가 다르면 실제 값으로 바꿔.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.4/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.5/sw"
 export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
 k() {

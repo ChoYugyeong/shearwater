@@ -14,13 +14,13 @@ Shearwater is an experimental single-node container orchestrator for trying smal
 
 [첫 체험 안내](docs/first-try.md)가 시작점이야. 그 안에서 Go 없이 실행 파일을 설치하고
 첫 HTTP 응답까지 확인하는 순서로 이어져.
-현재 릴리스는 **v0.1.0-alpha.4**이며, `sw version`도 `0.1.0-alpha.4`를 표시해.
+현재 릴리스는 **v0.1.0-alpha.5**이며, `sw version`도 `0.1.0-alpha.5`를 표시해.
 [릴리스 변경 사항과 버전 검증 방법](docs/releases.md)도 확인할 수 있어.
 
 alpha.3부터 `sw get/logs/events/why`로 목록·앱 로그·이벤트·실패 이유를 조회할 수 있어.
 [초보자용 문제 해결 안내](docs/troubleshooting.md)에 각 명령의 예제와 오류 해석을 정리했어.
 
-개발 소스의 [롤링 업데이트·서버 재시작 연결 유지](docs/connection-continuity.md)에는 커널 전달 방식, 30초 연결 종료 대기, 실제 부하 시험 재현 방법을 설명했어. [실측 결과와 검증 범위](docs/connection-verification.md)도 함께 봐. 이 개선은 공개 alpha.4 실행 파일에는 아직 포함되지 않아.
+alpha.5의 [롤링 업데이트·서버 재시작 연결 유지](docs/connection-continuity.md)에는 커널 전달 방식, 30초 연결 종료 대기, 실제 부하 시험 재현 방법을 설명했어. [실측 결과와 검증 범위](docs/connection-verification.md)도 함께 봐. alpha.4에서 처음 교체할 때 기존 소켓은 이전되지 않아. 이후 같은 호스트에서 서버를 재시작하면 커널 전달이 유지돼.
 
 **alpha.4**에는 [자동 시작](docs/automatic-start.md),
 [백업·복원](docs/backup-restore.md), [앱 상태 검사](docs/health-probes.md),

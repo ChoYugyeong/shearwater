@@ -2,7 +2,7 @@
 
 # Shearwater에서 Service가 Pod에 연결되는 과정
 
-> **버전 구분:** 아래의 프로세스 내부 TCP 프록시 설명과 정지 시 연결 종료는 공개 alpha.4까지의 동작이야. 현재 개발 소스는 Linux 커널 전달과 롤링 연결 종료 대기를 사용해. 현재 방식의 설정·실패 경계·시험 방법은 [연결 유지와 롤링 종료 대기](connection-continuity.md)를 먼저 봐. 아래 문서는 M5 도입 당시의 배경과 API 사용 예를 함께 보존하고 있어.
+> **버전 구분:** 아래의 프로세스 내부 TCP 프록시 설명과 정지 시 연결 종료는 공개 alpha.4까지의 동작이야. alpha.5는 Linux 커널 전달과 롤링 연결 종료 대기를 사용해. alpha.5 방식의 설정·실패 경계·시험 방법은 [연결 유지와 롤링 종료 대기](connection-continuity.md)를 먼저 봐. 아래 문서는 M5 도입 당시의 배경과 API 사용 예를 함께 보존하고 있어.
 
 Pod는 앱 컨테이너가 실행되는 단위야. Pod를 삭제하고 다시 만들면 이름이나 IP가 바뀔 수 있어. **Service는 클라이언트가 계속 사용할 주소와 포트**를 제공해. 여기서 주소를 **ClusterIP**라고 불러. 예를 들어 클라이언트는 `10.96.0.1:80`에 연결하고, Shearwater가 그 연결을 현재 준비된 Pod의 `10.244.0.2:8080`으로 전달해.
 
@@ -141,7 +141,7 @@ Pod의 첫 컨테이너 실행을 시도하기 직전에 같은 네임스페이�
 1. **Service 주소와 포트부터 확인한다.** `kubectl get svc demo-web -o yaml`에서 `spec.clusterIP`, `port`, `targetPort`를 확인해. `curl`에는 Service의 `port`를 넣어.
 2. **Pod가 선택되는지 확인한다.** `kubectl get pod -l app=demo-web -o wide`로 Pod IP와 Ready 상태를 확인해. `kubectl get endpointslices -l kubernetes.io/service-name=demo-web -o yaml`의 `endpoints`와 `ports`를 같이 봐. 주소가 있어도 원하는 이름의 포트가 빠져 있다면 Pod의 포트 선언을 확인해.
 3. **Pod 자체에 연결한다.** WSL에서 `curl --noproxy '*' http://<Pod-IP>:<target-port>/`를 실행해. 이 연결이 실패하면 앱이 실제로 그 포트를 열었는지 `kubectl logs <pod>`로 확인해.
-4. **ClusterIP가 WSL에 붙었는지 확인한다.** `ip -o -4 addr show dev sw-svc0`에 ClusterIP의 `/32`가 있어야 해. 공개 alpha.4는 `ss -ltn`으로 Service 리스너를 확인해. 현재 개발 소스에는 이 리스너가 없고, root로 `iptables -t nat -S SHEARWATER-SERVICES`를 읽어 전달 대상을 확인해. 로그에 `overlaps host route`가 있다면 `ip -4 route show table all`로 어떤 대역이 겹치는지 확인해.
+4. **ClusterIP가 WSL에 붙었는지 확인한다.** `ip -o -4 addr show dev sw-svc0`에 ClusterIP의 `/32`가 있어야 해. 공개 alpha.4는 `ss -ltn`으로 Service 리스너를 확인해. alpha.5에는 이 리스너가 없고, root로 `iptables -t nat -S SHEARWATER-SERVICES`를 읽어 전달 대상을 확인해. 로그에 `overlaps host route`가 있다면 `ip -4 route show table all`로 어떤 대역이 겹치는지 확인해.
 5. **환경변수가 비어 있다면 시작 순서를 확인한다.** Service를 만들고 Pod를 새로 생성하면 새 Pod가 주소를 읽어. 실행 중인 컨테이너는 시작할 때 받은 환경을 유지해.
 
 이 단계는 IPv4 ClusterIP와 TCP를 지원해. Selector가 없는 Service는 주소를 예약하지만 Shearwater가 자동 연결 대상을 채우지 않아. `clusterIP: None`은 저장되며 주소나 리스너가 생기지 않아. UDP, NodePort, LoadBalancer, Service 이름을 푸는 DNS는 이후 단계 범위야. WSL에서의 접근과 Pod에서의 접근을 검증 대상으로 삼았어.
@@ -157,7 +157,7 @@ Pod의 첫 컨테이너 실행을 시도하기 직전에 같은 네임스페이�
 | `internal/runtime/serviceip_linux.go` | 커널에서 더미 인터페이스와 개별 주소를 맞추는 흐름 |
 | `internal/runtime/network_linux.go` | Pod IP를 재사용할 때 브리지의 이전 MAC 기록을 비우는 흐름 |
 | `internal/proxy/routes.go`, `internal/proxy/forward.go` | alpha.4의 Slice 후보 선택과 프로세스 내부 TCP 복사 방식; 기존 단위 테스트도 유지 |
-| `internal/proxy/kernel.go`, `internal/runtime/services_linux.go` | 현재 개발 소스의 UID/IP 예약 검증과 커널 전달 규칙 |
+| `internal/proxy/kernel.go`, `internal/runtime/services_linux.go` | alpha.5의 UID/IP 예약 검증과 커널 전달 규칙 |
 | `internal/drain/drain.go`, `internal/runtime/serviceconn_linux.go` | 연결 종료 대기의 확인과 conntrack 집계·정리 |
 | `internal/node/serviceenv.go` | Pod 시작 시 환경변수 값을 저장하는 이유 |
 
