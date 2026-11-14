@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"shearwater/internal/apis"
+	"shearwater/internal/drain"
 	"shearwater/internal/objects"
 	"shearwater/internal/store"
 )
@@ -16,6 +17,7 @@ import (
 type Manager struct {
 	Store    *store.Store
 	NodeName string
+	Drain    *drain.State
 }
 
 // Run rechecks the current state when the store changes and periodically.
@@ -24,6 +26,10 @@ func (m Manager) Run(ctx context.Context) {
 	delay := time.Second
 	for ctx.Err() == nil {
 		changed := m.Store.Changed()
+		var drainChanged <-chan struct{}
+		if m.Drain != nil {
+			drainChanged = m.Drain.Changed()
+		}
 		wait := 5 * time.Minute
 		if err := m.Sync(); err != nil {
 			log.Printf("workload controllers: %v", err)
@@ -33,10 +39,14 @@ func (m Manager) Run(ctx context.Context) {
 		} else {
 			delay = time.Second
 		}
+		if m.Drain != nil && m.Drain.Pending() {
+			wait = min(wait, 200*time.Millisecond)
+		}
 		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 		case <-changed:
+		case <-drainChanged:
 		case <-timer.C:
 		}
 		timer.Stop()
@@ -181,6 +191,9 @@ func ownerRef(i *item) apis.OwnerReference {
 }
 
 func podReady(p *apis.Pod) bool {
+	if p.Metadata.Annotations[drain.Annotation] != "" {
+		return false
+	}
 	for _, c := range p.Status.Conditions {
 		if c.Type == "Ready" {
 			return c.Status == "True"

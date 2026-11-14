@@ -19,6 +19,7 @@ import (
 	"shearwater/internal/api"
 	"shearwater/internal/apis"
 	"shearwater/internal/controller"
+	"shearwater/internal/drain"
 	"shearwater/internal/node"
 	"shearwater/internal/pki"
 	"shearwater/internal/proxy"
@@ -289,20 +290,23 @@ func runServer(args []string) error {
 				return err
 			}
 		}
+		draining := &drain.State{}
+		forwarding := &proxy.KernelManager{Manager: proxy.Manager{Store: st},
+			DataPath: &runtime.KernelServices{PodCIDR: apis.PodCIDR, ServiceCIDR: apis.ServiceCIDR}, Drain: draining}
 		agent := &node.Agent{
 			Store: st, Runtime: rt, Net: n,
-			NodeName: *nodeName, DataDir: *dataDir, LogDir: *logDir, PodCIDR: apis.PodCIDR, Version: api.GitVersion,
+			RetirePod: forwarding.RetirePod,
+			NodeName:  *nodeName, DataDir: *dataDir, LogDir: *logDir, PodCIDR: apis.PodCIDR, Version: api.GitVersion,
 		}
 		srv.NodeName, srv.LogDir = *nodeName, *logDir
 		go func() { agent.Run(ctx); close(agentDone) }()
 		go func() {
 			defer close(controllerDone)
-			controller.Manager{Store: st, NodeName: *nodeName}.Run(ctx)
+			controller.Manager{Store: st, NodeName: *nodeName, Drain: draining}.Run(ctx)
 		}()
 		go func() {
 			defer close(proxyDone)
-			addresses := runtime.ServiceAddresses{CIDR: apis.ServiceCIDR}
-			proxy.Manager{Store: st, Addresses: addresses.Reconcile}.Run(ctx)
+			forwarding.Run(ctx)
 		}()
 	} else {
 		close(agentDone)

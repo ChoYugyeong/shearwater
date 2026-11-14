@@ -1,5 +1,34 @@
 > 공개 준비 과정에서 개인 경로·내부 세션 식별자·로컬 앱 이름을 일반화했어. 측정값과 당시 검증 범위는 유지했고, `<private-evidence>`는 공개 저장소에 없는 원본 기록을 뜻해.
 
+## 최신: 연결 유지 개선 검증 완료 (2026-11-14)
+
+`connection-continuity`는 공개 소스 계열 `228876a`에서 이어진 로컬 작업 브랜치야.
+프로세스 내부 Service TCP 프록시 대신 소유 표식이 있는 커널 DNAT·conntrack을 사용하고,
+ReplicaSet 축소·롤링 교체 전에 기존 Service 연결을 최대 30초 기다리도록 구현했어.
+Pod IP 반납 전 연결 기록 정리, 같은 SQLite 스냅샷의 규칙/종료 대기 확인,
+Pod 자기 Service 연결의 veth hairpin, VIP 제거 순서도 보완했어.
+
+[연결 유지 안내](connection-continuity.md)와 [검증 기록](connection-verification.md)을 먼저 봐.
+같은 개발 바이너리의 정상 HTTP **112,000건/오류 0/재시도 0**을 확인했고, 1MiB 느린 다운로드,
+30초 종료 경고 watch, Service IP 재사용, 3분간 TERM/KILL 5회도 실측했어.
+Go 전체·M0 47/0·M1 103/0·M4/M5·지원 범위의 1단계 통합·root 격리 검사 2개를 통과했어.
+full3의 Pod 삭제 후 이벤트 조회 assertion 실패는 원본 그대로 남겼고, 시험을 실시간 watch로
+바꾼 full4에서 관련 경계와 나머지 부하를 통과했어. 실행별 상태·수치·바이너리 해시는
+[측정 JSON](testdata/connection-continuity-20261114.json)에 있어.
+
+운영 alpha.4의 프로세스·앱·인증·파일·저장 객체·IP를 보존했고 QA 실행 자원은 정리했어.
+이 개선은 **미발행**이며 운영 바이너리를 교체하지 않았어. 개발 빌드의 기존 alpha.4 버전 문자열을
+공개 릴리스와 혼동하지 마. C 컴파일러가 없어 race detector는 미실행이며 독립 코드 검수도 아직 없어.
+30초보다 긴 연결, Pod 직접 IP, 강제 삭제, 컨테이너/호스트 장애는 무중단 보장 범위가 아니야.
+처음 alpha.4에서 전환할 때 기존 프로세스 소유 소켓을 커널로 옮길 수 없다는 점도 남아 있어.
+
+**다음 세션 첫 프롬프트:** HANDOFF의 이 최신 단락과 `docs/connection-continuity.md`,
+`docs/connection-verification.md`를 먼저 읽고 변경할 대상 파일만 확인해. 레포 전체나 상위 폴더의
+다른 프로젝트를 재탐색하지 마. `connection-continuity` 공개 계열 작업을 사용하고 원본 private main과
+기존 미추적 M1 파일은 섞지 마. 실행 중인 앱·데이터를 보존하고 runtime 검사는 별도 QA에서만 해.
+새 릴리스·push·운영 업그레이드는 후속 사용자 지시가 있을 때 진행하고, 그때는 버전을 올린 공개 소스를
+다시 빌드·검증해. 아래 설명은 각 시점의 과거 기록이야.
+
 ## alpha.4 이후: 첫 사용 공동 검증
 
 alpha.4는 공개했고 기존 운영 앱·데이터를 유지하며 서버 업데이트도 끝났어.

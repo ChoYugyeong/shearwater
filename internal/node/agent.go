@@ -28,17 +28,18 @@ const (
 var podsRes = apis.Lookup("", "v1", "pods")
 
 type Agent struct {
-	Store    *store.Store
-	Runtime  runtime.Runtime
-	Net      runtime.Network
-	NodeName string
-	DataDir  string       // /var/lib/shearwater
-	LogDir   string       // /var/log/shearwater
-	PodCIDR  netip.Prefix // 10.244.0.0/24
-	Version  string       // reported as the kubelet version
-	Now      func() time.Time
-	Logf     func(format string, args ...any)
-	ProbeRun func(context.Context, *apis.Probe, *apis.Container, string, string) error // injectable action, not the scheduling policy
+	Store     *store.Store
+	Runtime   runtime.Runtime
+	Net       runtime.Network
+	NodeName  string
+	DataDir   string       // /var/lib/shearwater
+	LogDir    string       // /var/log/shearwater
+	PodCIDR   netip.Prefix // 10.244.0.0/24
+	Version   string       // reported as the kubelet version
+	Now       func() time.Time
+	Logf      func(format string, args ...any)
+	ProbeRun  func(context.Context, *apis.Probe, *apis.Container, string, string) error // injectable action, not the scheduling policy
+	RetirePod func(context.Context, string) error                                       // withdraw Service routes and old tuples before IP reuse
 
 	ctx context.Context
 

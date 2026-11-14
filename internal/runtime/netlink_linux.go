@@ -47,7 +47,11 @@ func nlOpen() (*nlSock, error) {
 const netlinkTimeout = 5 * time.Second
 
 func nlOpenContext(ctx context.Context) (*nlSock, error) {
-	fd, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_RAW|unix.SOCK_CLOEXEC, unix.NETLINK_ROUTE)
+	return nlOpenProtocol(ctx, unix.NETLINK_ROUTE)
+}
+
+func nlOpenProtocol(ctx context.Context, protocol int) (*nlSock, error) {
+	fd, err := unix.Socket(unix.AF_NETLINK, unix.SOCK_RAW|unix.SOCK_CLOEXEC, protocol)
 	if err != nil {
 		return nil, fmt.Errorf("netlink socket: %w", err)
 	}
@@ -100,6 +104,7 @@ func (s *nlSock) request(typ, flags uint16, dump bool, body []byte) ([]nlMsg, er
 		return nil, fmt.Errorf("netlink send: %w", err)
 	}
 	var out []nlMsg
+	var receivedBytes int
 	buf := make([]byte, 1<<16)
 	deadline := time.Now().Add(netlinkTimeout)
 	for {
@@ -109,12 +114,15 @@ func (s *nlSock) request(typ, flags uint16, dump bool, body []byte) ([]nlMsg, er
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("netlink receive: %w", context.DeadlineExceeded)
 		}
-		n, _, err := unix.Recvfrom(s.fd, buf, 0)
+		n, _, recvFlags, _, err := unix.Recvmsg(s.fd, buf, nil, 0)
 		if err == unix.EINTR || err == unix.EAGAIN {
 			continue
 		}
 		if err != nil {
 			return nil, fmt.Errorf("netlink receive: %w", err)
+		}
+		if recvFlags&unix.MSG_TRUNC != 0 {
+			return nil, errors.New("netlink: truncated datagram; refusing incomplete state")
 		}
 		for b := buf[:n]; len(b) >= unix.NLMSG_HDRLEN; {
 			l := int(ne.Uint32(b[0:]))
@@ -149,6 +157,10 @@ func (s *nlSock) request(typ, flags uint16, dump bool, body []byte) ([]nlMsg, er
 					return out, nil
 				}
 			default:
+				receivedBytes += len(payload)
+				if receivedBytes > 64<<20 {
+					return nil, errors.New("netlink: dump exceeds 64 MiB; refusing incomplete state")
+				}
 				out = append(out, nlMsg{mtyp, bytes.Clone(payload)})
 			}
 		}
@@ -313,6 +325,17 @@ func (s *nlSock) linkSetUp(index int32) error {
 
 func (s *nlSock) linkSetMaster(index, master int32) error {
 	_, err := s.request(unix.RTM_SETLINK, 0, false, append(ifinfo(index, 0, 0), attrU32(unix.IFLA_MASTER, uint32(master))...))
+	return err
+}
+
+func (s *nlSock) linkSetHairpin(index int32) error {
+	// A Service can DNAT a Pod's packet back through the same bridge port.
+	// Linux normally excludes the incoming port from forwarding; hairpin
+	// permits that return path. This changes only our owned Pod veth port.
+	body := ifinfo(index, 0, 0)
+	body[0] = unix.AF_BRIDGE
+	body = append(body, nest(unix.IFLA_PROTINFO|unix.NLA_F_NESTED, attr(unix.IFLA_BRPORT_MODE, []byte{1}))...)
+	_, err := s.request(unix.RTM_SETLINK, 0, false, body)
 	return err
 }
 

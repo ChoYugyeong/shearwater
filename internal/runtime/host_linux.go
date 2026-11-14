@@ -144,6 +144,10 @@ func (n *Net) TeardownHost(ctx context.Context) error {
 	if err := n.removeRules(ctx); err != nil {
 		return err
 	}
+	services := &KernelServices{PodCIDR: n.PodCIDR, ServiceCIDR: n.ServiceCIDR}
+	if err := services.Teardown(ctx); err != nil {
+		return err
+	}
 	for _, l := range []link{svc, br} {
 		if l.index != 0 {
 			if err := s.linkDel(l.index); err != nil && !errors.Is(err, unix.ENODEV) {
@@ -275,6 +279,11 @@ func (n *Net) CheckFirewall(ctx context.Context) error {
 	}
 	for _, spec := range n.chainSpecs() {
 		if _, err := spec.read(ctx); err != nil {
+			return err
+		}
+	}
+	for _, c := range [][2]string{{"nat", serviceNAT}, {"nat", serviceSNAT}, {"filter", serviceInput}} {
+		if _, err := readServiceChain(ctx, c[0], c[1]); err != nil {
 			return err
 		}
 	}

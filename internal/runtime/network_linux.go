@@ -232,6 +232,10 @@ func (n *Net) Setup(podUID string, ip netip.Addr) (created bool, err error) {
 			return created, fmt.Errorf("bring up %s: %w", host, err)
 		}
 	}
+	// Also apply when adopting an existing Pod after upgrade/restart.
+	if err := hs.linkSetHairpin(hl.index); err != nil {
+		return created, fmt.Errorf("enable Service hairpin on %s: %w", host, err)
+	}
 	err = inNetns(path, func(s *nlSock) error {
 		lo, err := s.linkGet("lo")
 		if err != nil {

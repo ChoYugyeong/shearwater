@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"shearwater/internal/apis"
+	"shearwater/internal/drain"
 	"shearwater/internal/objects"
 	"shearwater/internal/store"
 )
@@ -67,6 +68,7 @@ func (m Manager) replicaSet(tx *store.Tx, i *item, v view, budget *int, now time
 					return references(candidate, ref, i)
 				})
 				setPodDeployment(p, nil)
+				delete(p.Metadata.Annotations, drain.Annotation)
 				if err := candidate.update(tx); err != nil {
 					return err
 				}
@@ -106,9 +108,44 @@ func (m Manager) replicaSet(tx *store.Tx, i *item, v view, budget *int, now time
 		return err
 	}
 	desired := int(replicas(rs.Spec.Replicas))
+	// Keep draining Pods in the physical replica/surge count. A scale-up
+	// may cancel retirement; do not keep an unneeded drain annotation then.
+	slices.SortStableFunc(owned, scaleDownOrder)
+	for _, child := range owned[max(0, len(owned)-desired):] {
+		if child.obj.Meta().Annotations[drain.Annotation] != "" {
+			delete(child.obj.Meta().Annotations, drain.Annotation)
+			if err := child.update(tx); err != nil {
+				return err
+			}
+		}
+	}
 	if excess := len(owned) - desired; excess > 0 {
-		slices.SortStableFunc(owned, scaleDownOrder)
 		for _, child := range owned[:excess] {
+			p := child.obj.(*apis.Pod)
+			if m.Drain != nil && p.Status.PodIP != "" && nonTerminal(p) {
+				token := p.Metadata.Annotations[drain.Annotation]
+				if token == "" {
+					// A fresh token also distinguishes cancel + re-drain within
+					// one clock tick. A stale zero-count ACK must not be reused.
+					annotate(p.Meta(), drain.Annotation, objects.NewUID())
+					if err := child.update(tx); err != nil {
+						return err
+					}
+					if err := objects.PodEvent(tx, p, now, "connection-drain", "", "ConnectionDraining", "Withdrawing new Service connections before Pod termination; waiting up to 30 seconds for existing connections", "shearwater-controller", "Normal"); err != nil {
+						return err
+					}
+					continue
+				}
+				ready, timedOut := m.Drain.Decision(p.Metadata.UID, token, now)
+				if !ready {
+					continue
+				}
+				if timedOut {
+					if err := objects.PodEvent(tx, p, now, "connection-drain-timeout", "", "ConnectionDrainTimeout", "The 30-second Service connection drain expired; beginning the Pod termination grace period with connections still active", "shearwater-controller", "Warning"); err != nil {
+						return err
+					}
+				}
+			}
 			rec, _, err := objects.Delete(tx, child.res, child.rec, child.obj, m.NodeName, nil, now)
 			if err != nil {
 				return err

@@ -20,6 +20,8 @@ Shearwater is an experimental single-node container orchestrator for trying smal
 alpha.3부터 `sw get/logs/events/why`로 목록·앱 로그·이벤트·실패 이유를 조회할 수 있어.
 [초보자용 문제 해결 안내](docs/troubleshooting.md)에 각 명령의 예제와 오류 해석을 정리했어.
 
+개발 소스의 [롤링 업데이트·서버 재시작 연결 유지](docs/connection-continuity.md)에는 커널 전달 방식, 30초 연결 종료 대기, 실제 부하 시험 재현 방법을 설명했어. [실측 결과와 검증 범위](docs/connection-verification.md)도 함께 봐. 이 개선은 공개 alpha.4 실행 파일에는 아직 포함되지 않아.
+
 **alpha.4**에는 [자동 시작](docs/automatic-start.md),
 [백업·복원](docs/backup-restore.md), [앱 상태 검사](docs/health-probes.md),
 [MCP 조회와 계획·승인·배포](docs/agent-mcp.md)가 추가됐어.

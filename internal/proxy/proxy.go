@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"shearwater/internal/apis"
+	"shearwater/internal/drain"
 	"shearwater/internal/store"
 )
 
@@ -117,11 +118,15 @@ func (m Manager) currentPod(ctx context.Context, r *route, b backend) bool {
 	// Pod. Read the actual reservation with the Pod, then check readiness.
 	ip := b.address.Addr().String()
 	rec, err := m.Store.PodAtIP(ctx, b.pod.Namespace, b.pod.Name, ip)
-	if err != nil || rec.Deleting || rec.UID != b.uid {
+	return err == nil && validBackendPod(rec, r, b)
+}
+
+func validBackendPod(rec store.Record, r *route, b backend) bool {
+	if rec.Deleting || rec.UID != b.uid {
 		return false
 	}
 	var pod apis.Pod
-	if json.Unmarshal(rec.Data, &pod) != nil || pod.Status.PodIP != ip ||
+	if json.Unmarshal(rec.Data, &pod) != nil || pod.Metadata.Annotations[drain.Annotation] != "" || pod.Status.PodIP != b.address.Addr().String() ||
 		pod.Status.Phase == "Succeeded" || pod.Status.Phase == "Failed" {
 		return false
 	}

@@ -8,9 +8,10 @@ cd "$(dirname "$0")/.."
 }
 sw=$1 kubectl=$2
 port=${SW_M4_PORT:-16447}
+socket=${SW_CONTAINERD_SOCKET:-/run/containerd/containerd.sock}
 empty_runtime() {
   local ids
-  ids=$(ctr --namespace shearwater containers list -q) && [[ -z $ids ]]
+  ids=$(ctr --address "$socket" --namespace shearwater containers list -q) && [[ -z $ids ]]
 }
 empty_runtime || {
   echo "shearwater containerd namespace is busy or unavailable" >&2
@@ -23,6 +24,7 @@ echo "Evidence: $run"
 watcher=
 k() { KUBECONFIG="$run/kubeconfig" "$kubectl" --request-timeout=90s "$@"; }
 "$sw" server --runtime=containerd --node-name=m4-check --listen="127.0.0.1:$port" \
+  --containerd-socket="$socket" \
   --data-dir="$run/data" --config-dir="$run/etc" --run-dir="$net" --log-dir="$run/log" \
   --trace="$run/trace.jsonl" >"$run/server.log" 2>&1 &
 srv=$!

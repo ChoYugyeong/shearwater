@@ -163,6 +163,11 @@ func (a *Agent) cleanup(ctx context.Context, uid string, actual []runtime.Contai
 	if keepIP {
 		return 0, nil
 	}
+	if a.RetirePod != nil {
+		if err := a.RetirePod(ctx, uid); err != nil {
+			return failureRetry, err
+		}
+	}
 	if err := a.Store.ReleaseIP(uid); err != nil {
 		return failureRetry, err
 	}

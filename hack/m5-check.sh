@@ -8,7 +8,8 @@ cd "$(dirname "$0")/.."
 }
 sw=$1 kubectl=$2
 port=${SW_M5_PORT:-16448}
-ctr_sw() { ctr --namespace shearwater "$@"; }
+socket=${SW_CONTAINERD_SOCKET:-/run/containerd/containerd.sock}
+ctr_sw() { ctr --address "$socket" --namespace shearwater "$@"; }
 empty_runtime() {
   local ids
   ids=$(ctr_sw containers list -q) && [[ -z $ids ]]
@@ -35,6 +36,7 @@ until_ok() {
 serving() { kill -0 "$srv" && k get node m5-check >/dev/null 2>&1; }
 start() {
   "$sw" server --runtime=containerd --node-name=m5-check --listen="127.0.0.1:$port" \
+    --containerd-socket="$socket" \
     --data-dir="$run/data" --config-dir="$run/etc" --run-dir="$net" --log-dir="$run/log" \
     --trace="$run/trace.jsonl" >>"$run/server.log" 2>&1 &
   srv=$!
@@ -198,7 +200,13 @@ fi
 echo "Verified automatic and explicit IPs, two named-port slices, round robin, and env"
 
 container=$(k get pod m5-blue -o jsonpath='{.status.containerStatuses[0].containerID}')
-[[ $(ctr_sw tasks exec --exec-id m5-hairpin "${container#containerd://}" wget -qO- -T 5 "http://$fixed_ip:81/") == blue ]]
+if [[ $(ctr_sw tasks exec --exec-id m5-hairpin "${container#containerd://}" wget -qO- -T 5 "http://$fixed_ip:81/") != blue ]]; then
+  iptables -t nat -nvL SHEARWATER-SERVICES >"$run/hairpin-nat.txt"
+  iptables -t nat -nvL SHEARWATER-SVC-SNAT >"$run/hairpin-snat.txt"
+  ip -d link show master sw-br0 >"$run/hairpin-ports.txt"
+  echo "Pod hairpin failed; evidence: $run/hairpin-*.txt" >&2
+  exit 1
+fi
 echo "Verified Pod -> its own Service -> the same Pod"
 
 k patch service m5-web --type=merge -p '{"spec":{"selector":{"tier":"blue"}}}'
@@ -224,20 +232,24 @@ has_addr() {
 has_addr "$web_ip"
 stop
 has_addr "$web_ip"
-if reachable "$web_url"; then
-  echo "TCP listener survived server stop" >&2
+if ! reply_is "$web_url" blue; then
+  echo "Service forwarding stopped with the control process" >&2
   exit 1
 fi
 start
 [[ $(ip_of m5-web) == "$web_ip" ]]
 until_ok 15 reply_is "$web_url" blue
-echo "Verified stable ClusterIP and listener recovery after server restart"
+echo "Verified stable ClusterIP and live forwarding while the server is stopped"
 
 k delete service m5-web --wait=true --timeout=20s
 absent_addr() { ! has_addr "$1"; }
 until_ok 15 absent_addr "$web_ip"
 until_ok 15 no_slices m5-web
 if reachable "$web_url"; then
+  http "$web_url" >"$run/deleted-service-response.txt" || true
+  ip route get "$web_ip" >&2
+  iptables -t nat -S SHEARWATER-SERVICES >&2
+  sha256sum "$run/deleted-service-response.txt" >&2
   echo "Deleted Service still responds" >&2
   exit 1
 fi

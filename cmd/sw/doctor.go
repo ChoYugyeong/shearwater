@@ -63,7 +63,7 @@ func hostChecks(ctx context.Context, o opsOptions) []hostCheck {
 	}
 	add("containerd", strings.TrimSpace(o.Socket+" "+version),
 		"start your existing containerd or use --containerd-socket=/path/to/containerd.sock", err)
-	for _, binary := range []string{"runc", "iptables"} {
+	for _, binary := range []string{"runc", "iptables", "iptables-restore"} {
 		path, err := exec.LookPath(binary)
 		add(binary, path, "make "+binary+" available in the WSL Linux PATH", err)
 	}

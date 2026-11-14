@@ -16,15 +16,19 @@ const (
 )
 
 // ServiceAddresses gives the kernel a local route for each ClusterIP. A dummy
-// interface is sufficient because the TCP socket runs on this same host.
+// interface owns the address; kernel DNAT selects the actual Pod destination.
 // We claim individual /32s so addresses outside active Services stay untouched.
 type ServiceAddresses struct {
 	CIDR netip.Prefix
+	// Kernel forwarding installs addresses before rules, but must remove
+	// obsolete DNAT BEFORE detaching addresses. A first pass can defer only
+	// the deletions; the final pass completes them after the rules commit.
+	retainStale bool
 }
 
-// Reconcile runs after the proxy has closed obsolete listeners and before it
-// opens new ones. Kernel state is the source of truth: a restart reuses valid
-// addresses and cleans up any stale ones left on the owned interface.
+// Reconcile validates and attaches desired addresses. The kernel data path
+// uses retainStale for its first pass, then detaches obsolete addresses only
+// after withdrawing their forwarding rules. A restart reuses owned addresses.
 func (a ServiceAddresses) Reconcile(ctx context.Context, wanted map[netip.Addr]bool) (map[netip.Addr]bool, error) {
 	for ip := range wanted {
 		if !ip.Is4() || !a.CIDR.Contains(ip) {
@@ -99,6 +103,9 @@ func (a ServiceAddresses) Reconcile(ctx context.Context, wanted map[netip.Addr]b
 	for ip := range owned {
 		if allowed[ip] {
 			attached[ip] = true
+			continue
+		}
+		if a.retainStale {
 			continue
 		}
 		_, err := s.request(unix.RTM_DELADDR, 0, false, ipv4AddrMessage(l.index, netip.PrefixFrom(ip, 32)))

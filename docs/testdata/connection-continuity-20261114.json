@@ -1,0 +1,387 @@
+{
+  "schema": 1,
+  "date": "2026-11-14",
+  "sourceBaseCommit": "228876a6496bc2f5a513673b792dccb1cf9d89fb",
+  "build": "unreleased development working tree, identified by binarySHA256",
+  "binaryBytes": 36243092,
+  "environment": {
+    "cpu": "AMD Ryzen 5 7500F",
+    "logicalCPUs": 12,
+    "windowsVisibleGiB": 31.6,
+    "kernel": "6.6.87.2-microsoft-standard-WSL2",
+    "go": "1.27.3",
+    "containerd": "2.2.1",
+    "iptables": "1.8.10 (nf_tables)",
+    "kubectlLinux": "1.36.6",
+    "kubectlWindows": "1.36.0",
+    "workload": "nginx:1.27, 1 worker, 64Mi memory / 500m CPU limit per Pod",
+    "isolation": "separate runtime socket and private network namespace, cluster uplink blocked"
+  },
+  "measurementNotes": [
+    "No HTTP request retries. Each normal response body was compared with the expected 1 KiB.",
+    "p95 is successful-request latency. CPU and 1-second sampled RSS cover only the sw process.",
+    "Kernel, containerd, shims, workloads, iptables children and the load generator are excluded from sw resource samples.",
+    "full3 HTTP phases and slow download passed, but its post-deletion Event LIST assertion failed because Pod-owned Events were garbage-collected.",
+    "The same binary was used for full4 --extended-only; a watch captured ConnectionDrainTimeout before garbage collection. full3 failure is retained.",
+    "The 180-second soak contains five planned restarts (TERM/KILL/TERM/KILL/TERM).",
+    "This is a bounded regression measurement, not maximum capacity or 24-hour reliability evidence."
+  ],
+  "combinedChecksPassed": true,
+  "runStatuses": {
+    "full3": {
+      "passed": false,
+      "cleanup": true
+    },
+    "full4": {
+      "passed": true,
+      "cleanup": true
+    }
+  },
+  "binarySHA256": "4f3944c72aa41b10ddfff2154e95059f36fad7347c595b37a47adc7ea02c0db9",
+  "httpRetries": 0,
+  "normalRequests": 112000,
+  "normalErrors": 0,
+  "measuredPhaseSeconds": 665.0337794700172,
+  "maxRSSMiB": 37.0703125,
+  "rows": [
+    {
+      "run": "full3",
+      "phase": "restart-term",
+      "success": 1200,
+      "errors": 0,
+      "actionErrors": 0,
+      "seconds": 15.001099072993384,
+      "achievedSuccessRPS": 79.99413870683456,
+      "p95ms": 0.5057459929957986,
+      "swSampledMaxRSSMiB": 29.421875,
+      "swCPUPercentOneCore": 0.6585669043802765,
+      "cpuObservedSeconds": 9.110691655005212
+    },
+    {
+      "run": "full3",
+      "phase": "doctor-under-load",
+      "success": 800,
+      "errors": 0,
+      "actionErrors": 0,
+      "seconds": 10.001355412998237,
+      "achievedSuccessRPS": 79.98915816553044,
+      "p95ms": 0.5167189956409857,
+      "swSampledMaxRSSMiB": 28.0078125,
+      "swCPUPercentOneCore": 0.5491783831011834,
+      "cpuObservedSeconds": 9.104509853001218
+    },
+    {
+      "run": "full3",
+      "phase": "restart-kill",
+      "success": 1200,
+      "errors": 0,
+      "actionErrors": 0,
+      "seconds": 15.001409013013472,
+      "achievedSuccessRPS": 79.99248596975258,
+      "p95ms": 0.5193899996811524,
+      "swSampledMaxRSSMiB": 28.0,
+      "swCPUPercentOneCore": 0.6587643627200632,
+      "cpuObservedSeconds": 9.10796081200533
+    },
+    {
+      "run": "full3",
+      "phase": "baseline-recovery-1",
+      "success": 9600,
+      "errors": 0,
+      "actionErrors": 0,
+      "seconds": 120.00257041500299,
+      "achievedSuccessRPS": 79.99828642670296,
+      "p95ms": 0.5056340014562011,
+      "swSampledMaxRSSMiB": 35.64453125,
+      "swCPUPercentOneCore": 4.652772605717088,
+      "cpuObservedSeconds": 113.9105743849941
+    },
+    {
+      "run": "full3",
+      "phase": "baseline-recovery-2",
+      "success": 9600,
+      "errors": 0,
+      "actionErrors": 0,
+      "seconds": 120.0019701889978,
+      "achievedSuccessRPS": 79.99868656223246,
+      "p95ms": 0.5074130021966994,
+      "swSampledMaxRSSMiB": 37.0703125,
+      "swCPUPercentOneCore": 4.558674453787552,
+      "cpuObservedSeconds": 114.50697023699468
+    },
+    {
+      "run": "full3",
+      "phase": "baseline-recovery-3",
+      "success": 9600,
+      "errors": 0,
+      "actionErrors": 0,
+      "seconds": 120.00258138000208,
+      "achievedSuccessRPS": 79.99827911701739,
+      "p95ms": 0.49321999540552497,
+      "swSampledMaxRSSMiB": 36.984375,
+      "swCPUPercentOneCore": 4.649205775757266,
+      "cpuObservedSeconds": 113.56778457800101
+    },
+    {
+      "run": "full3",
+      "phase": "rolling-1000rps",
+      "success": 60000,
+      "errors": 0,
+      "actionErrors": 0,
+      "seconds": 60.01703749199805,
+      "achievedSuccessRPS": 999.716122409402,
+      "p95ms": 0.2933249925263226,
+      "swSampledMaxRSSMiB": 36.34765625,
+      "swCPUPercentOneCore": 7.21568042162068,
+      "cpuObservedSeconds": 59.17667843500385
+    },
+    {
+      "run": "full4",
+      "phase": "restart-term",
+      "success": 1200,
+      "errors": 0,
+      "actionErrors": 0,
+      "seconds": 15.001018349998049,
+      "achievedSuccessRPS": 79.99456916870955,
+      "p95ms": 0.45677799789700657,
+      "swSampledMaxRSSMiB": 29.98828125,
+      "swCPUPercentOneCore": 0.5492227044716801,
+      "cpuObservedSeconds": 9.103775134004536
+    },
+    {
+      "run": "full4",
+      "phase": "doctor-under-load",
+      "success": 800,
+      "errors": 0,
+      "actionErrors": 0,
+      "seconds": 10.000983616002486,
+      "achievedSuccessRPS": 79.99213184590434,
+      "p95ms": 0.4705180035671219,
+      "swSampledMaxRSSMiB": 28.18359375,
+      "swCPUPercentOneCore": 0.65860505062143,
+      "cpuObservedSeconds": 9.11016396600462
+    },
+    {
+      "run": "full4",
+      "phase": "soak-repeated-restarts",
+      "success": 18000,
+      "errors": 0,
+      "actionErrors": 0,
+      "seconds": 180.00375452901062,
+      "achievedSuccessRPS": 99.99791419405642,
+      "p95ms": 0.4255179956089705,
+      "swSampledMaxRSSMiB": 35.35546875,
+      "swCPUPercentOneCore": 1.4348839914854459,
+      "cpuObservedSeconds": 150.53481764500611
+    }
+  ],
+  "actions": {
+    "full3": [
+      {
+        "kind": "rollout",
+        "revision": 1,
+        "replicas": 3,
+        "seconds": 1.3127114340022672
+      },
+      {
+        "kind": "restart-term",
+        "seconds": 5.167446580002434,
+        "identitiesPreserved": true
+      },
+      {
+        "kind": "empty-endpoints",
+        "sameConnectionRequests": 100,
+        "newConnectionRejected": true
+      },
+      {
+        "kind": "restart-kill",
+        "seconds": 5.17789564699342,
+        "identitiesPreserved": true
+      },
+      {
+        "kind": "rollout",
+        "revision": 2,
+        "replicas": 3,
+        "seconds": 3.970895990001736
+      },
+      {
+        "kind": "rollout",
+        "revision": 3,
+        "replicas": 10,
+        "seconds": 27.164580548007507
+      },
+      {
+        "kind": "restart-term",
+        "seconds": 5.204881691999617,
+        "identitiesPreserved": true
+      },
+      {
+        "kind": "rollout",
+        "revision": 4,
+        "replicas": 3,
+        "seconds": 4.731068009001319
+      },
+      {
+        "kind": "rollout",
+        "revision": 5,
+        "replicas": 10,
+        "seconds": 27.28150865700445
+      },
+      {
+        "kind": "restart-term",
+        "seconds": 5.236171716998797,
+        "identitiesPreserved": true
+      },
+      {
+        "kind": "rollout",
+        "revision": 6,
+        "replicas": 3,
+        "seconds": 4.606324431995745
+      },
+      {
+        "kind": "rollout",
+        "revision": 7,
+        "replicas": 10,
+        "seconds": 27.301207497992436
+      },
+      {
+        "kind": "restart-term",
+        "seconds": 5.241005197996856,
+        "identitiesPreserved": true
+      },
+      {
+        "kind": "rollout",
+        "revision": 8,
+        "replicas": 10,
+        "seconds": 20.654116691992385
+      },
+      {
+        "kind": "rollout",
+        "revision": 9,
+        "replicas": 1,
+        "seconds": 2.2312072920030914
+      },
+      {
+        "kind": "rollout",
+        "revision": 10,
+        "replicas": 1,
+        "seconds": 14.545038184995065
+      },
+      {
+        "kind": "slow-download-roll-and-restart",
+        "bytes": 1048576,
+        "sha256": "7e31e5962974900441e745f400f9dc5060c7a21acfd97f197b4cbece12fed3d8",
+        "seconds": 14.773177840994322,
+        "errors": 0
+      },
+      {
+        "kind": "rollout",
+        "revision": 11,
+        "replicas": 1,
+        "seconds": 1.4630973160092253
+      },
+      {
+        "kind": "rollout",
+        "revision": 12,
+        "replicas": 1,
+        "seconds": 31.441326245985692
+      }
+    ],
+    "full4": [
+      {
+        "kind": "rollout",
+        "revision": 1,
+        "replicas": 3,
+        "seconds": 1.326967296001385
+      },
+      {
+        "kind": "restart-term",
+        "seconds": 5.148384925007122,
+        "identitiesPreserved": true
+      },
+      {
+        "kind": "empty-endpoints",
+        "sameConnectionRequests": 100,
+        "newConnectionRejected": true
+      },
+      {
+        "kind": "rollout",
+        "revision": 2,
+        "replicas": 1,
+        "seconds": 1.6699094399955356
+      },
+      {
+        "kind": "rollout",
+        "revision": 3,
+        "replicas": 1,
+        "seconds": 14.906496884999797
+      },
+      {
+        "kind": "slow-download-roll-and-restart",
+        "bytes": 1048576,
+        "sha256": "7e31e5962974900441e745f400f9dc5060c7a21acfd97f197b4cbece12fed3d8",
+        "seconds": 15.118860160000622,
+        "errors": 0
+      },
+      {
+        "kind": "rollout",
+        "revision": 4,
+        "replicas": 1,
+        "seconds": 1.3647475949983345
+      },
+      {
+        "kind": "rollout",
+        "revision": 5,
+        "replicas": 1,
+        "seconds": 31.503272089001257
+      },
+      {
+        "kind": "bounded-drain-expected-close",
+        "requestsBeforeClose": 322,
+        "timeoutEvent": true,
+        "afterSeconds": 30.23860146199877,
+        "error": "RemoteDisconnected('Remote end closed connection without response')"
+      },
+      {
+        "kind": "service-IP-reuse",
+        "oldConnectionRejected": true,
+        "newUID": true
+      },
+      {
+        "kind": "rollout",
+        "revision": 6,
+        "replicas": 10,
+        "seconds": 1.6450118990032934
+      },
+      {
+        "kind": "restart-term",
+        "seconds": 5.170719300993369,
+        "identitiesPreserved": true
+      },
+      {
+        "kind": "restart-kill",
+        "seconds": 5.1469266719941515,
+        "identitiesPreserved": true
+      },
+      {
+        "kind": "restart-term",
+        "seconds": 5.217962533002719,
+        "identitiesPreserved": true
+      },
+      {
+        "kind": "restart-kill",
+        "seconds": 5.162764555003378,
+        "identitiesPreserved": true
+      },
+      {
+        "kind": "restart-term",
+        "seconds": 5.1717423439986305,
+        "identitiesPreserved": true
+      }
+    ]
+  },
+  "rawResultSHA256": {
+    "full3": "32163782ded837892424c981d409bc2879e4fd735c77fcafb4a881f1f3dbf28b",
+    "full4": "0b96bc2f0b412e78842e153fb43ae13b80a6812e41875a9bad56ce987125c61d"
+  }
+}
