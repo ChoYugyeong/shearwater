@@ -73,7 +73,7 @@ curl --noproxy '*' --max-time 5 "http://$demo_ip/"
 kubectl logs demo-web
 ```
 
-예상 응답은 `hello from demo-web`이야. Pod가 Ready가 된 직후에는 EndpointSlice와 프록시가 변경을 읽는 데 잠깐 걸릴 수 있어. `kubectl get endpointslices`에 Pod 주소가 보인 뒤 `curl`을 다시 실행하면 돼. `containerPort`는 포트 이름과 번호를 알려 주는 선언이야. 실제로 8080에서 연결을 받는 건 예제의 `httpd`야. 이 단계의 Ready는 컨테이너가 실행 중이라는 뜻이라, 앱이 포트를 열 때까지는 접속이 실패할 수 있어. `readinessProbe`는 아직 실행하지 않아.
+예상 응답은 `hello from demo-web`이야. Pod가 Ready가 된 직후에는 EndpointSlice와 프록시가 변경을 읽는 데 잠깐 걸릴 수 있어. `kubectl get endpointslices`에 Pod 주소가 보인 뒤 `curl`을 다시 실행하면 돼. `containerPort`는 포트 이름과 번호를 알려 주는 선언이야. 실제로 8080에서 연결을 받는 건 예제의 `httpd`야. 이 예제에는 `readinessProbe`가 없어서 컨테이너가 실행되면 Ready가 될 수 있고, 앱이 포트를 열 때까지 접속이 실패할 수도 있어. alpha.4부터는 [readiness 검사](health-probes.md)를 실행해. 실제 앱에는 준비 상태를 확인하는 검사를 넣어 앱이 요청을 받을 수 있을 때 Service 대상으로 들어가게 해.
 
 예제가 끝나면 그때 만든 두 객체를 지워.
 
@@ -92,7 +92,7 @@ M4에서 넘어온 데이터베이스는 서버 시작 시 보정돼. 지정해 
 
 ## EndpointSlice가 연결할 Pod를 고르는 기준
 
-같은 네임스페이스 안에서 Service selector의 모든 키와 값이 Pod 라벨에 맞아야 해. Pod에 유효한 Pod IP가 있고, Ready 조건이 True이며, 삭제가 시작되지 않았을 때 연결 대상으로 넣는다. 현재 단계의 Ready는 컨테이너가 실행 중이라는 뜻이야. 앱 포트에 실제로 접속할 수 있는지는 프록시가 연결할 때 드러나.
+같은 네임스페이스 안에서 Service selector의 모든 키와 값이 Pod 라벨에 맞아야 해. Pod에 유효한 Pod IP가 있고, Ready 조건이 True이며, 삭제가 시작되지 않았을 때 연결 대상으로 넣는다. alpha.4에서는 `readinessProbe`가 있으면 그 검사 결과를 Ready에 반영해. 검사가 없으면 컨테이너 실행 상태만으로 Ready가 될 수 있으므로, Ready 표시만 보고 앱 포트까지 검증됐다고 생각하면 안 돼.
 
 숫자 `targetPort: 8080`은 해당 번호를 그대로 사용해. 이름 `targetPort: web`은 Pod의 컨테이너 포트 선언에서 이름과 TCP가 맞는 항목을 찾는다. 예를 들어 Pod A의 `web`은 8080, Pod B의 `web`은 8081일 수 있어. EndpointSlice의 `ports`는 그 Slice에 속한 모든 주소에 공통으로 적용돼. 그래서 Shearwater는 이렇게 숫자가 다르면 포트 조합별로 Slice를 만든다. Pod가 이름을 선언하지 않았다면 그 포트의 대상에서는 빠지고, 같은 Service의 다른 포트는 연결 대상으로 남을 수 있어. [EndpointSlice의 포트와 분할](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/#distribution-of-endpointslices)
 
@@ -111,6 +111,16 @@ Linux에 있는 `sw-svc0` 더미 인터페이스에 ClusterIP를 `/32`로 붙인
 새 TCP 연결마다 준비된 주소를 돌아가며 첫 후보로 선택한다. 첫 후보에 TCP 연결을 열 수 없으면 남은 후보를 시도한다. 연결을 맺은 뒤에는 앱의 바이트를 양방향으로 복사하므로, 이미 전달을 시작한 요청을 다른 Pod로 다시 보내지 않아. HTTP keep-alive처럼 여러 요청을 하나의 TCP 연결에 보내면 그 연결은 같은 Pod로 간다. TCP에서 한쪽이 쓰기를 끝내도 반대 방향의 응답이 끝날 때까지 읽을 수 있다. [Go TCPConn.CloseWrite](https://pkg.go.dev/net#TCPConn.CloseWrite)
 
 Service를 삭제하거나 포트를 없애면 해당 리스너와 연결을 닫는다. 주소를 사용하는 Service가 없어지면 인터페이스에서 그 주소를 뗀다. 서버를 정상 종료하면 연결을 닫고 주소는 남겨 둔다. 다시 실행하면 SQLite의 설정을 읽어 필요한 주소와 리스너를 맞추고, 남아 있는 불필요한 ClusterIP를 정리한다.
+
+### 롤링 교체와 서버 재시작 때 연결은 어떻게 될까
+
+**Service 주소가 유지되는 것과 기존 TCP 연결이 유지되는 것은 달라.** HTTP keep-alive는 여러 HTTP 요청에 연결 하나를 다시 쓰는 방식이야. 그 연결의 상대 Pod가 종료되면 연결도 끝날 수 있어. 프록시는 이미 보낸 바이트를 새 Pod에서 이어서 처리하지 않아.
+
+`maxUnavailable: 0`은 롤링 교체 중 준비된 Pod 수를 관리하는 설정이야. 모든 HTTP 요청이 성공한다거나 기존 연결을 다른 Pod로 옮겨 준다는 뜻은 아니야. 삭제가 시작된 Pod는 새 연결 대상에서 빠지지만, 그 Pod에 이미 붙어 있던 연결까지 새 Pod로 이동하지는 않아. Pod의 종료 유예 시간도 앱이 종료될 때까지 기다리는 상한이지, 그 시간 동안 연결이 반드시 유지된다는 보장은 아니야.
+
+`sw down` 뒤 `sw up`으로 서버만 재시작하면 기존 앱 컨테이너를 이어받을 수 있어. 하지만 Service TCP 프록시는 `sw server` 안에서 실행되므로 재시작 때 기존 프록시 연결은 닫혀. 클라이언트는 새 연결을 열어야 해. HTTP 클라이언트의 재연결·재시도 동작에 따라 사용자가 보는 결과도 달라질 수 있어.
+
+요청 실패 뒤에는 서버가 그 요청을 처리했는지 알 수 없는 경우도 있어. 조회와 데이터 변경 요청을 구분하고, 특히 데이터 변경을 무조건 다시 보내서 같은 작업을 두 번 실행하지 않게 해야 해. 무중단이 필요한 앱은 요청별 오류와 기존 연결을 재사용하는 상황까지 포함해서 자기 클라이언트로 검증해.
 
 ## Pod 안에서 Service 주소를 찾는 방법
 
