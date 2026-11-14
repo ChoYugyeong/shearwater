@@ -204,10 +204,15 @@ def write_new_json(path, value):
         output.write("\n")
 
 
-async def windows_peer(args):
+async def windows_peer(args, on_event=None):
     if os.name != "nt":
         raise ValueError("run this command from Windows, not from inside WSL")
-    for path in [args.stop_file, args.ready_file, args.ready_file.with_suffix(".upstream.json")]:
+    paths = [args.stop_file]
+    if args.ready_file is not None:
+        paths += [args.ready_file, args.ready_file.with_suffix(".upstream.json")]
+    elif on_event is None:
+        raise ValueError("a ready file or supervisor event callback is required")
+    for path in paths:
         if not path.is_absolute() or path.exists() or not path.parent.is_dir():
             raise ValueError("state paths must be new absolute paths in an existing directory")
     if not args.linux_script.startswith("/") or "\n" in args.linux_script:
@@ -215,19 +220,32 @@ async def windows_peer(args):
     child = None
     bridge = None
     watchers = []
+    stderr_reader = None
+    async def read_stderr(stream):
+        # WSL startup errors must remain visible when pythonw has no console.
+        # Read bounded chunks so a missing newline cannot grow memory forever.
+        while chunk := await stream.read(2048):
+            on_event("wsl-stderr", text=chunk.decode("utf-8", errors="replace"))
     try:
         # Use an argv list, never a shell string. Distro/path spaces are safe.
         child = await asyncio.create_subprocess_exec(
             "wsl.exe", "-d", args.distro, "--exec", "python3", args.linux_script,
             "_linux", "--target-ip", args.target_ip, "--target-port", str(args.target_port),
             "--linux-port", str(args.linux_port), stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE)
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE if on_event else None,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if on_event:
+            stderr_reader = asyncio.create_task(read_stderr(child.stderr))
         try:
             raw = await asyncio.wait_for(child.stdout.readline(), 30)
         except TimeoutError as exc:
             raise RuntimeError("WSL peer startup timed out; check WSL sessions and host memory before retrying") from exc
         ready = validate_ready(json.loads(raw), args.linux_port)
-        write_new_json(args.ready_file.with_suffix(".upstream.json"), ready)
+        if args.ready_file is not None:
+            write_new_json(args.ready_file.with_suffix(".upstream.json"), ready)
+        if on_event:
+            on_event("linux-ready", **{k: v for k, v in ready.items() if k != "event"})
         bridge = TCPForwarder((ready["bindIP"], ready["bindPort"]))
         deadline = time.monotonic() + args.wait_listen
         while True:
@@ -244,34 +262,48 @@ async def windows_peer(args):
                 await asyncio.sleep(.1)
         report = dict(event="windows-ready", pid=os.getpid(), wslPID=child.pid,
                       listenIP="127.0.0.1", listenPort=args.listen_port, upstream=ready)
-        write_new_json(args.ready_file, report)
-        emit("windows-ready", **{k: v for k, v in report.items() if k != "event"})
+        if args.ready_file is not None:
+            write_new_json(args.ready_file, report)
+        (on_event or emit)("windows-ready", **{k: v for k, v in report.items() if k != "event"})
         watchers = [asyncio.create_task(wait_stop(args.stop_file)), asyncio.create_task(child.wait())]
         done, _ = await asyncio.wait(watchers, return_when=asyncio.FIRST_COMPLETED)
         if watchers[1] in done:
             raise RuntimeError("Linux peer exited; inspect its log and restart this helper")
     finally:
-        if bridge:
-            await bridge.close()
-            emit("windows-stopped", **bridge.counts)
-        if child is not None:
-            if child.returncode is None:
-                with contextlib.suppress(OSError):
-                    child.stdin.write(b"stop\n")
-                    await child.stdin.drain()
-                child.stdin.close()
-                try:
-                    await asyncio.wait_for(child.wait(), 15)
-                except TimeoutError:
-                    # This is our one child process, never a distro-wide kill.
-                    child.kill()
-                    await child.wait()
-            tail = await asyncio.wait_for(child.stdout.read(), 3)
-            if tail:
-                print(tail.decode("utf-8", errors="replace"), end="", flush=True)
-        for task in watchers:
-            task.cancel()
-        await asyncio.gather(*watchers, return_exceptions=True)
+        # A supervisor reuses this event loop after a failed attempt. Always
+        # finish child/reader cleanup, even if another cleanup step fails.
+        try:
+            if bridge:
+                await bridge.close()
+                (on_event or emit)("windows-stopped", **bridge.counts)
+        finally:
+            try:
+                if child is not None:
+                    if child.returncode is None:
+                        with contextlib.suppress(OSError):
+                            child.stdin.write(b"stop\n")
+                            await child.stdin.drain()
+                        child.stdin.close()
+                        try:
+                            await asyncio.wait_for(child.wait(), 15)
+                        except TimeoutError:
+                            # This is our one child, never a distro-wide kill.
+                            with contextlib.suppress(ProcessLookupError):
+                                child.kill()
+                            await asyncio.wait_for(child.wait(), 5)
+                    tail = await asyncio.wait_for(child.stdout.read(), 3)
+                    if tail:
+                        if on_event:
+                            on_event("linux-output", text=tail.decode("utf-8", errors="replace"))
+                        else:
+                            print(tail.decode("utf-8", errors="replace"), end="", flush=True)
+            finally:
+                if stderr_reader:
+                    stderr_reader.cancel()
+                    watchers.append(stderr_reader)
+                for task in watchers:
+                    task.cancel()
+                await asyncio.gather(*watchers, return_exceptions=True)
 
 
 def main(argv=None):

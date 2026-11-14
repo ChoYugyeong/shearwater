@@ -60,7 +60,8 @@ Windows 127.0.0.1 → Windows Python 중계 → WSL eth0 IPv4의 TCP 포트
                  → Linux Python 중계 → 기존 Service → 기존 Pod
 ```
 
-WSL 실행은 Linux 중계를 시작할 때 한 번만 해. HTTP 연결마다 WSL 프로세스나
+WSL 실행은 Linux 중계를 시작할 때 한 번만 해. 자동 감독 모드는 중계가 끝났을 때만
+다시 시작해. HTTP 연결마다 WSL 프로세스나
 Hyper-V 소켓을 새로 만들지 않아. 단, VM 자체가 멈추거나 메모리가 고갈되면
 이 경로도 멈출 수 있어. WSL 시작 실패와 OS의 메모리 문제를 고치는 커널 패치는 아니야.
 
@@ -102,14 +103,60 @@ New-Item -ItemType File -Path 'C:\실제\실행폴더\stop'
 말고 포트 소유자를 확인해. `--wait-listen=30`은 계획된 포트 인계 때 최대
 30초 동안 바인딩만 기다리는 옵션이야. HTTP 요청을 재시도하는 옵션은 아니야.
 
-이 스크립트는 자동 시작 작업을 설치하지 않아. WSL 또는 Windows를 재시작해
-Linux 중계가 끝났다면 새 실행 폴더로 다시 실행해야 해. 다시 시작할 때 새 WSL
-IP를 읽는다. 장기 운영의 서비스 등록은 이 도구의 검증 범위 밖이야.
+위의 **단독 실행 명령**은 자동 시작 작업을 설치하지 않아. WSL 또는 Windows를
+재시작해 Linux 중계가 끝났다면 새 실행 폴더로 다시 실행해야 해. 다시 시작할 때
+현재 WSL IP를 읽어.
+
+계속 사용할 때는 [자동 시작 안내](automatic-start.md#windows-로그인부터-중계까지-자동으로-시작하기)의
+`wsl-forward-autostart.py`와 예약 작업을 사용해. Windows 로그인 때 감독 프로그램이
+시작되고, WSL 종료를 발견하면 잠시 기다렸다가 WSL과 Linux 중계를 다시 켜.
+Linux 안의 sw는 별도로 등록한 `shearwater.service`가 시작해. 자동 시작을 쓰려면
+Windows·Linux 파일을 임시 검증 폴더가 아닌 고정 경로에 놓아야 해.
+
+## 자동 감독 모드에서 접속이 안 될 때
+
+아래는 자동 시작 문서의 설치 경로를 사용한 예제야. 직접 실행하던 임시 폴더의
+준비 파일과 자동 감독 모드의 `status.json`을 혼동하지 마.
+
+```powershell
+python -I C:\Dev\shearwater-runtime\forward\v1\wsl-forward-autostart.py status `
+  --state-dir C:\Dev\shearwater-runtime\forward\state
+Get-ScheduledTask -TaskName Shearwater-Windows-Forward | Select-Object TaskName,State
+Get-Content C:\Dev\shearwater-runtime\forward\state\supervisor.log -Tail 30
+curl.exe --fail --max-time 3 http://127.0.0.1:18080/
+```
+
+| 상태 | 뜻과 다음 확인 |
+| --- | --- |
+| `active: false` | 감독 프로그램이 상태 폴더의 잠금을 갖고 있지 않아. 예약 작업의 실행 경로와 최근 결과를 확인해. JSON에 오래된 `running`이 남아 있을 수도 있어. |
+| `starting` | WSL 실행과 Linux 중계의 준비 응답을 기다리는 중이야. 준비 응답의 제한 시간은 30초야. |
+| `backoff` | 시작이나 연결 유지에 실패해 다음 시도를 기다려. `lastError`와 로그의 `wsl-stderr`를 먼저 봐. |
+| `running` | Windows 수신 포트가 열렸다는 뜻이야. 앱의 정상 응답까지 뜻하지 않으므로 curl과 `sw doctor`도 확인해. |
+| `stopped` | 해당 감독 실행이 종료됐어. 다시 쓰려면 예약 작업을 시작해. |
+
+`retrySeconds`는 `backoff` 상태에서 의미가 있어. 로그에는 Linux에서 기록한 시각을
+`sourceUnix`, Windows에서 받은 시각을 `unix`로 구분해. 로그 한 파일은 약 1 MiB,
+현재 파일과 이전 3개를 합쳐 약 4 MiB로 제한해. HTTP 본문과 인증 토큰을 기록하지 않아.
+
+포트 충돌 오류가 있으면 아래에서 **소유자만 확인**해. 감독 프로그램은 다른
+프로그램을 종료하거나 포트를 빼앗지 않아. 기존 수동 중계가 남아 있다면 그
+중계의 원래 종료 절차를 사용한 뒤 예약 작업을 시작해.
+
+```powershell
+Get-NetTCPConnection -LocalPort 18080 -State Listen |
+  Select-Object LocalAddress,LocalPort,OwningProcess
+```
+
+WSL 내부의 Service는 정상인데 Windows 수신만 안 된다면, 설정의 배포판 이름과
+Linux 스크립트 경로, Python 설치 위치를 확인해. `running`인데 앱이 응답하지
+않는다면 Linux에서 `systemctl status shearwater.service`와 `sw doctor`를 확인해.
+WSL을 일부러 꺼 놓을 때는 [감독 프로그램부터 멈춰야 해](automatic-start.md#일부러-멈추기와-다시-시작하기).
 
 ## 검증과 한계
 
 ```powershell
 python -m unittest discover -s hack -p test_wsl_forward.py -v
+python -m unittest discover -s hack -p test_wsl_forward_autostart.py -v
 ```
 
 Linux에서도 같은 테스트를 실행할 수 있어. 큰 양방향 전송, 한쪽만 전송 종료한
@@ -132,6 +179,14 @@ keep-alive를 합쳐 초당 2건씩 보내 596/596이 성공했어. 이때 Windo
 2 GiB 여유 메모리 기준을 충족하지 않아 시작하지 않았어. 새 중계 테스트 13개는
 Windows·Linux 모두 통과했고, 전체 Python 회귀는 Linux 53개 통과,
 Windows 52개 통과·기존 symlink 권한 검사 1개 건너뜀이야.
+
+이후 자동 시작 검증에서는 감독 모드 테스트 10개를 추가했어. 전체 Python 회귀는
+Linux 63개 통과, Windows 62개 통과·같은 권한 검사 1개 건너뜀이야. 실제 WSL VM을
+종료한 뒤 수동 시작 명령 없이 기존 Windows 주소가 약 18.4초 만에 돌아왔고,
+안정 복구 후 약 6분 38초 동안 1,985개 요청이 모두 성공했어. 전체 전환·재부팅
+관측에서는 3,333개 성공과 재부팅 구간의 실패 7개를 모두 기록했어. 별도 복구 시점
+탐지 요청도 실패 7개 후 연속 10개 성공이었으며, 두 측정의 요청을 섞어 세지 않았어.
+시험은 약 초당 5회였으므로 최대 처리량이나 모든 환경의 복구 시간 보장은 아니야.
 
 공유 호스트에서 추가 부하 검사를 할 때는 메모리 여유를 먼저 확인하고,
 낮아지면 검사를 멈춰. 앱을 지우거나 WSL 전체를 종료하는 조치로 시작하지 마.
