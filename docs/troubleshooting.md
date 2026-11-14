@@ -1,5 +1,8 @@
 # `sw get / logs / events / why`로 문제 찾기
 
+Windows localhost에서만 시간이 초과되고 WSL 안의 앱은 정상이라면
+[Windows→WSL 연결 진단과 선택적 TCP 중계](windows-localhost.md)를 먼저 봐.
+
 이 문서는 **`0.1.0-alpha.5`**의 진단 명령을 설명해.
 alpha.2 실행 파일에는 이 네 명령이 없어. [설치 안내](install.md)로 alpha.5를 받거나
 [개발 빌드 방법](../README.md)으로 만든 `dist/sw`를 사용해.
