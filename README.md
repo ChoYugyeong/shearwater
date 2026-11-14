@@ -6,13 +6,14 @@ Shearwater는 **한 대의 Linux 환경에서 작은 앱을 띄우고, 문제를
 
 실행 파일은 `sw` 하나지만 containerd·runc와 네트워크 도구는 별도로 필요해. `kubectl`로 Pod, Deployment, Service를 다루고, containerd가 실행을 맡고, SQLite가 상태를 보관해. 필요한 API·컨트롤러·네트워크 부분을 직접 구현하며, `sw`에는 Kubernetes Go 패키지(`k8s.io/*`)가 포함되지 않아. containerd 네이티브 클라이언트를 사용하고 CRI·CNI 플러그인은 사용하지 않아. 참고·적응한 구현의 출처는 NOTICE에 적었어.
 
-**현재 단계는 실험적 알파**야. 실제로 검증한 운영 환경은 **WSL 2의 Ubuntu 24.04, Linux amd64, 단일 노드, IPv4, TCP ClusterIP**야. 관리자 한 명이 신뢰하는 앱을 실험하는 용도이며, Kubernetes 인증 제품이나 운영 서비스용 보안 격리 도구가 아니야. **securityContext는 여전히 저장만 해.** alpha.4는 설정된 프로브를 실행하며 readiness가 없으면 실행 중인 컨테이너를 Ready로 봐. [지원 범위](docs/compatibility.md)를 먼저 확인해.
+**현재 단계는 실험적 알파**야. 실제로 검증한 실행 환경은 **WSL 2의 Ubuntu 24.04, Linux amd64, 단일 노드, IPv4, TCP ClusterIP**야. 관리자 한 명이 신뢰하는 앱을 실험하는 용도이며, Kubernetes 인증 제품이나 운영 서비스용 보안 격리 도구가 아니야. **securityContext는 여전히 저장만 해.** alpha.4는 설정된 프로브를 실행하며 readiness가 없으면 실행 중인 컨테이너를 Ready로 봐. [지원 범위](docs/compatibility.md)를 먼저 확인해.
 
 Shearwater is an experimental single-node container orchestrator for trying small apps, diagnosing failures, and reviewing changes before deployment, with optional MCP access for AI tools. It provides a small Kubernetes-compatible API, native containerd integration, and SQLite storage. The tested runtime target is WSL 2 / Ubuntu 24.04 / amd64. Runtime dependencies are installed separately. The [first-try guide](docs/first-try.md) and [compatibility table](docs/compatibility.md) are currently in Korean.
 
 ## 처음 시작하기
 
-Go 없이 시작하려면 [알파 실행 파일 설치 안내](docs/install.md)를 따라 해.
+[첫 체험 안내](docs/first-try.md)가 시작점이야. 그 안에서 Go 없이 실행 파일을 설치하고
+첫 HTTP 응답까지 확인하는 순서로 이어져.
 현재 릴리스는 **v0.1.0-alpha.4**이며, `sw version`도 `0.1.0-alpha.4`를 표시해.
 [릴리스 변경 사항과 버전 검증 방법](docs/releases.md)도 확인할 수 있어.
 
@@ -25,7 +26,7 @@ alpha.3부터 `sw get/logs/events/why`로 목록·앱 로그·이벤트·실패 
 alpha.3에서 저장만 하던 기존 프로브도 실행되므로 [업데이트 전 확인](docs/health-probes.md#alpha3에서-올리기-전에)을 먼저 읽어.
 [개발 단계 실측과 재현 방법](docs/next-verification.md)에 장애·복구·배포 검증 범위를 정리했어.
 
-처음이라면 **[설치부터 HTTP 응답까지 따라 하기](docs/quickstart.md)**를 사용해. Go 1.27.3과 kubectl 1.36.6, containerd·runc·iptables, cgroup v2와 IPv4 전달이 준비된 WSL에서는 다음 순서로 실행해. 기존 Shearwater 인스턴스가 없는 환경을 사용해.
+소스에서 직접 빌드하려면 **[개발자용 빌드와 실행 안내](docs/quickstart.md)**를 사용해. Go 1.27.3과 kubectl 1.36.6, containerd·runc·iptables, cgroup v2와 IPv4 전달이 준비된 WSL에서는 다음 순서로 실행해. 기존 Shearwater 인스턴스가 없는 환경을 사용해.
 
 ```bash
 . hack/env.sh
@@ -51,7 +52,7 @@ sudo "$(command -v kubectl)" --kubeconfig /etc/shearwater/kubeconfig rollout sta
 | 서버를 잠시 멈추기 | `sw down` |
 | Pod와 전용 네트워크도 내리기 | `sw down --all` |
 
-기본 경로의 인증 정보는 root 소유야. 표의 `sw`를 빌드한 파일 경로로 바꾸고 시작한 사용자로 실행해. [운영 안내서](docs/operations.md)에 명령별 예제와 복구 순서가 있고, [Service 안내서](docs/service-networking.md)에 연결 구조가 있어. SQLite는 `/mnt/c`가 아닌 WSL의 Linux 파일시스템에 둬. WSL 배포판을 여러 개 만들더라도 네트워크가 공유될 수 있으므로 기본 설정의 Shearwater를 동시에 띄우지 마.
+기본 경로의 인증 정보는 root 소유야. 표의 `sw`를 설치하거나 빌드한 실행 파일의 경로로 바꾸고 `sudo "$sw" status`처럼 실행해. 설치 안내로 시작했다면 `up/down/doctor`에 `--node-name=shearwater`를 같이 붙여. [운영 안내서](docs/operations.md)에 명령별 예제와 복구 순서가 있고, [Service 안내서](docs/service-networking.md)에 연결 구조가 있어. SQLite는 `/mnt/c`가 아닌 WSL의 Linux 파일시스템에 둬. WSL 배포판을 여러 개 만들더라도 네트워크가 공유될 수 있으므로 기본 설정의 Shearwater를 동시에 띄우지 마.
 
 ## 개발·검증·기여
 

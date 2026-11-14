@@ -9,11 +9,14 @@ Shearwater는 신뢰하는 로컬 관리자가 사용하는 **실험적 알파**
 
 ## 1. WSL과 준비물 확인
 
-Windows PowerShell에서 배포판을 확인하고 Ubuntu에 들어가.
+Windows PowerShell에서 `wsl --list --verbose`로 배포판을 확인해.
+`NAME` 열의 이름을 아래 `$distro`에 그대로 써. 기본 설치는 `Ubuntu`일 수 있고,
+`Ubuntu-24.04`는 예시 이름이야. 이름을 맞춘 뒤 Ubuntu에 들어가.
 
 ```powershell
 wsl --list --verbose
-wsl -d Ubuntu-24.04
+$distro = 'Ubuntu-24.04'  # NAME 열의 실제 이름으로 바꿔
+wsl -d $distro
 ```
 
 **이후 명령은 Ubuntu의 Bash 터미널에서 실행해.**
@@ -23,7 +26,13 @@ uname -m                         # x86_64가 나와야 함
 cat /etc/os-release              # Ubuntu 24.04 계열 확인
 findmnt -n -o FSTYPE /sys/fs/cgroup  # cgroup2
 cat /proc/sys/net/ipv4/ip_forward    # 1
-command -v containerd runc iptables ip curl sha256sum tar
+for tool in containerd runc iptables ip curl sha256sum tar; do
+  if command -v "$tool" >/dev/null; then
+    printf '있음: %s\n' "$tool"
+  else
+    printf '없음: %s\n' "$tool"
+  fi
+done
 ```
 
 한 네트워크 공간에서는 Shearwater 인스턴스를 하나만 띄워. WSL 배포판 이름이 달라도 호스트 네트워크를 공유할 수 있어. 기존 `sw-br0`, `sw-svc0`나 실행 중인 Shearwater 앱이 있다면 이 새 설치 예제를 겹쳐 실행하지 마. SQLite 데이터는 기본 `/var/lib/shearwater`의 WSL ext4에 두고 `/mnt/c`로 바꾸지 마.
@@ -143,8 +152,12 @@ MCP 설정에도 이 **Linux 절대 경로**를 넣어. Windows의 `C:\...` 경�
 ```bash
 sw="$HOME/.local/share/shearwater/v0.1.0-alpha.4/sw"
 example="$HOME/.local/share/shearwater/v0.1.0-alpha.4/examples/web.yaml"
+export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
-k() { sudo "$kubectl_bin" --kubeconfig /etc/shearwater/kubeconfig "$@"; }
+k() {
+  [ -n "$kubectl_bin" ] || { echo 'kubectl을 못 찾았어. 설치 안내 3절부터 확인해.' >&2; return 1; }
+  sudo "$kubectl_bin" --kubeconfig /etc/shearwater/kubeconfig "$@"
+}
 
 sudo "$sw" doctor --node-name=shearwater
 sudo "$sw" up --node-name=shearwater

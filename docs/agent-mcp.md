@@ -18,25 +18,40 @@ printf '%s\n' "$sw"
 
 마지막 줄에 나온 Linux 절대 경로를 MCP 실행 파일로 써. 설치 안내는
 `/opt/shearwater/current/sw` 링크를 만들지 않아. 서버가 없거나 인증 경로가 다르면
-먼저 `status` 오류를 해결해. 기본 인스턴스의 조회에는 기본값인
-`--config-dir=/etc/shearwater --listen=127.0.0.1:6443`을 사용해.
+먼저 `status` 오류를 해결해. 옵션 없이 실행하면 설정 경로는 `/etc/shearwater`,
+API 주소는 `127.0.0.1:6443`을 써. 기본 인스턴스라면 이 옵션을 따로 붙이지 않아도 돼.
 
 ### Windows의 Claude Code에서 연결하기
 
 다음은 **Windows PowerShell**에서 Claude Code를 쓰는 경우야. `claude` CLI가 이미 설치돼
 있어야 해. 연결할 프로젝트 폴더에서 실행하면 `--scope local`로 그 프로젝트에만 등록해.
-`Read-Host`에는 바로 위에서 확인한 `/home/.../sw` 경로를 입력해.
+먼저 `wsl --list --verbose`의 `NAME` 열을 보고 `$distro`를 실제 이름으로 바꿔.
+기본 설치는 `Ubuntu`일 수 있어. `Read-Host`에는 바로 위에서 확인한 `/home/.../sw` 경로를 입력해.
+다음 준비 블록은 연결을 등록하지 않으므로 새 PowerShell 터미널에서 다시 실행해도 돼.
+PowerShell 5.1은 `.ps1` 실행 파일에 전달한 `--`를 없앨 수 있어. 아래는 `claude.exe` 또는
+npm 설치의 `claude.cmd`를 직접 골라 이 문제를 피하고, 선택한 경로를 보여 줘.
 
 ```powershell
+$distro = 'Ubuntu-24.04'  # wsl --list --verbose의 NAME 값으로 바꿔
 $swLinuxPath = Read-Host 'Ubuntu에서 확인한 sw 절대 경로'
-wsl.exe -d Ubuntu-24.04 -u root --exec $swLinuxPath version
+$claudeBin = (Get-Command claude.exe, claude.cmd -CommandType Application -ErrorAction SilentlyContinue |
+  Select-Object -First 1).Source
+if (-not $claudeBin) { throw 'claude.exe 또는 claude.cmd를 못 찾았어. Claude Code 설치를 확인해' }
+Write-Host "Claude 실행 파일: $claudeBin"
+wsl.exe -d $distro -u root --exec $swLinuxPath version
 if ($LASTEXITCODE -ne 0) { throw '실행 파일 경로부터 확인해' }
-claude mcp add --transport stdio --scope local shearwater -- wsl.exe -d Ubuntu-24.04 -u root --exec $swLinuxPath mcp
-claude mcp get shearwater
 ```
 
-이미 `shearwater`라는 연결이 있으면 새로 덮어쓰려고 하지 말고 `claude mcp get shearwater`로
-기존 실행 파일과 인자를 확인해. 배포판 이름이 다르면 `-d` 다음 값도 바꿔.
+이미 `shearwater`라는 연결이 있으면 `& $claudeBin mcp get shearwater`로 기존 실행 파일과
+인자를 확인해. 다음은 **새 연결을 등록하는 블록**이므로 기존 연결에 반복 실행하지 마.
+
+```powershell
+& $claudeBin mcp add --transport stdio --scope local shearwater -- wsl.exe -d $distro -u root --exec $swLinuxPath mcp
+if ($LASTEXITCODE -ne 0) { throw 'MCP 등록에 실패했어. 기존 연결과 오류를 확인해' }
+& $claudeBin mcp get shearwater
+if ($LASTEXITCODE -ne 0) { throw '등록한 MCP 연결을 조회하지 못했어' }
+```
+
 Claude Code의 해당 프로젝트 세션에서 `/mcp`로 연결 상태와 도구 6개를 확인해.
 다음처럼 요청해서 실제 서버 응답을 받아 봐.
 
@@ -51,12 +66,13 @@ Claude Code 자체의 도구 사용 확인과 Shearwater의 배포 승인은 별
 ### 다른 stdio MCP 앱에서 연결하기
 
 앱마다 설정 화면과 바깥쪽 JSON 키 이름은 다를 수 있어. 아래는 서버 한 개의 명령 설정 예시야.
-`YOUR_LINUX_USER`를 포함한 경로 전체를 위에서 확인한 실제 값으로 바꿔.
+`YOUR_WSL_DISTRO`는 `wsl --list --verbose`의 실제 배포판 이름으로,
+`YOUR_LINUX_USER`를 포함한 경로 전체는 위에서 확인한 실제 값으로 바꿔.
 
 ```json
 {
   "command": "wsl.exe",
-  "args": ["-d", "Ubuntu-24.04", "-u", "root", "--exec",
+  "args": ["-d", "YOUR_WSL_DISTRO", "-u", "root", "--exec",
            "/home/YOUR_LINUX_USER/.local/share/shearwater/v0.1.0-alpha.4/sw", "mcp"]
 }
 ```
@@ -79,23 +95,51 @@ root 예시는 기본 root 소유 인증을 읽기 위한 것이야. 이 연결�
 ## 변경 계획과 승인은 분리돼
 
 `sw mcp --allow-write`로 시작해야 `sw_plan`, `sw_apply` 두 도구가 추가돼.
-MCP에는 승인 도구가 없어. 흐름은 다음과 같아.
+MCP에는 승인 도구가 없어.
+
+이는 **MCP 앱에 등록된 실행 인자**를 뜻해. 별도 터미널에 이 명령을 띄워도 앱이 이미
+연결한 조회 전용 프로세스가 쓰기 모드로 바뀌지는 않아. 쓰기 도구도 체험하기로 했다면
+일반 MCP 앱에서는 해당 실행 인자에서 `mcp` 뒤에 `--allow-write`를 추가하고 연결을 다시 시작해.
+
+**Windows Claude Code**에서는 조회 연결을 유지하고 별도 이름 `shearwater-write`로 등록할 수 있어.
+위 PowerShell 준비 블록의 `$distro`, `$swLinuxPath`, `$claudeBin`을 먼저 선언해.
+이미 같은 이름이 있으면 `& $claudeBin mcp get shearwater-write`로 확인하고 추가를 반복하지 마.
+
+```powershell
+& $claudeBin mcp add --transport stdio --scope local shearwater-write -- wsl.exe -d $distro -u root --exec $swLinuxPath mcp --allow-write
+if ($LASTEXITCODE -ne 0) { throw '쓰기 MCP 등록에 실패했어. 기존 연결과 오류를 확인해' }
+& $claudeBin mcp get shearwater-write
+if ($LASTEXITCODE -ne 0) { throw '등록한 쓰기 MCP 연결을 조회하지 못했어' }
+```
+
+Claude Code의 `/mcp`에서 새 연결을 확인하고, 계획·적용은 `shearwater-write` 연결의 도구로 요청해.
+`tools/list` 또는 앱의 도구 목록에서 조회6개와 계획·적용2개, 총8개가 보이는지 확인해.
+등록으로 계획 승인이 생기지는 않아. 다음처럼 계획별 로컬 승인은 계속 필요해.
 
 1. AI가 `sw_plan`에 JSON 매니페스트를 전달해. 서버 dry-run으로 검증하지만 배포하지 않아.
 2. 결과의 **before/after와 경고**를 사람이 읽어. 환경변수·삭제되는 필드·복제본 수·이미지를 확인해.
 3. 사람이 로컬 터미널에서 정확한 해시를 반복해 승인해.
 4. AI의 `sw_apply`는 그 계획만 한 번 실행해. 변경된 대상이나 만료된 계획은 거절해.
 
+체험을 끝내고 이 프로젝트의 쓰기 연결만 해제하려면 PowerShell에서 실행해.
+`shearwater` 조회 연결과 실행 중인 서버·앱은 유지돼. 적용한 앱은 아래 객체 정리 명령으로 따로 정리해.
+
+```powershell
+& $claudeBin mcp remove shearwater-write --scope local
+if ($LASTEXITCODE -ne 0) { throw '쓰기 MCP 연결 해제에 실패했어. 연결 목록을 확인해' }
+```
+
 CLI로도 같은 흐름을 사용할 수 있어. 파일 만들기부터 실제 앱 응답·정리까지 이어지는
 예제는 아래 **승인 배포를 처음부터 따라 하기**에 있어. 설치된 실행 파일과 root 소유 인증을
 사용하므로 `sudo "$sw"`를 생략하지 마.
 
-계획은 기본 `CONFIG/plans`에 소유자 전용으로 저장되고 15분 뒤 만료돼.
+계획은 기본 `/etc/shearwater/plans`에 소유자 전용으로 저장되고 15분 뒤 만료돼.
+`--config-dir`를 바꾸면 그 디렉터리 아래 `plans`를 사용해.
 `--plan-dir`를 바꿨다면 MCP와 세 CLI 명령에 같은 경로를 사용해야 해.
 승인은 이 프로그램의 명시적인 실행 허가 기록이야. 사람의 신원을 암호학적으로 증명하지는 않아.
 같은 OS 권한의 다른 프로그램이 승인 파일을 만들 수 있으므로 MCP 경계와 OS 권한을 혼동하지 마.
 MCP 응답 한도보다 큰 계획은 전체 diff 대신 대상 목록과 `fullPreview: false`를 반환해.
-이때 `sw plan --plan=계획해시`로 **저장된 원문 전체**를 읽고 승인해.
+이때 `sudo "$sw" plan --plan=계획해시`로 **저장된 원문 전체**를 읽고 승인해.
 이 명령은 새 계획을 만들거나 객체를 변경하지 않고 기존 해시·만료·인증 식별자를 검증해.
 
 ## 지원하는 매니페스트
@@ -137,11 +181,18 @@ Service의 생략된 ClusterIP는 기존 할당을 유지해. before/after를 �
 
 ```bash
 sw="$HOME/.local/share/shearwater/v0.1.0-alpha.4/sw"
+export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
-k() { sudo "$kubectl_bin" --kubeconfig /etc/shearwater/kubeconfig "$@"; }
+k() {
+  [ -n "$kubectl_bin" ] || { echo 'kubectl을 못 찾았어. 설치 안내 3절부터 확인해.' >&2; return 1; }
+  sudo "$kubectl_bin" --kubeconfig /etc/shearwater/kubeconfig "$@"
+}
 k get deployment,service sw-review-web -n default --ignore-not-found -o name
 # 위 결과가 비어 있어야 해. 객체 이름이 나오거나 API 오류가 나면 여기서 멈춰.
 ```
+
+새 터미널에서도 설치 안내의 kubectl을 찾도록 PATH를 다시 선언했어.
+`kubectl_bin`이 비어 있으면 설치 안내의 kubectl 준비부터 확인해.
 
 매니페스트는 무엇을 실행할지 적은 파일이야. 여기서는 외부 볼륨 없이 BusyBox의 작은 HTTP
 서버를 실행해. `replicas: 1`은 앱 하나, Service의 `port: 80`은 접속 포트,
@@ -185,16 +236,26 @@ JSON
 sudo "$sw" plan -f "$trial_dir/web.json"
 ```
 
-이 단계는 계획만 저장해. 출력의 `plan` 값은 계획 원문을 식별하는 64자리 해시야.
-그 값을 아래 질문에 붙여 넣고 전체 내용을 읽어. `before`가 비어 있는 새 객체인지,
-대상이 위 두 이름인지, 이미지·복제본 수·볼륨·권한 설정이 의도한 내용인지 확인해.
+이 단계는 계획만 저장해. 출력 **맨 아래 `"plan"` 줄**의 값은 계획 원문을 식별하는
+64자리 해시야. **따옴표 안의 영문 소문자·숫자 64자리만** 아래 질문에 붙여 넣어.
+따옴표·쉼표·공백은 포함하지 마. 출력이 없거나 오류가 나면 다음 단계로 넘어가지 마.
 
 ```bash
-read -r -p '방금 출력된 plan 값을 붙여 넣어: ' plan
-sudo "$sw" plan --plan="$plan"
+read -r -p '출력 맨 아래 plan 값 64자리만 (따옴표 없이): ' plan
+if [[ "$plan" =~ ^[0-9a-f]{64}$ ]]; then
+  sudo "$sw" plan --plan="$plan"
+else
+  echo '해시 형식이 달라. 따옴표·공백 없이 64자리만 입력하고 이 블록을 다시 실행해.' >&2
+  plan=''
+fi
 ```
 
-내용이 맞을 때만 다음 블록을 실행해. 해시를 `--confirm`에 반복해서 넣는 것은 **그 계획**을
+방금 표시된 계획 원문에서 대상이 위 두 이름인지, 이미지·복제본 수·볼륨·권한 설정이
+의도한 내용인지 확인해. 새 객체라면 `method`가 `POST`이고 `before` 항목은 없어.
+`after`의 `uid`, `resourceVersion`, `creationTimestamp`는 dry-run이 채운 값이라 실제 생성 때
+달라질 수 있어. `PUT`이나 `before`가 보이면 기존 객체를 바꾸는 계획이므로 이 예제에서는 멈춰.
+
+오류 없이 원문을 확인했고 내용이 맞을 때만 다음 블록을 실행해. 해시를 `--confirm`에 반복해서 넣는 것은 **그 계획**을
 승인한다는 뜻이야. `approve`는 승인 기록만 만들고 `apply`가 실제 객체를 생성해.
 
 ```bash
@@ -205,7 +266,7 @@ service_ip=$(k get service sw-review-web -n default -o jsonpath='{.spec.clusterI
 curl --noproxy '*' --fail --retry 10 --retry-connrefused --retry-delay 1 "http://$service_ip/"
 ```
 
-`state: complete`와 `Shearwater review example` 응답을 각각 확인해.
+`"state":"complete"`가 포함된 JSON 한 줄과 `Shearwater review example` 응답을 각각 확인해.
 계획 적용 완료는 앱의 준비 완료와 다르므로 HTTP 확인을 생략하지 마.
 계획이 만료되었거나 다른 변경 때문에 거절되면 새 `plan -f` 출력부터 다시 검토해.
 이미 소비한 계획을 반복 실행하지 마. 도중 오류가 났다면 아래 **동시에 바뀌거나 도중에 실패하면**을 봐.

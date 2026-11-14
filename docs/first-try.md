@@ -5,7 +5,8 @@ Shearwater alpha.4가 내 작업에 도움이 되는지 직접 확인하는 안�
 흐름을 체험해. **실제 서비스나 중요한 데이터를 옮기는 절차는 아니야.**
 
 이 안내는 alpha.4 실행 파일로 따라 할 수 있는 후속 문서야. 기존 alpha.4 압축에
-이 페이지가 들어 있지는 않아. 설치는 [설치 안내](install.md), 정확한 기능 범위는
+이 페이지가 들어 있지는 않아. 압축 안 `INSTALL-ko.md`보다 이 저장소의 [설치 안내](install.md)가
+최신이므로 그 안내를 따라 해. 정확한 기능 범위는
 [호환표](compatibility.md)를 함께 봐. 끝나면 [체험 기록](first-try-feedback.md)을 남겨 줘.
 
 ## 시작할 수 있는 환경인지 확인하기
@@ -30,7 +31,7 @@ Ubuntu Bash와 Windows PowerShell을 구분하고, 안내에 있는 실제 실�
 
 이 세 가지가 모두 보이면 A 성공이야.
 
-1. `sw version`에 `0.1.0-alpha.4`가 나온다.
+1. 설치된 실행 파일의 `"$sw" version`에 `0.1.0-alpha.4`가 나온다.
 2. `kubectl` 조회에서 `web` Deployment의 Pod가 Ready다.
 3. **Ubuntu 안에서** Service IP에 `curl`하면 `Welcome to nginx!`가 나오고 로그에 요청이 남는다.
 
@@ -47,11 +48,19 @@ A에서 켠 서버는 유지해. 다음 예제는 `default/sw-try-crash`라는 *
 
 ```bash
 sw="$HOME/.local/share/shearwater/v0.1.0-alpha.4/sw"
+export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
-k() { sudo "$kubectl_bin" --kubeconfig /etc/shearwater/kubeconfig "$@"; }
+k() {
+  [ -n "$kubectl_bin" ] || { echo 'kubectl을 못 찾았어. 설치 안내 3절부터 확인해.' >&2; return 1; }
+  sudo "$kubectl_bin" --kubeconfig /etc/shearwater/kubeconfig "$@"
+}
 k get pod sw-try-crash -n default --ignore-not-found -o name
 # 이름이 나오거나 API 오류가 나면 멈춰. 기존 객체를 덮어쓰는 실험이 아니야.
 ```
+
+PATH 줄은 설치 안내에서 받은 kubectl을 새 터미널에서도 찾도록 해.
+`kubectl_bin`이 비어 있거나 sudo 실행 파일 오류가 나면 [kubectl 준비](install.md#3-kubectl-준비)를
+확인하고 다음 생성 단계로 넘어가지 마.
 
 충돌이 없을 때 새 파일을 만들고 그 Pod만 생성해.
 
@@ -123,7 +132,8 @@ A의 `web` 예제까지 끝낼 때는 [설치 안내 6절](install.md#6-재시�
 
 처음에는 설명을 덧붙이지 말고 이 문서와 릴리스 링크만 전달해. 막히면 어디에서 멈췄는지
 먼저 기록하고, 도움을 준 뒤에는 **도움 후 성공**으로 표시해. 실패하거나 중단한 체험도 남겨.
-개발자·AI 에이전트의 재현 검사는 `에이전트 점검`으로 표시하고 외부 사용자 수에 포함하지 마.
+개발자의 재현은 `개발자 점검`, AI의 재현은 `에이전트 점검`으로 표시해.
+둘 다 외부 사용자 수에 포함하지 마.
 
 첫 참가자 3~5명의 목적은 인기나 시장 점유율을 추정하는 것이 아니야. 반복해서 막히는 곳과
 실제로 쓸 이유를 찾는 작은 탐색이야. 가능하면 처음 며칠 뒤 다시 물어봐.
