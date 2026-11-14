@@ -79,7 +79,7 @@ IPv4 전달 값이 0이고 이 호스트를 Pod 네트워크용으로 쓰기로 
 
 `...tar.gz: OK`와 `sw: OK`가 나와야 해. 해시가 다르면 실행하지 말고 다운로드 상태를 확인해. SHA256SUMS는 같은 릴리스의 파일 무결성을 확인하는 자료이며 별도의 디지털 서명은 아니야.
 
-묶음에는 `sw`, `sw.sha256`, 이 안내(`INSTALL-ko.md`), 진단 안내(`TROUBLESHOOTING-ko.md`), 새 기능 안내 4개, `BUILDINFO.txt`, `examples/web.yaml`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, `LICENSES/`가 들어 있어. 이미지·containerd·kubectl은 포함하지 않아. 바이너리를 다시 배포할 때 라이선스 고지도 함께 전달해.
+묶음에는 `sw`, `sw.sha256`, 이 안내(`INSTALL-ko.md`), 진단 안내(`TROUBLESHOOTING-ko.md`), 자동 시작·백업/복원·프로브·AI 연결·연결 유지·첫 체험 안내, `BUILDINFO.txt`, `examples/web.yaml`, `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, `LICENSES/`가 들어 있어. 이미지·containerd·kubectl은 포함하지 않아. 바이너리를 다시 배포할 때 라이선스 고지도 함께 전달해.
 
 **버전 확인:** 다음처럼 실제 릴리스 버전이 나와야 해. 다른 값이 나오면 실행 파일 경로를 먼저 확인해. 동봉 `BUILDINFO.txt`에는 공개 소스 커밋과 빌드 정보, 파일 체크섬도 있어.
 
@@ -207,7 +207,7 @@ sudo "$sw" why "pod/$pod" -n default
 
 ## 6. 재시작과 종료
 
-서버만 잠깐 정지했다 시작하면 기존 앱 컨테이너를 이어받아. 이 동안 API와 Service 프록시는 멈추지만 앱 컨테이너는 유지될 수 있어.
+alpha.5에서 서버만 잠깐 정지했다 시작하면 기존 앱 컨테이너와 커널의 Service 전달 규칙을 이어받아. 이 동안 API·상태 검사·자동 복구는 멈추지만, 살아 있는 앱으로 향하는 Service TCP 연결은 유지돼. 호스트/WSL 재부팅이나 앱 컨테이너 종료까지 연결이 유지된다는 뜻은 아니야. alpha.4 이하에서 처음 교체할 때의 단절 가능성은 앞의 업데이트 단락을 봐.
 
 ```bash
 sudo "$sw" down --node-name=shearwater

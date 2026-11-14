@@ -29,7 +29,7 @@ Ubuntu Bash와 Windows PowerShell을 구분하고, 안내에 있는 실제 실�
 
 이 세 가지가 모두 보이면 A 성공이야.
 
-1. 설치된 실행 파일의 `"$sw" version`에 `0.1.0-alpha.4`가 나온다.
+1. 설치된 실행 파일의 `"$sw" version`에 `0.1.0-alpha.5`가 나온다.
 2. `kubectl` 조회에서 `web` Deployment의 Pod가 Ready다.
 3. **Ubuntu 안에서** Service IP에 `curl`하면 `Welcome to nginx!`가 나오고 로그에 요청이 남는다.
 
