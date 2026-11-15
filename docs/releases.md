@@ -1,5 +1,22 @@
 # 릴리스와 버전 확인
 
+## v0.1.0-alpha.7
+
+QA 도구와 운영 설명을 보완한 릴리스야. `m3-check.sh`와 `measure.sh`가
+`SW_CONTAINERD_SOCKET`으로 지정한 containerd를 사전 확인·서버 실행·관측·정리에
+일관되게 사용해. M2/M3는 containerd 조회 실패를 빈 런타임으로 오인하지 않고,
+containers와 tasks가 모두 비어 있는 것을 확인한 뒤에만 검사를 시작해.
+소켓 선택과 별개로 기존 앱과 네트워크도 격리해야 해. [운영 안내](operations.md)를 봐.
+
+[호환표](compatibility.md)의 서버 중단 설명도 alpha.5 이후 커널 Service 전달 유지
+동작과 그 한계에 맞췄어. `sw version`·API·Node의 제품 버전은 `0.1.0-alpha.7`이야.
+SQLite 스키마·Pod 실행·네트워크·Windows 중계 코드는 alpha.6과 같아.
+기존 경로와 인증·노드 옵션을 유지해 서버만 교체하며, 같은 코드의 Windows 중계는
+다시 설치할 필요가 없어. 업데이트 전에 DB·인증·앱 자료와 서비스 설정을 백업해.
+
+이번 공개 소스 빌드·첨부 파일 검증과 운영 인계 결과는 GitHub alpha.7 릴리스 본문에
+기록해. 이전 릴리스의 WSL 재부팅·장시간 부하 실험을 이번 결과로 합산하지 않아.
+
 ## v0.1.0-alpha.6
 
 Windows에서만 localhost 연결이 멈추는 경우를 위한 선택적 TCP 중계와 자동 감독
@@ -109,7 +126,7 @@ Git 태그에만 붙는 앞의 `v`는 그 값에 넣지 않아. Git이 없는 �
 bash hack/t.sh ./...
 python3 -m unittest discover -s hack -p 'test_*.py'
 bash hack/build.sh
-python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.6
+python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.7
 python3 hack/notices.py
 ```
 

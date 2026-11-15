@@ -14,10 +14,13 @@ Shearwater is an experimental single-node container orchestrator for trying smal
 
 [첫 체험 안내](docs/first-try.md)가 시작점이야. 그 안에서 Go 없이 실행 파일을 설치하고
 첫 HTTP 응답까지 확인하는 순서로 이어져.
-현재 릴리스는 **v0.1.0-alpha.6**이며, `sw version`도 `0.1.0-alpha.6`을 표시해.
+현재 릴리스는 **v0.1.0-alpha.7**이며, `sw version`도 `0.1.0-alpha.7`을 표시해.
 [릴리스 변경 사항과 버전 검증 방법](docs/releases.md)도 확인할 수 있어.
 
-alpha.6에는 Windows localhost 접속을 위한 선택적 TCP 중계와 로그인·WSL 재시작
+alpha.7은 QA 도구가 지정한 containerd를 일관되게 검사·사용하도록 보완하고,
+연결 유지 조건과 운영 안내를 갱신했어. 앱 실행 방식과 SQLite 스키마는 alpha.6과 같아.
+
+alpha.6부터 Windows localhost 접속을 위한 선택적 TCP 중계와 로그인·WSL 재시작
 자동 복구 도구를 동봉해. [Windows 접속 문제 구분](docs/windows-localhost.md)과
 [자동 시작 설치·중지 방법](docs/automatic-start.md)을 먼저 봐. 기존 sw나 앱을
 다시 배포하는 기능이 아니며, WSL VM을 끄는 동안 연결은 끊겨.

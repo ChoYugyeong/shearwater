@@ -45,7 +45,7 @@ A에서 켠 서버는 유지해. 다음 예제는 `default/sw-try-crash`라는 *
 **Ubuntu Bash**에서 필요한 경로를 다시 선언해. 설치 위치나 kubeconfig가 다르면 실제 값으로 바꿔.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.6/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.7/sw"
 export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
 k() {
