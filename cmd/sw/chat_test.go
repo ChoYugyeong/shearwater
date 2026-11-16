@@ -87,3 +87,26 @@ func TestChatBudgetsAndTransportBoundaries(t *testing.T) {
 		t.Fatal("terminal control emitted")
 	}
 }
+
+func TestChatRejectedToolNameCannotControlTerminal(t *testing.T) {
+	s := chatSession{o: chatOptions{Provider: "ollama", Model: "mock"}, tools: chatTools(false), approved: map[string]bool{}}
+	s.call = func(string, json.RawMessage) (string, error) {
+		t.Fatal("unrecognized model tool must not execute")
+		return "", nil
+	}
+	requests := 0
+	s.transport = func(context.Context, []byte) ([]byte, error) {
+		requests++
+		if requests == 1 {
+			return []byte(`{"done":true,"message":{"role":"assistant","content":"","tool_calls":[{"function":{"name":"sw_observe\u001b]52;c;fake\u0007","arguments":{}}}]}}`), nil
+		}
+		return []byte(`{"done":true,"message":{"role":"assistant","content":"미확인"}}`), nil
+	}
+	var out bytes.Buffer
+	if err := s.turn(context.Background(), "관찰", &out); err != nil {
+		t.Fatal(err)
+	}
+	if requests != 2 || strings.ContainsAny(out.String(), "\x1b\x07") || !strings.Contains(out.String(), "tool is not available") {
+		t.Fatalf("rejected tool header was unsafe: %q", out.String())
+	}
+}

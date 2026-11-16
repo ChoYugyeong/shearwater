@@ -206,7 +206,9 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 			if len(result) > 12<<10 {
 				result = "Tool result exceeds chat budget. Narrow the read, or review the saved plan with sw plan --plan=HASH. Do not infer success from missing output."
 			}
-			fmt.Fprintf(out, "[Shearwater 도구 %s]\n%s\n", call.Function.Name, printableChat(result))
+			// Rejected tool names still come from the model. Sanitize the header
+			// too, so an invalid name cannot control the terminal or clipboard.
+			fmt.Fprintf(out, "[Shearwater 도구 %s]\n%s\n", printableChat(call.Function.Name), printableChat(result))
 			s.messages = append(s.messages, chatMessage{Role: "tool", Content: result, ToolName: call.Function.Name, ToolCallID: call.ID})
 		}
 	}
