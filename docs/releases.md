@@ -1,5 +1,31 @@
 # 릴리스와 버전 확인
 
+## v0.1.0-alpha.8
+
+AI가 필요한 사실을 읽고, 작은 변경 계획을 만들고, 원래 대상의 결과를 확인하는 흐름을
+추가했어. `observe`, `capabilities`, `verify`, `app-plan`, `chat`과 외부 MCP가 같은
+운영 함수를 사용해. [전체 흐름](agent-interface.md)과 [집중 모드](focused-tools.md)를 봐.
+
+이미 앱을 골랐다면 `--target=deploy/NAME -n NAMESPACE --task=inspect`로 조회 도구1개만,
+`--task=image|scale`로 선택한 계획까지2개만 보여 줄 수 있어. namespace·원래 UID·세대를
+프로그램이 고정하고, 재생성·세대 변경·숨긴 도구·스키마 밖 인자를 거부해.
+계획이 저장돼도 적용된 것은 아니며 사람의 정확한 로컬 승인이 계속 필요해.
+
+집중 응답의 `answer`에는 현재 ID와 완전한 JSON만 담아. 내장 Qwen 대화는 이번 질문에서
+성공한 도구의 JSON을 직접 표시해 과거 ID 전사·해시만 있는 답변을 피하고, 오류나 새 질문
+뒤에는 앞의 결과를 재사용하지 않아. 외부 MCP 앱의 모델 최종 문장까지 보장하는 기능은 아니야.
+일반 조회 도구11개·쓰기 포함14개와 집중 모드1~2개를 구분해 사용해.
+
+Windows Ollama에 연결하는 `chat-windows.py`와 AI 안내2편도 체크섬과 함께 동봉해.
+Qwen은 로컬 Ollama, DeepSeek 등 기존 AI 앱은 stdio MCP로 연결할 수 있어.
+모델 설치·API 키 발급·자동 승인·소스 이미지 빌드를 대신하는 기능은 아니야.
+
+제품 버전은 CLI·API·Node 모두 `0.1.0-alpha.8`이야. SQLite 스키마, Pod 실행,
+Service 전달과 Windows 중계 코드는 alpha.7과 같아. 기존 설정·데이터 경로를 유지하고
+서버만 교체할 수 있어. [설치 안내](install.md)의 백업·교체 절차를 따라.
+공개 소스 빌드·실제 연결·운영 보존 검사의 범위와 결과는 GitHub 릴리스 본문에 기록해.
+개발 중 반복 실험이나 이전 재부팅 검사를 이번 릴리스의 재실행으로 합산하지 않아.
+
 ## v0.1.0-alpha.7
 
 QA 도구와 운영 설명을 보완한 릴리스야. `m3-check.sh`와 `measure.sh`가
@@ -126,7 +152,7 @@ Git 태그에만 붙는 앞의 `v`는 그 값에 넣지 않아. Git이 없는 �
 bash hack/t.sh ./...
 python3 -m unittest discover -s hack -p 'test_*.py'
 bash hack/build.sh
-python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.7
+python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.8
 python3 hack/notices.py
 ```
 

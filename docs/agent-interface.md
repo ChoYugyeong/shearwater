@@ -1,8 +1,8 @@
 # AI가 상태를 읽고 결과까지 확인하는 방법
 
-**개발 소스의 새 기능 안내야. 공개 alpha.7 실행 파일에는 아직 이 명령이 없어.**
-소스에서 새 클라이언트를 빌드해 기존 API를 조회할 수 있어. 운영 서버 실행 파일에
-덮어쓰는 절차는 이 문서에 포함하지 않아.
+**alpha.8부터 제공하는 AI 운영 인터페이스 안내야.** [설치 안내](install.md)로 받은
+실행 파일에서 `sw version`이 `0.1.0-alpha.8`인지 먼저 확인해. 클라이언트만 새 버전으로
+실행해 기존 API를 조회할 수도 있어. 운영 업데이트는 설치 안내의 백업·교체 절차를 따라.
 
 ## 어떤 가치를 만들려는 걸까
 
@@ -34,7 +34,7 @@ Claude·Codex·DeepSeek 앱은 MCP로, 내장 Qwen은 `sw chat`으로 같은 운
 
 ## 1. 적은 정보부터 읽기
 
-아래 `$sw`는 **새로 빌드한 실행 파일의 절대 경로**야. 별도 인증 경로라면 모든 명령에 같은
+아래 `$sw`는 **alpha.8 실행 파일의 절대 경로**야. 별도 인증 경로라면 모든 명령에 같은
 `--config-dir`와 `--listen`을 붙여. 기본 관리자 인증으로 조회하는 CLI는 설치 안내처럼
 sudo가 필요할 수 있어. 모델 대화인 `sw chat` 자체는 일반 사용자로 실행해야 해.
 
@@ -152,6 +152,9 @@ CLI 검증은 목표가 충족되지 않으면 종료 코드가 0이 아니야. 
 ### Qwen은 Windows, sw는 WSL에 있을 때
 
 Windows Python 3로 연결 도우미를 실행해. 포트를 새로 열거나 WSL 설정을 바꾸지 않아.
+릴리스 페이지의 `chat-windows.py`와 `SHA256SUMS`를 받아 체크섬을 확인했다면 아래
+`python .\hack\chat-windows.py`를 `python .\chat-windows.py`로 바꿔 실행해.
+Linux 압축에도 `hack/chat-windows.py`가 들어 있어. 새 모델을 내려받는 도구는 아니야.
 
 ```powershell
 python .\hack\chat-windows.py `

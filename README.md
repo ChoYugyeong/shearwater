@@ -6,9 +6,9 @@
 | DNS·Ingress·PVC·RBAC·Helm·다중 노드 | Kubernetes 또는 K3s |
 | 오케스트레이터 학습, AI의 관찰·계획·승인·결과 추적 실험 | Shearwater |
 
-개발 소스에는 [AI가 쓰기 쉬운 운영 인터페이스](docs/agent-interface.md)를 추가했어.
+alpha.8에는 [AI가 쓰기 쉬운 운영 인터페이스](docs/agent-interface.md)를 추가했어.
 짧은 상태 관찰, 이미지·복제본 변경 계획, 적용한 원래 대상의 결과 검증, Qwen 대화를 같은
-실행 함수에 연결했어. 이 새 명령은 **아직 공개 alpha.7 실행 파일에는 없어**.
+실행 함수에 연결했어. `sw version`이 **0.1.0-alpha.8**인지 확인하고 사용해.
 앱을 하나 골랐다면 [집중 모드](docs/focused-tools.md)로 대상과 작업을 고정하고,
 조회 도구 1개 또는 변경 계획 도구까지 2개만 AI에게 보여 줄 수 있어.
 
@@ -26,11 +26,12 @@ Shearwater is an experimental single-node container orchestrator for trying smal
 
 [첫 체험 안내](docs/first-try.md)가 시작점이야. 그 안에서 Go 없이 실행 파일을 설치하고
 첫 HTTP 응답까지 확인하는 순서로 이어져.
-현재 릴리스는 **v0.1.0-alpha.7**이며, `sw version`도 `0.1.0-alpha.7`을 표시해.
+현재 릴리스는 **v0.1.0-alpha.8**이며, `sw version`도 `0.1.0-alpha.8`을 표시해.
 [릴리스 변경 사항과 버전 검증 방법](docs/releases.md)도 확인할 수 있어.
 
-alpha.7은 QA 도구가 지정한 containerd를 일관되게 검사·사용하도록 보완하고,
-연결 유지 조건과 운영 안내를 갱신했어. 앱 실행 방식과 SQLite 스키마는 alpha.6과 같아.
+alpha.8은 필요한 도구만 보여 주는 대상 고정, 현재 ID를 담은 구조화된 답변,
+Qwen 내장 대화와 외부 MCP를 제공해. 앱 실행 방식과 SQLite 스키마는 alpha.7과 같아.
+AI가 계획해도 적용에는 정확한 계획에 대한 사람의 로컬 승인이 필요해.
 
 alpha.6부터 Windows localhost 접속을 위한 선택적 TCP 중계와 로그인·WSL 재시작
 자동 복구 도구를 동봉해. [Windows 접속 문제 구분](docs/windows-localhost.md)과
