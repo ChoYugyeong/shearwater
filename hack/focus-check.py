@@ -84,7 +84,9 @@ def content(result):
     assert not result.get('isError'), result
     obj = json.loads(result['content'][0]['text'])
     assert result['structuredContent'] == obj
-    return obj
+    assert obj['format']=='shearwater.answer/v1' and obj['namespace']=='bench' and obj['resource']=='deploy/web'
+    assert 'goal' not in obj
+    return obj['answer']
 
 
 def until(expected):
@@ -155,8 +157,9 @@ try:
                 message['tool_calls']=[dict(function=dict(name='sw_target_image',arguments={'image':'nginx:stable'}))]
             else:
                 result = json.loads(last['content'])
-                saved_plan.append(result['plan'])
-                message['content']='PLAN_READY'
+                saved_plan.append(result['answer']['plan'])
+                # 실제로 관측됐던 실패처럼 JSON 대신 해시만 답하는 모델을 흉내 낸다.
+                message['content']=saved_plan[-1]
             body = json.dumps(dict(done=True,message=message)).encode()
             self.send_response(200)
             self.send_header('Content-Length',str(len(body)))
@@ -172,8 +175,11 @@ try:
     children.append(chat)
     until('/quit')
     os.write(master,b'plan image\n')
-    until('PLAN_READY')
+    until('[Shearwater 확인 결과]')
     plan_id = saved_plan[-1]
+    verified = transcript.decode().split('[Shearwater 확인 결과]')[-1].splitlines()
+    answer_line = next(line for line in verified if line.startswith('{'))
+    check(json.loads(answer_line)==dict(plan=plan_id,applied=False),'native final preserves complete JSON despite bare-hash model answer')
     approval = root/'config/plans'/f'{plan_id}.approved.json'
     check(not approval.exists(),'focused model creates no approval')
     os.write(master,b'/approve\n')

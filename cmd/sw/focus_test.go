@@ -62,8 +62,15 @@ func focusRead(t *testing.T, o mcpOptions) focusStatus {
 	if strings.Contains(text, "PRIVATE-") {
 		t.Fatal("private details leaked", text)
 	}
+	var envelope focusResult
+	if err = json.Unmarshal([]byte(text), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Format != "shearwater.answer/v1" || envelope.Namespace != o.Focus.Namespace || envelope.Resource != o.Focus.Target || strings.Contains(text, `"goal"`) {
+		t.Fatal("invalid/ambiguous scope", text)
+	}
 	var v focusStatus
-	if err = json.Unmarshal([]byte(text), &v); err != nil {
+	if err = json.Unmarshal(envelope.Answer, &v); err != nil {
 		t.Fatal(err)
 	}
 	return v
@@ -91,7 +98,7 @@ func TestFocusedCatalogEnforcesScopeBeforeDispatch(t *testing.T) {
 				}
 			}
 			v := focusRead(t, o)
-			if v.State != "met" || v.Namespace != "bench" || v.Resource != "deploy/web" || v.UID != v.Goal.UID || v.HTTP != "not_checked" {
+			if v.State != "met" || v.UID != o.Focus.goal.UID || v.HTTP != "not_checked" {
 				t.Fatal(v)
 			}
 		})
@@ -116,13 +123,13 @@ func TestFocusedGoalDoesNotFollowLaterGenerationOrReplacement(t *testing.T) {
 	}
 	focusObject(t, c, "DELETE", o.Focus.path(), map[string]any{"gracePeriodSeconds": 0})
 	missing := focusRead(t, o)
-	if missing.State != "unknown" || missing.UID != "" || missing.Generation != 0 || missing.Goal != original {
+	if missing.State != "unknown" || missing.UID != "" || missing.Generation != 0 || o.Focus.goal != original {
 		t.Fatal("missing object echoed goal as observation", missing)
 	}
 	delete(obj, "status")
 	obj["metadata"] = map[string]any{"name": "web", "namespace": "bench"}
 	obj = focusObject(t, c, "POST", "/apis/apps/v1/namespaces/bench/deployments", obj)
-	if v := focusRead(t, o); v.State != "stale" || v.UID == original.UID || v.Goal != original {
+	if v := focusRead(t, o); v.State != "stale" || v.UID == original.UID || o.Focus.goal != original {
 		t.Fatal(v)
 	}
 	if _, err := mcpCall(o, "sw_target_image", json.RawMessage(`{"image":"nginx:stable"}`)); err == nil {
@@ -155,7 +162,11 @@ func TestFocusedPlansPreserveUnrelatedFieldsAndAcceptStatusOnlyChanges(t *testin
 				Plan    string `json:"plan"`
 				Applied bool   `json:"applied"`
 			}
-			if json.Unmarshal([]byte(result), &saved) != nil || !focusPlanKnown(o, saved.Plan) || saved.Applied {
+			var envelope focusResult
+			if json.Unmarshal([]byte(result), &envelope) != nil {
+				t.Fatal(result)
+			}
+			if json.Unmarshal(envelope.Answer, &saved) != nil || !focusPlanKnown(o, saved.Plan) || saved.Applied {
 				t.Fatal(result)
 			}
 			var plan deploymentPlan
@@ -215,7 +226,7 @@ func TestFocusedExplicitGoalAndContainerSelection(t *testing.T) {
 	if err := bindFocus(context.Background(), &o, c); err != nil {
 		t.Fatal(err)
 	}
-	if v := focusRead(t, o); v.State != "stale" || v.Goal.UID != "original-object" || v.UID == v.Goal.UID {
+	if v := focusRead(t, o); v.State != "stale" || o.Focus.goal.UID != "original-object" || v.UID == o.Focus.goal.UID {
 		t.Fatal(v)
 	}
 	for _, container := range []string{"", "missing"} {

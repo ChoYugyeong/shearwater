@@ -83,6 +83,9 @@ func (s *chatSession) reset() {
 	s.messages = []chatMessage{{Role: "system", Content: instructions}}
 	s.approved = map[string]bool{}
 	s.pendingPlan = ""
+	if s.o.Focus != nil {
+		s.o.Focus.answer = nil
+	}
 	// 대화만 지운다. 처음 고정한 대상·목표와 이 세션에서 만든 계획 목록은 유지한다.
 }
 
@@ -100,6 +103,9 @@ func printableChat(s string) string {
 }
 
 func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) error {
+	if s.o.Focus != nil {
+		s.o.Focus.answer = nil
+	}
 	s.messages = append(s.messages, chatMessage{Role: "user", Content: text})
 	for step := 0; step < 8; step++ {
 		var definitions []any
@@ -181,17 +187,33 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 		if msg.Role != "assistant" || len(msg.Calls) > 4 {
 			return fmt.Errorf("unexpected model role or too many tool calls")
 		}
-		if msg.Content != "" {
+		if msg.Content != "" && s.o.Focus == nil {
 			fmt.Fprintln(out, "[모델 답변 · 사실 여부는 아래 도구 결과로 확인]\n"+printableChat(msg.Content))
 		}
 		s.messages = append(s.messages, msg)
 		if len(msg.Calls) == 0 {
+			if s.o.Focus != nil {
+				// 집중 작업의 결과를 모델이 다시 쓰게 하면 ID 전사와 JSON 형식에서
+				// 또 오류가 날 수 있다. 이 질문에서 성공한 도구가 만든 JSON을 직접
+				// 출력한다. 근거 없이 모델만 답했다면 과거 결과로 성공을 꾸미지 않는다.
+				if len(s.o.Focus.answer) == 0 {
+					return fmt.Errorf("no successful focused tool result in this turn; no verified answer")
+				}
+				fmt.Fprintln(out, "[Shearwater 확인 결과]\n"+string(s.o.Focus.answer))
+				// 다음 질문의 대화 이력에도 프로그램이 출력한 값만 남긴다.
+				// 모델이 잘못 옮겨 쓴 문장을 뒤의 사실 근거로 재사용하지 않는다.
+				s.messages[len(s.messages)-1].Content = string(s.o.Focus.answer)
+				return nil
+			}
 			if msg.Content == "" {
 				return fmt.Errorf("model returned an empty answer")
 			}
 			return nil
 		}
 		for _, call := range msg.Calls {
+			if s.o.Focus != nil {
+				s.o.Focus.answer = nil
+			}
 			allowed := false
 			for _, t := range s.tools {
 				if t.Name == call.Function.Name {
@@ -217,7 +239,11 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 				var saved struct {
 					Plan string `json:"plan"`
 				}
-				if json.Unmarshal([]byte(result), &saved) == nil && s.reviewablePlan(saved.Plan) {
+				planResult := []byte(result)
+				if s.o.Focus != nil {
+					planResult = s.o.Focus.answer
+				}
+				if json.Unmarshal(planResult, &saved) == nil && s.reviewablePlan(saved.Plan) {
 					s.pendingPlan = saved.Plan
 				}
 			}

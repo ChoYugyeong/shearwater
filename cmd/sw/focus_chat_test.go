@@ -28,7 +28,7 @@ func TestFocusedChatCatalogAndHiddenTools(t *testing.T) {
 					if name != "sw_target_status" || string(raw) != "{}" {
 						t.Fatalf("hidden tool executed: %s %s", name, raw)
 					}
-					return `{"state":"unknown"}`, nil
+					return finishFocusAnswer(o.Focus, focusStatus{State: "unknown", UID: "current", Generation: 7, HTTP: "not_checked"}, "not_observed")
 				}
 				s.transport = func(_ context.Context, body []byte) ([]byte, error) {
 					requests++
@@ -94,7 +94,7 @@ func TestFocusedChatPendingPlanAndResetKeepsPinnedScope(t *testing.T) {
 					t.Fatalf("unexpected tool %s", name)
 				}
 				focus.plans[id] = true
-				return `{"plan":"` + id + `"}`, nil
+				return finishFocusAnswer(focus, map[string]any{"plan": id, "applied": false}, "local_review_required")
 			}
 			requests := 0
 			s.transport = func(context.Context, []byte) ([]byte, error) {
@@ -115,6 +115,7 @@ func TestFocusedChatPendingPlanAndResetKeepsPinnedScope(t *testing.T) {
 				t.Fatal("pending/review accepted an unknown plan or lost the issued plan")
 			}
 			before := *focus
+			before.answer = nil
 			s.approved[id] = true
 			s.reset()
 			if s.o.Focus != focus || !reflect.DeepEqual(before, *focus) || !s.reviewablePlan(id) {

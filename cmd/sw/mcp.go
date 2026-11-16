@@ -102,6 +102,9 @@ func decodeStrict(b []byte, v any) error {
 	return nil
 }
 func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
+	if o.Focus != nil {
+		o.Focus.answer = nil
+	} // 스키마/도구 거부도 이전 답변을 무효화한다.
 	if len(raw) == 0 {
 		raw = json.RawMessage(`{}`)
 	}
