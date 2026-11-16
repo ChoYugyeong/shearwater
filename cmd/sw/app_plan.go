@@ -34,8 +34,10 @@ func prepareAppPlan(ctx context.Context, c *agentClient, config, listen string, 
 	if i.Namespace == "" {
 		i.Namespace = "default"
 	}
-	if !apis.IsDNS1123Label(i.Namespace) || !apis.IsDNS1123Label(i.Name) {
-		return fail("use a DNS label for name and namespace")
+	// 기존 Deployment는 점을 포함한 DNS subdomain 이름도 유효하다.
+	// 새 앱은 같은 이름의 Service도 만들기 때문에 더 짧은 label 규칙을 쓴다.
+	if !apis.IsDNS1123Label(i.Namespace) || !apis.IsDNS1123Subdomain(i.Name) || i.Action == "create" && !apis.IsDNS1123Label(i.Name) {
+		return fail("use a DNS label for namespace/new app; existing Deployment names may be DNS subdomains")
 	}
 	if i.Replicas != nil && (*i.Replicas < 0 || *i.Replicas > 1000) {
 		return fail("replicas must be 0..1000")

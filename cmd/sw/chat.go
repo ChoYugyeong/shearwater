@@ -67,6 +67,29 @@ func chatTools(write bool) []mcpTool {
 	return selected
 }
 
+func chatToolsFor(o mcpOptions) []mcpTool {
+	if o.Focus != nil {
+		return availableMCPTools(o)
+	}
+	return chatTools(o.Write)
+}
+
+func (s *chatSession) reset() {
+	instructions := instructionsFor(s.o.mcpOptions) + " Speak Korean."
+	if s.o.Focus == nil {
+		instructions += " Use sw_observe for current facts before making a diagnosis."
+	}
+	instructions += " Never claim a tool was called unless its response is in the conversation. Built-in approval commands can only be entered by the human, not emitted as a tool call."
+	s.messages = []chatMessage{{Role: "system", Content: instructions}}
+	s.approved = map[string]bool{}
+	s.pendingPlan = ""
+	// 대화만 지운다. 처음 고정한 대상·목표와 이 세션에서 만든 계획 목록은 유지한다.
+}
+
+func (s *chatSession) reviewablePlan(id string) bool {
+	return validPlanID(id) && (s.o.Focus == nil || focusPlanKnown(s.o.mcpOptions, id))
+}
+
 func printableChat(s string) string {
 	return strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) && r != '\n' && r != '\t' {
@@ -190,11 +213,11 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 			if callErr == nil {
 				result, callErr = s.call(call.Function.Name, call.Function.Arguments)
 			}
-			if callErr == nil && call.Function.Name == "sw_app_plan" {
+			if callErr == nil && (call.Function.Name == "sw_app_plan" || s.o.Focus != nil && (call.Function.Name == "sw_target_image" || call.Function.Name == "sw_target_scale")) {
 				var saved struct {
 					Plan string `json:"plan"`
 				}
-				if json.Unmarshal([]byte(result), &saved) == nil && validPlanID(saved.Plan) {
+				if json.Unmarshal([]byte(result), &saved) == nil && s.reviewablePlan(saved.Plan) {
 					s.pendingPlan = saved.Plan
 				}
 			}
@@ -314,6 +337,7 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 	f.StringVar(&o.Listen, "listen", defaultListen, "local HTTPS API")
 	f.StringVar(&o.Plans, "plan-dir", "", "private plan directory")
 	f.BoolVar(&o.Write, "allow-write", false, "allow planning and locally approved apply")
+	addFocusFlags(f, &o.mcpOptions)
 	f.StringVar(&o.Provider, "provider", "ollama", "ollama (Qwen/local DeepSeek) or deepseek (API)")
 	f.StringVar(&o.Model, "model", "", "explicit model name")
 	f.StringVar(&o.Endpoint, "endpoint", "", "model origin URL")
@@ -341,6 +365,13 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 	if o.Plans == "" {
 		o.Plans = filepath.Join(o.Config, "plans")
 	}
+	// 모델에 첫 요청을 보내기 전에 대상과 목표를 한 번만 고정한다.
+	focusCtx, cancelFocus := context.WithTimeout(context.Background(), inspectTimeout)
+	focusErr := initFocus(focusCtx, &o.mcpOptions)
+	cancelFocus()
+	if focusErr != nil {
+		return focusErr
+	}
 	var transport chatTransport
 	var err error
 	if o.ModelStdio {
@@ -355,15 +386,13 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 			return err
 		}
 	}
-	s := chatSession{o: o, tools: chatTools(o.Write), transport: transport, approved: map[string]bool{}}
+	s := chatSession{o: o, tools: chatToolsFor(o.mcpOptions), transport: transport, approved: map[string]bool{}}
 	s.call = func(name string, raw json.RawMessage) (string, error) { return mcpCall(o.mcpOptions, name, raw) }
-	reset := func() {
-		s.messages = []chatMessage{{Role: "system", Content: agentInstructions + " Speak Korean. Use sw_observe for current facts before making a diagnosis. Never claim a tool was called unless its response is in the conversation. Built-in approval commands can only be entered by the human, not emitted as a tool call."}}
-		s.approved = map[string]bool{}
-		s.pendingPlan = ""
-	}
-	reset()
+	s.reset()
 	fmt.Fprintf(out, "[Shearwater] %s / %s. 질문과 선택한 도구 결과가 이 모델로 전달돼. 대화는 파일에 저장하지 않아.\n", o.Provider, printableChat(o.Model))
+	if o.Focus != nil {
+		fmt.Fprintln(out, "[Shearwater 집중 모드] "+printableChat(focusLabel(o.mcpOptions))+". 새 목표는 새 세션에서 시작해.")
+	}
 	if *prompt != "" {
 		return s.turn(context.Background(), *prompt, out)
 	}
@@ -384,7 +413,7 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 		case line == "/quit":
 			return nil
 		case line == "/reset":
-			reset()
+			s.reset()
 			reviewed = ""
 			continue
 		case line == "/review" || strings.HasPrefix(line, "/review "):
@@ -395,6 +424,10 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 			reviewed = ""
 			if !validPlanID(id) {
 				err = fmt.Errorf("no plan selected; first create a plan or use /review HASH")
+				break
+			}
+			if !s.reviewablePlan(id) {
+				err = fmt.Errorf("focused chat can review only plans created in this session")
 				break
 			}
 			err = runPlanCommand("plan", []string{"--config-dir=" + o.Config, "--listen=" + o.Listen, "--plan-dir=" + o.Plans, "--plan=" + id}, out)
@@ -408,15 +441,22 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 				id = strings.TrimSpace(strings.TrimPrefix(line, "/approve "))
 			}
 			_, ttyErr := unix.IoctlGetTermios(int(in.Fd()), unix.TCGETS)
-			if !o.Write || ttyErr != nil || id != reviewed || !validPlanID(id) {
+			if !o.Write || ttyErr != nil || id != reviewed || !s.reviewablePlan(id) {
 				err = fmt.Errorf("interactive write mode and /review of this exact plan are required")
 				break
 			}
 			err = runPlanCommand("approve", []string{"--config-dir=" + o.Config, "--listen=" + o.Listen, "--plan-dir=" + o.Plans, "--plan=" + id, "--confirm=" + id}, out)
 			if err == nil {
-				s.approved[id] = true
 				reviewed = ""
-				err = s.turn(context.Background(), "The user locally reviewed and approved plan "+id+". Apply it once, then observe its targets. Report actual readiness separately from execution.", out)
+				if o.Focus != nil {
+					// 사람의 정확한 계획 승인을 CLI로 직접 실행한다. 모델에는 적용 도구를 열지 않는다.
+					// apply가 실제 쓰기 영수증으로 verifyAppliedPlan을 호출하고 검증 JSON을 출력한다.
+					s.pendingPlan = ""
+					err = runPlanCommand("apply", []string{"--config-dir=" + o.Config, "--listen=" + o.Listen, "--plan-dir=" + o.Plans, "--plan=" + id}, out)
+				} else {
+					s.approved[id] = true
+					err = s.turn(context.Background(), "The user locally reviewed and approved plan "+id+". Apply it once, then observe its targets. Report actual readiness separately from execution.", out)
+				}
 			}
 		default:
 			reviewed = "" // a new conversation turn may propose a different change

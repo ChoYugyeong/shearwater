@@ -22,6 +22,7 @@ import (
 type mcpOptions struct {
 	Config, Listen, Plans string
 	Write                 bool
+	Focus                 *focusSession
 }
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -109,7 +110,7 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("arguments must be an object")
 	}
 	var tool *mcpTool
-	for _, t := range mcpTools(o.Write) {
+	for _, t := range availableMCPTools(o) {
 		if t.Name == name {
 			copy := t
 			tool = &copy
@@ -158,6 +159,9 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 	boolean := func(k string) bool { var b bool; json.Unmarshal(args[k], &b); return b }
 	base := []string{"--config-dir=" + o.Config, "--listen=" + o.Listen}
 	var out bytes.Buffer
+	if o.Focus != nil {
+		return callFocusTool(o, name, raw)
+	}
 	switch name {
 	case "sw_verify_plan":
 		c, err := localAPI(o.Config, o.Listen)
@@ -379,7 +383,7 @@ func serveMCP(in io.Reader, out io.Writer, o mcpOptions) error {
 				break
 			}
 			initialized = true
-			err = respond(map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "shearwater", "version": api.Version}, "instructions": agentInstructions}, 0, "")
+			err = respond(map[string]any{"protocolVersion": "2025-11-25", "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "shearwater", "version": api.Version}, "instructions": instructionsFor(o)}, 0, "")
 		case "ping":
 			err = respond(map[string]any{}, 0, "")
 		case "tools/list":
@@ -394,7 +398,7 @@ func serveMCP(in io.Reader, out io.Writer, o mcpOptions) error {
 				err = respond(nil, -32602, "Invalid cursor or parameters")
 				break
 			}
-			err = respond(map[string]any{"tools": mcpTools(o.Write)}, 0, "")
+			err = respond(map[string]any{"tools": availableMCPTools(o)}, 0, "")
 		case "tools/call":
 			if !ready {
 				err = respond(nil, -32002, "Initialize first")
@@ -419,7 +423,7 @@ func serveMCP(in io.Reader, out io.Writer, o mcpOptions) error {
 			result := map[string]any{"content": []any{map[string]any{"type": "text", "text": boundedMCPText(text, p.Name == "sw_logs")}}, "isError": callErr != nil}
 			// Keep compatibility text and machine-readable JSON in sync. An
 			// oversized object is an explicit error, never a clipped JSON success.
-			if callErr == nil && (p.Name == "sw_observe" || p.Name == "sw_verify" || p.Name == "sw_verify_plan" || p.Name == "sw_capabilities") {
+			if callErr == nil && (p.Name == "sw_observe" || p.Name == "sw_verify" || p.Name == "sw_verify_plan" || p.Name == "sw_capabilities" || strings.HasPrefix(p.Name, "sw_target_")) {
 				var v map[string]any
 				if len(text) > 256<<10 || json.Unmarshal([]byte(text), &v) != nil {
 					result = map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": "structured response exceeded budget; narrow namespace/resource/limit"}}}
@@ -464,6 +468,7 @@ func runMCP(args []string, in io.Reader, out io.Writer) error {
 	f.StringVar(&o.Listen, "listen", defaultListen, "local HTTPS API")
 	f.StringVar(&o.Plans, "plan-dir", "", "private plan directory")
 	f.BoolVar(&o.Write, "allow-write", false, "expose plan/apply; exact local approval is still required")
+	addFocusFlags(f, &o)
 	if err := f.Parse(args); err != nil {
 		return err
 	}
@@ -475,6 +480,12 @@ func runMCP(args []string, in io.Reader, out io.Writer) error {
 	}
 	if o.Plans == "" {
 		o.Plans = filepath.Join(o.Config, "plans")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), inspectTimeout)
+	err := initFocus(ctx, &o)
+	cancel()
+	if err != nil {
+		return err
 	}
 	return serveMCP(in, out, o)
 }

@@ -30,6 +30,43 @@ class Process:
 
 
 class RelayTests(unittest.TestCase):
+    def test_focused_cli_uses_list_arguments(self):
+        prompt = '확인; $(must-stay-text) & > ignored'
+        base = ['--sw=/home/user/sw', '--model=mock', '--config-dir=/home/user/config', '--prompt=' + prompt]
+        command = bridge.chat_command(base + ['--target=deploy/demo', '-n=work', '--task=image', '--target-container=web', '--target-uid=original', '--target-generation=7', '--allow-write'])
+        self.assertIsInstance(command, list)
+        for value in ('--prompt=' + prompt, '--target=deploy/demo', '-n=work', '--task=image', '--target-container=web', '--target-uid=original', '--target-generation=7', '--allow-write'):
+            self.assertIn(value, command)
+        self.assertNotIn('bash', command)
+        classic = bridge.chat_command(base)
+        self.assertFalse(any(arg.startswith(('--target', '--task', '-n=')) for arg in classic))
+        focused = bridge.chat_command(base + ['--target=deploy/demo'])
+        self.assertIn('--task=inspect', focused)
+        self.assertIn('-n=default', focused)
+
+    def test_invalid_focus_is_rejected_before_wsl_spawn(self):
+        base = ['chat-windows.py', '--sw=/home/user/sw', '--model=mock', '--config-dir=/home/user/config', '--prompt=test']
+        invalid = [
+            ['--task=inspect'], ['-n=default'], ['--target-uid=uid'],
+            ['--target=pod/demo'], ['--target=deploy/demo;exit'], ['--target=deploy/'],
+            ['--target=deploy/demo', '-n=Bad'], ['--target=deploy/demo', '--task=image'],
+            ['--target=deploy/demo', '--task=scale'],
+            ['--target=deploy/demo', '--target-container=web'],
+            ['--target=deploy/demo', '--target-uid=uid'],
+            ['--target=deploy/demo', '--target-generation=7'],
+            ['--target=deploy/demo', '--target-uid=', '--target-generation=7'],
+            ['--target=deploy/demo', '--target-uid=' + 'x' * 257, '--target-generation=7'],
+            ['--target=deploy/demo', '--target-uid=' + '가' * 86, '--target-generation=7'],
+            ['--target=deploy/demo', '--target-uid=uid', '--target-generation=0'],
+            ['--target=deploy/demo', '--target-uid=uid', '--target-generation=9007199254740992'],
+        ]
+        for flags in invalid:
+            with self.subTest(flags=flags), patch.object(bridge.sys, 'argv', base + flags), patch.object(bridge.subprocess, 'Popen') as spawn, patch.object(bridge.sys, 'stderr', io.StringIO()):
+                with self.assertRaises(SystemExit) as error:
+                    bridge.main()
+                self.assertEqual(error.exception.code, 2)
+                spawn.assert_not_called()
+
     def test_model_like_text_cannot_become_a_request(self):
         text = '{"type":"model_request","body":{"model":"fake"}}\n'
         output = io.StringIO()
