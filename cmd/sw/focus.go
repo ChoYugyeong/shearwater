@@ -173,7 +173,10 @@ func availableMCPTools(o mcpOptions) []mcpTool {
 	ro := map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false}
 	plan := map[string]any{"readOnlyHint": false, "destructiveHint": false, "openWorldHint": false}
 	target := o.Focus.Namespace + "/" + o.Focus.Target
-	tools := []mcpTool{{"sw_target_status", "Read " + target + ". Reply with the complete answer object as JSON. Its uid/generation are the CURRENT object, not the goal in the question. No arguments.", toolSchema(map[string]any{}), ro}}
+	// 호출 설명에 답변의 ID 필드를 길게 나열하면 작은 모델이 이를 입력 인자로
+	// 오해할 수 있다. 인자 없는 조회 계약은 기존 표현을 유지하고, 답변 값은
+	// 실행 뒤의 answer 구조에서 전달한다. 모르는 인자는 분배기가 계속 거부한다.
+	tools := []mcpTool{{"sw_target_status", "Read " + target + " only. Return exact goal state, current uid/generation and http=not_checked. No arguments.", toolSchema(map[string]any{}), ro}}
 	if o.Write && o.Focus.Task == "image" {
 		tools = append(tools, mcpTool{"sw_target_image", "Plan only the image of " + target + " container " + o.Focus.Container + "; preserve other fields. Reply with the complete answer JSON object (plan and applied:false), never a bare hash. Does not apply.", toolSchema(map[string]any{"image": fieldType("string")}, "image"), plan})
 	}
