@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"shearwater/internal/agent"
 	"shearwater/internal/apis"
 )
 
@@ -338,6 +339,37 @@ type applyReceipt struct {
 	State   string    `json:"state"`
 	Applied []string  `json:"applied"`
 	Error   string    `json:"error,omitempty"`
+	// Goals are captured from the successful WRITE response, never from a
+	// later GET. A concurrent replacement must not redefine what we approved.
+	Goals        []agent.ReadinessGoal `json:"goals,omitempty"`
+	Unverified   []string              `json:"unverified,omitempty"`
+	Identity     string                `json:"identity,omitempty"`
+	Listen       string                `json:"listen,omitempty"`
+	Verification *planVerification     `json:"verification,omitempty"`
+}
+
+func appliedGoal(body []byte) (agent.ReadinessGoal, bool) {
+	var obj struct {
+		Kind     string          `json:"kind"`
+		Metadata apis.ObjectMeta `json:"metadata"`
+	}
+	if json.Unmarshal(body, &obj) != nil {
+		return agent.ReadinessGoal{}, false
+	}
+	kind := ""
+	switch obj.Kind {
+	case "Deployment":
+		kind = "deploy"
+	case "Pod":
+		kind = "pod"
+	case "Service":
+		kind = "svc"
+	}
+	m := obj.Metadata
+	if kind == "" || m.UID == "" || m.Generation < 1 || m.Namespace == "" || m.Name == "" {
+		return agent.ReadinessGoal{}, false
+	}
+	return agent.ReadinessGoal{Namespace: m.Namespace, Resource: kind + "/" + m.Name, UID: m.UID, Generation: m.Generation}, true
 }
 
 func executePlan(ctx context.Context, c *agentClient, config, listen, dir, id string, out io.Writer) error {
@@ -369,7 +401,7 @@ func executePlan(ctx context.Context, c *agentClient, config, listen, dir, id st
 			return err
 		}
 	}
-	receipt := applyReceipt{Plan: id, At: time.Now().UTC(), State: "attempted"}
+	receipt := applyReceipt{Plan: id, At: time.Now().UTC(), State: "attempted", Identity: p.Identity, Listen: p.Listen}
 	receiptPath := filepath.Join(dir, id+".receipt.json")
 	// Reserve execution before sending a write. A lost response is not safe to
 	// retry; the immutable receipt tells the operator to inspect actual state.
@@ -377,7 +409,8 @@ func executePlan(ctx context.Context, c *agentClient, config, listen, dir, id st
 		return fmt.Errorf("plan already attempted (or cannot record attempt); inspect its receipt: %w", err)
 	}
 	for _, a := range p.Actions {
-		_, _, _, err = apiRequest(ctx, c, a.Method, a.Path+"?fieldValidation=Strict", a.Body)
+		var appliedBody []byte
+		appliedBody, _, _, err = apiRequest(ctx, c, a.Method, a.Path+"?fieldValidation=Strict", a.Body)
 		if err != nil {
 			receipt.State = "uncertain-or-partial"
 			receipt.Error = err.Error()
@@ -386,6 +419,11 @@ func executePlan(ctx context.Context, c *agentClient, config, listen, dir, id st
 			return errors.Join(err, saveErr)
 		}
 		receipt.Applied = append(receipt.Applied, planTarget(a))
+		if goal, ok := appliedGoal(appliedBody); ok {
+			receipt.Goals = append(receipt.Goals, goal)
+		} else {
+			receipt.Unverified = append(receipt.Unverified, planTarget(a))
+		}
 		if err = atomicJSON(receiptPath, receipt); err != nil {
 			return err
 		}
@@ -394,6 +432,15 @@ func executePlan(ctx context.Context, c *agentClient, config, listen, dir, id st
 	if err = atomicJSON(receiptPath, receipt); err != nil {
 		return err
 	}
+	// A successful write is not a successful rollout. Read once using goals
+	// captured above; later polls must use the same receipt via verify --plan.
+	verifyCtx, cancel := context.WithTimeout(ctx, inspectTimeout)
+	defer cancel()
+	verification, verifyErr := verifyAppliedPlan(verifyCtx, c, config, listen, dir, id)
+	if verifyErr != nil {
+		verification = planVerification{Plan: id, Execution: "complete", State: "unknown", Reason: "observation_failed; use sw verify --plan again"}
+	}
+	receipt.Verification = &verification
 	return json.NewEncoder(out).Encode(receipt)
 }
 func runPlanCommand(command string, args []string, out io.Writer) error {

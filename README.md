@@ -1,5 +1,15 @@
 # Shearwater
 
+| 목적 | 먼저 검토할 선택 |
+| --- | --- |
+| 작은 앱 몇 개를 빌드하고 바로 운영 | Docker Compose와 기존 운영 환경 |
+| DNS·Ingress·PVC·RBAC·Helm·다중 노드 | Kubernetes 또는 K3s |
+| 오케스트레이터 학습, AI의 관찰·계획·승인·결과 추적 실험 | Shearwater |
+
+개발 소스에는 [AI가 쓰기 쉬운 운영 인터페이스](docs/agent-interface.md)를 추가했어.
+짧은 상태 관찰, 이미지·복제본 변경 계획, 적용한 원래 대상의 결과 검증, Qwen 대화를 같은
+실행 함수에 연결했어. 이 새 명령은 **아직 공개 alpha.7 실행 파일에는 없어**.
+
 Shearwater는 **한 대의 Linux 환경에서 작은 앱을 띄우고, 문제를 확인하고, 변경 내용을 검토한 뒤 배포하는** 실험적 컨테이너 운영 도구야. `sw why`로 관측된 실패 이유를 읽고, MCP로 AI에 조회를 연결하고, 정확한 변경 계획을 로컬에서 승인해 실행할 수 있어. 개인 개발자와 오케스트레이터 동작을 공부하는 사람이 직접 시험해 볼 수 있게 코드와 재현 절차를 공개했어.
 
 **처음 써 본다면 [첫 체험 안내](docs/first-try.md)**에서 앱 응답 → 의도적인 실패 진단 → 선택적인 AI 연결과 승인 배포를 확인해. 새 OS를 준비하는 시간까지 포함한 설치 소요 시간이나 다른 도구보다 쉽다는 주장은 아직 검증하지 않았어. [체험 기록 양식](docs/first-try-feedback.md)에 막힌 지점을 남겨 줘.
@@ -71,6 +81,8 @@ sudo "$(command -v kubectl)" --kubeconfig /etc/shearwater/kubeconfig rollout sta
 bash hack/t.sh ./...       # 소스 수정 없이 포맷·정적 검사·Go 테스트
 bash hack/build.sh         # dist/sw와 SHA256, 포함 모듈 정보 출력
 python3 hack/mcp-check.py "$PWD/dist/sw"  # 별도 API에서 MCP·계획·승인·배포 확인, root 불필요
+python3 hack/chat-check.py "$PWD/dist/sw" # 실제 터미널 승인 흐름, 모델은 모의 응답
+python3 hack/chat-windows-test.py         # Windows 전달 도우미의 경계 검사, 모델 설치 불필요
 ```
 
 [기여 방법](CONTRIBUTING.md) · [보안 범위와 제보](SECURITY.md) · [공개 알파 검사 절차](docs/alpha-release.md) · [실제 재부팅·부하 기록](docs/reboot-soak.md)

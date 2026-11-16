@@ -37,6 +37,10 @@ jobs:
         run: bash hack/build.sh
       - name: MCP stdio, exact approval and real API deployment (no runtime)
         run: python3 hack/mcp-check.py "$PWD/dist/sw"
+      - name: Terminal approval and Windows model relay (scripted model, no runtime)
+        run: |
+          python3 hack/chat-check.py "$PWD/dist/sw"
+          python3 hack/chat-windows-test.py
       - name: Verify executable version (release tags must match)
         shell: bash
         run: |

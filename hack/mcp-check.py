@@ -34,6 +34,7 @@ def main():
         address = f'127.0.0.1:{port_probe.getsockname()[1]}'
     connection = ['--config-dir=' + str(config), '--listen=' + address]
     checks = []
+    measurements = {}
     clients = []
 
     def check(name, condition):
@@ -107,8 +108,11 @@ def main():
                 time.sleep(.1)
         read = MCP()
         names = {item['name'] for item in read.call('tools/list')['tools']}
-        check('read-only mode exposes exactly six diagnostic tools', names == {
-            'sw_status', 'sw_tree', 'sw_get', 'sw_logs', 'sw_events', 'sw_why'})
+        check('read-only mode exposes diagnostics and agent observation tools', names == {
+            'sw_status', 'sw_tree', 'sw_get', 'sw_logs', 'sw_events', 'sw_why',
+            'sw_capabilities', 'sw_observe', 'sw_verify', 'sw_verify_plan', 'sw_receipt'})
+        check('capabilities explicitly distinguish readiness from HTTP',
+              json.loads(read.tool('sw_capabilities'))['observation']['reachability'] == 'not checked')
         read.tool('sw_apply', {'plan': '0' * 64}, failure=True)
         read.tool('sw_get', {'resource': '--config-dir=/another-instance'}, failure=True)
         check('read-only writes and resource-as-flag injection are refused', True)
@@ -140,6 +144,52 @@ def main():
         check('large MCP preview remains valid JSON with an exact full-review command',
               large['fullPreview'] is False and large['reviewCommand'] == 'sw plan --plan=' + large['plan'])
         check('the saved large plan preserves the complete manifest', full['actions'][0]['body']['metadata']['annotations']['review'] == annotation)
+        app = json.loads(writer.tool('sw_app_plan', dict(action='create', name='intent-web', image='nginx:alpine', port=80)))
+        check('typed app plan is concise and does not claim deployment', not app['applied'] and app['reviewRequired'])
+        writer.tool('sw_apply', dict(plan=app['plan']), failure=True)
+        cli('approve', '--plan=' + app['plan'], '--confirm=' + app['plan'])
+        writer.tool('sw_apply', dict(plan=app['plan']))
+        receipt = json.loads(read.tool('sw_receipt', dict(plan=app['plan'])))
+        check('execution receipt is readable through read-only MCP', receipt['state'] == 'complete')
+        check('write responses bind both original app verification goals', len(receipt['goals']) == 2)
+        bound = json.loads(read.tool('sw_verify_plan', dict(plan=app['plan'])))
+        check('applied API-only goals are not confused with ready workloads', bound['state'] != 'met')
+        observation = read.call('tools/call', dict(name='sw_observe', arguments=dict(resource='deploy/intent-web')))
+        state = observation['structuredContent']
+        full_observation = read.call('tools/call', dict(name='sw_get', arguments=dict(resource='deploy/intent-web', full=True)))
+        encoded_size = lambda value: len(json.dumps(value, ensure_ascii=False, separators=(',', ':')).encode('utf-8'))
+        measurements['deploymentObservation'] = dict(
+            compactTextBytes=len(observation['content'][0]['text'].encode('utf-8')),
+            fullTextBytes=len(full_observation['content'][0]['text'].encode('utf-8')),
+            compactMCPResultBytes=encoded_size(observation),
+            fullMCPResultBytes=encoded_size(full_observation),
+            note='One API-only Deployment. Bytes, not tokens or model success rate; compact result also carries structuredContent.')
+        check('structured observation matches compatibility text JSON', state == json.loads(observation['content'][0]['text']))
+        item = state['items'][0]
+        goal = dict(resource=item['resource'], uid=item['uid'], generation=item['generation'])
+        result = json.loads(read.tool('sw_verify', goal))
+        check('API-only deployment is not falsely declared ready', result['state'] != 'met' and result['observation']['reachability'] == 'not_checked')
+        cli('verify', '--resource=deploy/intent-web', '--uid=' + item['uid'], '--generation=' + str(item['generation']), failure=True)
+        stale = json.loads(read.tool('sw_verify', dict(goal, uid='replaced-uid')))
+        check('verification rejects a replacement with the same name', stale['state'] == 'stale')
+        scale = json.loads(writer.tool('sw_app_plan', dict(action='scale', name='intent-web', replicas=0,
+                          uid=item['uid'], resource_version=item['resourceVersion'])))
+        check('scale plan carries the exact observed version', scale['intent']['resource_version'] == item['resourceVersion'])
+        read.tool('sw_observe', dict(limit=0), failure=True)
+        read.tool('sw_observe', dict(resource='--listen=other'), failure=True)
+        read.tool('sw_app_plan', dict(action='create', name='not-allowed', image='nginx', port=80), failure=True)
+        check('agent schemas and read-only boundary reject invalid actions', True)
+        # Optional real-model smoke: no API billing and no production credentials.
+        # Set SW_QWEN_SMOKE=qwen2.5:latest only when Ollama runs in this Linux environment.
+        model = os.environ.get('SW_QWEN_SMOKE')
+        if model:
+            before_ai = cli('get', 'deploy/intent-web', '--full')
+            command = [binary, 'chat', '--model=' + model, *connection,
+                       '--prompt=Use sw_observe with resource deploy/intent-web. Report whether readiness is known. Do not change anything.']
+            chat = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=240)
+            (fixture / 'qwen-chat.txt').write_text(chat.stdout + '\n' + chat.stderr)
+            check('real Qwen completes an observation tool call', chat.returncode == 0 and '[Shearwater 도구 sw_observe]' in chat.stdout)
+            check('real Qwen read leaves the target unchanged', cli('get', 'deploy/intent-web', '--full') == before_ai)
         passed = True
     finally:
         cleanup_errors = []
@@ -158,7 +208,7 @@ def main():
                 server.wait(timeout=10)
             log.close()
             report = dict(passed=passed and not cleanup_errors, checks=checks, fixture=str(fixture),
-                          cleanup='children stopped; files retained', cleanupErrors=cleanup_errors)
+                          cleanup='children stopped; files retained', cleanupErrors=cleanup_errors, measurements=measurements)
             (fixture / 'report.json').write_text(json.dumps(report, indent=2))
             print('Evidence: ' + str(fixture), flush=True)
         if cleanup_errors:

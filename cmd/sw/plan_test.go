@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -35,6 +37,99 @@ func planTestServer(t *testing.T) (*agentClient, string, *store.Store) {
 		t.Fatal(err)
 	}
 	return &agentClient{client: server.Client(), url: server.URL, token: s.Token}, root, st
+}
+
+// Inject a concurrent edit (or a lost response) AFTER the server commits the
+// approved write but BEFORE the caller receives its body. A later GET must not
+// be allowed to redefine the approved operation's verification target.
+type afterCommittedWrite struct {
+	base  http.RoundTripper
+	after func(*http.Request, *http.Response) (*http.Response, error)
+	done  bool
+}
+
+func (r *afterCommittedWrite) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := r.base.RoundTrip(req)
+	if err == nil && !r.done && req.Method == "POST" && req.URL.Query().Get("dryRun") == "" && strings.HasSuffix(req.URL.Path, "/deployments") {
+		r.done = true
+		return r.after(req, resp)
+	}
+	return resp, err
+}
+
+func TestAppliedGoalsComeFromWriteResponseNotLaterRead(t *testing.T) {
+	for _, lose := range []bool{false, true} {
+		t.Run(fmt.Sprintf("lost_response_%t", lose), func(t *testing.T) {
+			c, root, _ := planTestServer(t)
+			ctx := context.Background()
+			p, err := prepareAppPlan(ctx, c, root, "127.0.0.1:6443", appIntent{Action: "create", Name: "bound", Image: "nginx:alpine", Port: 80})
+			if err != nil {
+				t.Fatal(err)
+			}
+			id := planHash(p)
+			exclusiveJSON(filepath.Join(root, id+".json"), p)
+			exclusiveJSON(filepath.Join(root, id+".approved.json"), map[string]string{"plan": id})
+			base := c.client.Transport
+			other := *c
+			httpCopy := *c.client
+			httpCopy.Transport = base
+			other.client = &httpCopy
+			c.client.Transport = &afterCommittedWrite{base: base, after: func(req *http.Request, resp *http.Response) (*http.Response, error) {
+				body, err := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if lose {
+					return nil, errors.New("injected lost reply after commit")
+				}
+				v, _ := objectMap(body)
+				v["spec"].(map[string]any)["replicas"] = float64(2)
+				changed, _ := json.Marshal(v)
+				if _, _, _, err = apiRequest(ctx, &other, "PUT", "/apis/apps/v1/namespaces/default/deployments/bound", changed); err != nil {
+					t.Fatal(err)
+				}
+				resp.Body = io.NopCloser(bytes.NewReader(body))
+				return resp, nil
+			}}
+			var output bytes.Buffer
+			err = executePlan(ctx, c, root, p.Listen, root, id, &output)
+			if (err != nil) != lose {
+				t.Fatal(err)
+			}
+			var receipt applyReceipt
+			if err = readPrivateJSON(filepath.Join(root, id+".receipt.json"), &receipt); err != nil {
+				t.Fatal(err)
+			}
+			v, err := verifyAppliedPlan(ctx, c, root, p.Listen, root, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if lose {
+				if receipt.State != "uncertain-or-partial" || len(receipt.Goals) != 0 || v.State != "unknown" {
+					t.Fatal(receipt, v)
+				}
+			} else {
+				if receipt.Goals[0].Generation != 1 || v.State != "stale" {
+					t.Fatal("latest generation falsely satisfied earlier plan", receipt, v)
+				}
+				// Deleting and recreating the same name also cannot satisfy the goal.
+				if _, _, _, err = apiRequest(ctx, &other, "DELETE", "/apis/apps/v1/namespaces/default/deployments/bound", nil); err != nil {
+					t.Fatal(err)
+				}
+				if _, _, _, err = apiRequest(ctx, &other, "POST", "/apis/apps/v1/namespaces/default/deployments", p.Actions[0].Body); err != nil {
+					t.Fatal(err)
+				}
+				v, err = verifyAppliedPlan(ctx, c, root, p.Listen, root, id)
+				if err != nil || v.State != "stale" {
+					t.Fatal(v, err)
+				}
+			}
+			if err = executePlan(ctx, c, root, p.Listen, root, id, &output); err == nil {
+				t.Fatal("replayed consumed/uncertain write")
+			}
+		})
+	}
 }
 
 var plannedPod = []byte(`{"apiVersion":"v1","kind":"Pod","metadata":{"name":"planned"},"spec":{"containers":[{"name":"web","image":"nginx:alpine"}]}}`)

@@ -1,10 +1,10 @@
 # 처음 써 보고 판단하기
 
-Shearwater alpha.6가 내 작업에 도움이 되는지 직접 확인하는 안내야.
+Shearwater alpha.7이 내 작업에 도움이 되는지 직접 확인하는 안내야.
 한 대의 Linux 환경에서 작은 앱을 띄우고, 실패 이유를 읽고, 변경 계획을 승인해 배포하는
 흐름을 체험해. **실제 서비스나 중요한 데이터를 옮기는 절차는 아니야.**
 
-이 안내는 alpha.6 실행 파일 기준이야. 압축의 `INSTALL-ko.md`와 저장소의 [설치 안내](install.md)를 따라 해. 정확한 기능 범위는
+이 안내는 alpha.7 실행 파일 기준이야. 압축의 `INSTALL-ko.md`와 저장소의 [설치 안내](install.md)를 따라 해. 정확한 기능 범위는
 [호환표](compatibility.md)를 함께 봐. 끝나면 [체험 기록](first-try-feedback.md)을 남겨 줘.
 
 ## 시작할 수 있는 환경인지 확인하기
@@ -29,7 +29,7 @@ Ubuntu Bash와 Windows PowerShell을 구분하고, 안내에 있는 실제 실�
 
 이 세 가지가 모두 보이면 A 성공이야.
 
-1. 설치된 실행 파일의 `"$sw" version`에 `0.1.0-alpha.6`가 나온다.
+1. 설치된 실행 파일의 `"$sw" version`에 `0.1.0-alpha.7`이 나온다.
 2. `kubectl` 조회에서 `web` Deployment의 Pod가 Ready다.
 3. **Ubuntu 안에서** Service IP에 `curl`하면 `Welcome to nginx!`가 나오고 로그에 요청이 남는다.
 

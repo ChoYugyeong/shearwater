@@ -38,6 +38,9 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw logs        read current or previous Pod container logs
   sw events      show recent events, optionally for one object's UID
   sw why         explain a Pod's state with events and bounded log excerpts
+  sw observe     read bounded, structured workload facts for agents
+  sw verify      check readiness of an exact resource UID and generation
+  sw capabilities show supported agent operations and their limits
   sw server      run the API server in the foreground
   sw kubeconfig  print a kubeconfig for kubectl
   sw version     print the version
@@ -45,9 +48,11 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw backup      snapshot the database and credentials, optionally cold volumes
   sw restore     verify a backup and restore into a new directory
   sw plan        prepare a reviewed deployment plan
+  sw app-plan    plan creating a web app, changing its image, or scaling it
   sw approve     approve the exact plan hash locally
   sw apply       execute an approved plan, checking for concurrent changes
   sw mcp         serve diagnostics and optional reviewed deployment over stdio
+  sw chat        talk through the shared tools using Qwen/Ollama or DeepSeek
 
 Run "sw COMMAND -h" for the flags of a command.
 `
@@ -80,8 +85,12 @@ func main() {
 		err = runRestore(args, os.Stdout)
 	case "plan", "approve", "apply":
 		err = runPlanCommand(cmd, args, os.Stdout)
+	case "app-plan":
+		err = runAppPlan(args, os.Stdout)
 	case "mcp":
 		err = runMCP(args, os.Stdin, os.Stdout)
+	case "chat":
+		err = runChat(args, os.Stdin, os.Stdout)
 	case "down":
 		err = runDown(args)
 	case "status":
@@ -92,6 +101,8 @@ func main() {
 		err = runDoctor(args)
 	case "get", "logs", "events", "why":
 		err = runDiagnostic(cmd, args, os.Stdout)
+	case "observe", "verify", "capabilities":
+		err = runObserveCommand(cmd, args, os.Stdout)
 	case "server":
 		err = runServer(args)
 	case "kubeconfig":
