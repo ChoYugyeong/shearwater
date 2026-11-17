@@ -54,6 +54,7 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw mcp         serve diagnostics and optional reviewed deployment over stdio
   sw chat        talk through the shared tools using Qwen/Ollama or DeepSeek
   sw connect     check an app connection and create its private AI workflow
+  sw setup       check/start a local server and prepare a normal user's credentials
   sw workflow    review/approve/resume the saved app workflow without copying connection flags
 
 Run "sw COMMAND -h" for the flags of a command.
@@ -95,6 +96,10 @@ func main() {
 		err = runChat(args, os.Stdin, os.Stdout)
 	case "connect":
 		err = runConnect(args, os.Stdout)
+	case "setup":
+		err = runSetup(args, os.Stdout)
+	case "receive-client":
+		err = receiveClient(args, os.Stdin, os.Stdout)
 	case "workflow":
 		err = runWorkflow(args, os.Stdout)
 	case "down":

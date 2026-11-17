@@ -1,5 +1,9 @@
 # AI에게 조회와 검토한 배포를 연결하기
 
+처음 연결한다면 [설치·인증·AI 연결 안내](onboarding.md)를 먼저 봐. 개발판에서는
+`sw setup`이 일반 사용자 인증을 준비하고 `sw workflow mcp-config`가 Linux 또는 Windows의
+정확한 실행 인자를 만들어 줘. 아래는 공개 alpha.10까지도 사용할 수 있는 수동 연결 안내야.
+
 `sw mcp`는 표준 입력/출력(stdio)으로 MCP 메시지를 주고받아. 이 안내는 alpha.9 기준이야.
 네트워크에 별도 MCP 포트를 열지 않고, 기존 로컬 HTTPS API와 인증 파일을 사용해.
 MCP SDK나 Kubernetes 모듈을 추가하지 않고 JSON-RPC 처리를 직접 구현했어.

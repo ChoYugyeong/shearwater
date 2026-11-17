@@ -10,6 +10,10 @@
 [다른 도구와 비교해서 선택하기](docs/choosing-shearwater.md)와 [AI 운영 체험](docs/agent-workflow-trial.md)에서
 적합한 사용자, 현재 한계, 직접 확인할 순서를 볼 수 있어.
 
+**개발 중인 다음 변경:** 기존 앱의 Service 이름·라벨·포트를 확인해서 연결하고,
+`sw setup`으로 인증을 준비하고 MCP 설정을 내보내는 [간단한 시작 절차](docs/onboarding.md)를
+추가했어. 공개 alpha.10 바이너리와 개발 소스의 기능을 구분해서 따라 해.
+
 | 목적 | 먼저 검토할 선택 |
 | --- | --- |
 | 작은 앱 몇 개를 빌드하고 바로 운영 | Docker Compose와 기존 운영 환경 |

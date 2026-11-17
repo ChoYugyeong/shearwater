@@ -1,7 +1,8 @@
 # AI에게 작은 웹 앱의 운영을 맡기기
 
-이 문서는 **alpha.10**의 `sw connect`, `sw workflow`, `--workflow`를 설명해.
-`sw version`에서 `0.1.0-alpha.10`을 확인해. [설치](install.md),
+기본 작업 흐름은 **alpha.10**부터 있어. 아래 기존 Service 확장과 `sw setup`은
+**alpha.10 이후 개발 소스**의 변경이며 아직 공개 alpha.10 실행 파일에는 없어.
+[처음 설치·인증·AI 연결](onboarding.md), [공개 버전 설치](install.md),
 [기존 AI 연결](agent-mcp.md), [지원 범위](compatibility.md)를 함께 봐.
 처음 실습하려면 [작은 시험 앱으로 AI 운영 체험](agent-workflow-trial.md)을 따라 해.
 
@@ -53,27 +54,32 @@ flowchart LR
 3. 아래 예시는 컨테이너 하나·내부 Service 하나로 구성된 HTTP 웹 앱이야.
    공개 도메인·HTTPS 인증서·여러 컨테이너·데이터 이전은 별도로 준비해야 해.
 
-### 기존 앱을 연결할 때의 alpha.10 제한
+### 기존 앱은 실제 연결 관계를 확인해 고정해
 
-`connect`가 성공했다는 것은 연결과 대상 UID를 기록했다는 뜻이야. 모든 기존 Service가
-새 작업 흐름의 HTTP 검사를 지원한다는 뜻은 아니야. alpha.10은 앱과 같은 이름의 Service,
-단일 TCP 포트, 연결할 때 지정한 Service 포트, 그리고 정확히 하나인
-`app.kubernetes.io/name: 앱이름` 선택 규칙을 요구해. 이 흐름으로 새로 만든 앱은 이 조건을 사용해.
+개발판은 현재 Deployment 이미지를 읽고, 그 앱의 라벨을 선택하는 Service를 찾아.
+`app: 앱이름` 같은 라벨도 되고, 여러 라벨·앱과 다른 Service 이름·이름 붙은 targetPort도 돼.
+한 개만 일치하면 자동으로 고르고, 여러 후보는 `--service=이름`, 여러 TCP 포트는
+`--port=Service포트`로 명시해야 해. 연결 검사가 실패하면 작업 파일을 만들지 않아.
 
-기존 앱의 Service가 `app: 앱이름` 같은 다른 선택 규칙을 쓰면 `diagnose`로 상태와 오류를
-읽을 수 있지만 `verify`는 `connected Service route changed or is outside supported IPv4 range`로
-멈춰. 이 오류는 반드시 IP나 포트 문제라는 뜻은 아니야. 진단의 성공과 HTTP 검증 성공을 구분해.
-이미지 업데이트·복구 뒤에도 이 제한이 적용되므로, 이런 기존 앱은 새 작업 흐름의 변경 작업에
-바로 맡기지 말고 기존 [집중 계획·검증](focused-tools.md)과 별도 HTTP 검사를 사용해.
-검사를 통과시키려고 운영 Service의 라벨·선택 규칙을 임의로 바꾸지 마.
+Service UID·IP·selector·선택한 포트를 저장하고, Pod의 ReplicaSet→Deployment 소유 UID와
+EndpointSlice의 Service·Pod 신원도 확인해. 같은 라벨을 붙인 다른 앱이 섞이면 거부해.
+계획 생성 전, 승인된 계획 실행 전, HTTP 검사 전후에 다시 확인하므로 이미 바뀐 경로를
+알면서 이미지 변경을 진행하지 않아. 여러 API 요청이 하나의 원자적 트랜잭션은 아니므로
+검사 직후 다른 관리자가 동시에 수정하는 것까지 차단하지는 않아. 적용 후에도 원래 목표와
+경로를 다시 확인하며, 기존 앱의 라벨이나 Service를 바꿀 필요는 없어.
 
-이 제한은 alpha.10 운영 인계에서 기존 앱의 `app` 선택 규칙으로 확인했어. 앱·데이터는
-그대로 유지했고, 새 표준 규칙의 별도 시험 앱에서는 배포부터 HTTP 복구까지 검증했어.
+공개 alpha.10은 같은 이름의 Service·단일 포트·`app.kubernetes.io/name` 한 라벨만 허용해.
+그 버전의 기존 작업 파일을 임의 편집하지 말고, 새 클라이언트로 새 작업 파일에 연결해.
+`connected`는 신원과 경로를 기록했다는 뜻이고 `healthy`가 실제 내부 HTTP까지 통과한 상태야.
 
 ## 한 번만 연결하기
 
 일반 Linux 사용자로 실행해. 경로와 이미지는 자신의 실제 값으로 바꿔.
 작업 폴더는 그 사용자만 읽고 쓸 수 있어야 해.
+
+개발판에서 기본 `sw setup`을 마쳤다면 기존 앱은 `sw connect --name=web`만으로 연결할 수
+있어. 이미지·인증 경로·포트는 유일하게 확인되는 값만 사용하며, 기존 파일은 덮어쓰지 않아.
+아래처럼 모두 명시하는 방식도 그대로 지원해.
 
 ```bash
 sw connect --workflow=/absolute/private/web.json \
@@ -121,7 +127,8 @@ sw workflow approve --file=/absolute/private/web.json --confirm=EXACT_PLAN_HASH
 
 AI에게 “방금 계획을 승인했어. 끝까지 진행해 줘”라고 말해. 같은 연결의 `continue` 동작은
 승인을 확인해 한 번만 적용하고, 제한 시간 동안 준비 상태와 실제 HTTP를 검사해.
-더 기다려야 하면 `verify`를 호출해. 기다리려고 적용을 반복하면 안 돼.
+더 기다려야 하면 `verify`를 호출해. 개발판의 verify도 약 18초의 대기 예산으로 확인하고,
+전체 도구 요청은 30초로 제한해. 기다리려고 적용을 반복하면 안 돼.
 
 `healthy`가 되려면 다음 조건이 모두 필요해.
 

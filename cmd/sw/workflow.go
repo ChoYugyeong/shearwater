@@ -16,7 +16,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -43,6 +42,7 @@ type appWorkflow struct {
 	Contains     string              `json:"expectedBody,omitempty"`
 	UID          string              `json:"uid,omitempty"`
 	ServiceUID   string              `json:"serviceUID,omitempty"`
+	Route        *workflowRoute      `json:"route,omitempty"`
 	Goal         agent.ReadinessGoal `json:"goal"`
 	Pending      string              `json:"pendingPlan,omitempty"`
 	LastPlan     string              `json:"lastPlan,omitempty"`
@@ -58,13 +58,15 @@ type workflowSession struct {
 // 기능이 삭제된 것은 아니다. 사람이 문제를 살필 때는 기존 진단 명령을 쓴다.
 func workflowTools(write bool) []mcpTool {
 	actions := []string{"status", "diagnose", "verify"}
-	properties := map[string]any{"action": map[string]any{"type": "string", "enum": actions}}
+	properties := map[string]any{"action": map[string]any{"type": "string", "enum": actions, "description": "verify=check HTTP, status=metadata, diagnose=failure evidence. deploy=create a MISSING app. update=change an EXISTING app image, even when healthy. recover=rollback image, never save status."}}
+	description := "Operate the connected app only. To check whether it responds, call verify: waits for readiness and checks actual internal HTTP without applying changes. status reads workflow metadata; diagnose reads API failure evidence only. Report success only after healthy."
 	if write {
 		actions = append(actions, "deploy", "update", "recover", "continue")
 		properties["action"].(map[string]any)["enum"] = actions
 		properties["image"] = map[string]any{"type": "string", "description": "Omit for an update image already staged from a local build artifact. Otherwise required for update. Deploy/recover use the connected/verified image. A supplied value must exactly match any fixed image; never override or retype a staged digest."}
+		description += " deploy SAVES creation of a MISSING app; update SAVES a new image for an EXISTING app, including a healthy one. recover SAVES a rollback image change ONLY when requested; it never saves status. Plan creation needs no approval: actually call the tool, then stop at awaiting_approval. continue executes an exactly locally approved plan once and verifies. Never guess IDs or repeat writes to wait."
 	}
-	return []mcpTool{{"sw_workflow", "Operate the connected app only. status: workflow state; deploy: SAVE initial plan; update(image): SAVE image plan; diagnose: actual failure evidence; recover: SAVE plan for last HTTP-verified image. Creating a plan needs NO approval: when a plan is requested, actually call deploy/update/recover before ending or asking approval. Tool-call JSON in plain text does nothing. continue: execute locally approved pending plan once and verify; verify: poll without applying. Stop at awaiting_approval or healthy. Never guess IDs or claim success without healthy.", toolSchema(properties, "action"), map[string]any{"readOnlyHint": !write, "destructiveHint": write, "openWorldHint": false}}}
+	return []mcpTool{{"sw_workflow", description, toolSchema(properties, "action"), map[string]any{"readOnlyHint": !write, "destructiveHint": write, "openWorldHint": false}}}
 }
 
 func addWorkflowFlag(f *flag.FlagSet, o *mcpOptions) {
@@ -91,6 +93,9 @@ func loadWorkflow(path string) (appWorkflow, error) {
 	}
 	if err := validateWorkflowHTTP(w); err != nil {
 		return w, err
+	}
+	if w.Route != nil && (!apis.IsDNS1123Label(w.Route.Name) || w.Route.Port.Port != w.Port || len(w.Route.Selector) == 0 || w.ServiceUID == "" || w.UID == "") {
+		return w, fmt.Errorf("invalid workflow Service route")
 	}
 	if w.Pending != "" && !validPlanID(w.Pending) || w.LastPlan != "" && !validPlanID(w.LastPlan) {
 		return w, fmt.Errorf("invalid workflow plan")
@@ -233,13 +238,16 @@ func workflowPlan(ctx context.Context, c *agentClient, w *appWorkflow, action, i
 		if d == nil {
 			return "", fmt.Errorf("deploy the connected app first")
 		}
+		if _, _, err := checkedWorkflowRoute(ctx, c, *w); err != nil {
+			return "", err
+		}
 		if len(d.Spec.Template.Spec.Containers) != 1 {
 			return "", fmt.Errorf("workflow image operations require one container; use an explicitly focused plan for multi-container apps")
 		}
 		i.UID, i.Revision, i.Container = d.Metadata.UID, d.Metadata.ResourceVersion, d.Spec.Template.Spec.Containers[0].Name
 		if action == "recover" {
 			if w.HealthyImage == "" {
-				return "", fmt.Errorf("no HTTP-verified image recorded; do not guess a recovery image")
+				return "", fmt.Errorf("no HTTP-verified image recorded: recover changes the image, it does not save status. For a connection/HTTP check call exactly {\"action\":\"verify\"}; never repeat recover or guess an image")
 			}
 			i.Image = w.HealthyImage
 		}
@@ -296,6 +304,27 @@ func (w *appWorkflow) consumeReceipt(c *agentClient) (bool, error) {
 	if !found {
 		return true, fmt.Errorf("receipt has no deployment goal")
 	}
+	if w.Route == nil {
+		// 새 배포의 Service UID는 실행 기록에서만 얻는다. 뒤따르는 GET은
+		// 기존의 표준 생성 경로와 정확히 일치할 때만 IP까지 고정한다.
+		ctx, cancel := context.WithTimeout(context.Background(), inspectTimeout)
+		defer cancel()
+		d, err := w.deployment(ctx, c)
+		if err != nil {
+			return true, err
+		}
+		var svc apis.Service
+		if err = c.get(ctx, w.servicePath(), &svc); err != nil {
+			return true, err
+		}
+		if d == nil {
+			return true, fmt.Errorf("receipt deployment was removed")
+		}
+		w.Route, err = validateRouteService(*w, svc, *d)
+		if err != nil {
+			return true, err
+		}
+	}
 	w.LastPlan, w.Pending = w.Pending, ""
 	return true, nil
 }
@@ -327,6 +356,12 @@ func workflowContinue(ctx context.Context, c *agentClient, w *appWorkflow) (stri
 			if a.Plan != w.Pending {
 				return "", fmt.Errorf("approval mismatch")
 			}
+			// 승인 이후 Service가 바뀌었어도 이전 앱 연결로 쓰기를 시작하지 않는다.
+			if w.UID != "" {
+				if _, _, err = checkedWorkflowRoute(ctx, c, *w); err != nil {
+					return "", err
+				}
+			}
 			// 저장한 계획도 앱 범위를 다시 검사한다. 다른 앱의 승인된 해시를
 			// 작업 파일에 옮겨 넣었다고 그 앱을 실행할 수 있게 하지 않는다.
 			for _, a := range p.Actions {
@@ -353,6 +388,12 @@ func workflowContinue(ctx context.Context, c *agentClient, w *appWorkflow) (stri
 			}
 		}
 	}
+	return workflowWait(ctx, c, w)
+}
+
+// 읽기 전용 verify도 준비를 기다린다. 모델이 몇 밀리초 간격으로 두 번
+// 확인한 뒤 정상 시작 중인 앱을 포기하지 않게, 대기는 프로그램이 맡는다.
+func workflowWait(ctx context.Context, c *agentClient, w *appWorkflow) (string, error) {
 	// Compose의 up --wait처럼 준비를 제한 시간 동안 기다리되, 쓰기 요청은
 	// 반복하지 않는다. 이후 호출에서도 저장된 원래 목표만 다시 검사한다.
 	deadline := time.Now().Add(18 * time.Second)
@@ -392,19 +433,14 @@ type workflowHTTP struct {
 // 이 검사는 서버 내부의 Service 경로만 보장한다. 공개 도메인/TLS/로그인은
 // 별도 사용자 목표이며 여기서 검사했다고 보고하지 않는다.
 func workflowProbe(ctx context.Context, c *agentClient, w appWorkflow) (workflowHTTP, error) {
-	var svc apis.Service
-	path := "/api/v1/namespaces/" + w.Namespace + "/services/" + w.Name
-	if err := c.get(ctx, path, &svc); err != nil {
+	svc, ready, err := checkedWorkflowRoute(ctx, c, w)
+	if err != nil {
 		return workflowHTTP{}, err
 	}
-	if w.ServiceUID == "" || svc.Metadata.UID != w.ServiceUID || svc.Metadata.Name != w.Name || svc.Metadata.Namespace != w.Namespace {
-		return workflowHTTP{}, fmt.Errorf("STALE: connected Service changed")
+	if !ready {
+		return workflowHTTP{State: "failed", Reason: "no_owned_ready_endpoint", serviceRevision: svc.Metadata.ResourceVersion}, nil
 	}
-	ip, parseErr := netip.ParseAddr(svc.Spec.ClusterIP)
-	if parseErr != nil || !apis.ServiceCIDR.Contains(ip) || len(svc.Spec.Ports) != 1 || svc.Spec.Ports[0].Port != w.Port || svc.Spec.Ports[0].Protocol != "TCP" || len(svc.Spec.Selector) != 1 || svc.Spec.Selector["app.kubernetes.io/name"] != w.Name {
-		return workflowHTTP{}, fmt.Errorf("connected Service route changed or is outside supported IPv4 range")
-	}
-	address := "http://" + net.JoinHostPort(ip.String(), strconv.Itoa(int(w.Port))) + w.HTTPPath
+	address := "http://" + net.JoinHostPort(svc.Spec.ClusterIP, strconv.Itoa(int(w.Port))) + w.HTTPPath
 	checked := probeWorkflowHTTP(ctx, address, w.Contains)
 	checked.serviceRevision = svc.Metadata.ResourceVersion
 	return checked, nil
@@ -477,16 +513,19 @@ func workflowVerify(ctx context.Context, c *agentClient, w *appWorkflow) (string
 	}
 	// 요청 도중 세대/Service가 바뀌면 방금 본 페이지를 원래 목표의 성공으로
 	// 저장하지 않는다. 동시 변경을 없앤다는 뜻이 아니라 관측 경계를 확인한다.
+	svc, ready, err := checkedWorkflowRoute(ctx, c, *w)
+	if err != nil {
+		return "", err
+	}
 	latest, err := w.deployment(ctx, c)
 	if err != nil {
 		return "", err
 	}
-	var svc apis.Service
-	if err = c.get(ctx, "/api/v1/namespaces/"+w.Namespace+"/services/"+w.Name, &svc); err != nil {
-		return "", err
-	}
 	if latest.Metadata.Generation != w.Goal.Generation || svc.Metadata.UID != w.ServiceUID || svc.Metadata.ResourceVersion != httpCheck.serviceRevision {
 		return workflowResult(*w, "stale", map[string]any{"http": httpCheck}), nil
+	}
+	if !ready {
+		httpCheck.State, httpCheck.Reason = "failed", "no_owned_ready_endpoint"
 	}
 	state := "http_failed"
 	if httpCheck.State == "passed" {
@@ -565,7 +604,7 @@ func executeWorkflow(o mcpOptions, c *agentClient, w *appWorkflow, action, image
 	case "continue":
 		result, err = workflowContinue(ctx, c, w)
 	case "verify":
-		result, err = workflowVerify(ctx, c, w)
+		result, err = workflowWait(ctx, c, w)
 	case "diagnose":
 		var d *apis.Deployment
 		d, err = w.deployment(ctx, c)
@@ -577,9 +616,13 @@ func executeWorkflow(o mcpOptions, c *agentClient, w *appWorkflow, action, image
 			if err == nil {
 				var facts map[string]any
 				err = json.Unmarshal([]byte(text), &facts)
-				// 진단만 끝내고 존재하지 않는 계획에 승인을 요구하던 실제 모델
-				// 실패를 줄인다. 계획 저장과 외부 적용의 승인 경계를 명확히 한다.
-				result = workflowResult(*w, "diagnosed", map[string]any{"evidence": facts["answer"], "lastVerifiedImage": w.HealthyImage, "next": "If recovery was requested, call recover NOW to SAVE its plan before ending. Creating the plan needs NO approval. Only applying that saved plan needs exact local approval."})
+				// 진단의 응답을 무조건 '복구하라'로 끝내면 작은 모델이 정상 앱의
+				// 접속 확인에서도 복구를 반복했다. 실제 상태와 확인 범위로 안내한다.
+				next := "HTTP was NOT checked. For connection/HTTP verification call verify. Only if the user explicitly requested image recovery, call recover to SAVE a plan, then stop for local approval."
+				if answer, ok := facts["answer"].(map[string]any); ok && answer["state"] == "met" {
+					next = "API readiness is met. Call exactly {\"action\":\"verify\"} to check actual HTTP. recover is an image change, not a status check or status save."
+				}
+				result = workflowResult(*w, "diagnosed", map[string]any{"evidence": facts["answer"], "lastVerifiedImage": w.HealthyImage, "next": next})
 			}
 		}
 	case "status":
@@ -592,7 +635,15 @@ func executeWorkflow(o mcpOptions, c *agentClient, w *appWorkflow, action, image
 		if w.Pending != "" {
 			state = "plan_pending"
 		}
-		result = workflowResult(*w, state, map[string]any{"lastVerifiedImage": w.HealthyImage, "actions": []string{"deploy", "update", "diagnose", "recover", "continue", "verify"}})
+		actions := []string{"status", "diagnose", "verify"}
+		if o.Write {
+			actions = append(actions, "deploy", "update", "recover", "continue")
+		}
+		next := "For an existing app connection/HTTP check call exactly {\"action\":\"verify\"}. status does not check HTTP."
+		if d == nil {
+			next = "The selected app does not exist. A new deployment requires a saved deploy plan and exact local approval."
+		}
+		result = workflowResult(*w, state, map[string]any{"lastVerifiedImage": w.HealthyImage, "actions": actions, "next": next})
 		if w.Pending != "" {
 			result = workflowPendingResult(*w)
 		}
@@ -611,6 +662,13 @@ func executeWorkflow(o mcpOptions, c *agentClient, w *appWorkflow, action, image
 // 그 값이 고정된 이미지와 정확히 같다면 받되, 다른 값은 무시하지 않고
 // 명시적으로 거부한다. 복구 이미지도 같은 규칙으로 검증 기록에 묶는다.
 func validateWorkflowImage(w appWorkflow, action, image string) error {
+	if action == "deploy" && w.UID != "" {
+		call := `{"action":"update","image":"REQUESTED_IMAGE"}`
+		if w.UpdateImage != "" {
+			call = `{"action":"update"}`
+		}
+		return fmt.Errorf("this app already exists: deploy only creates a MISSING app. To change this existing app's image, call update, NOT deploy. When an update was requested call %s; omit image when staged. Checking health alone does not update it", call)
+	}
 	if action == "update" {
 		if w.UpdateImage == "" && image == "" {
 			return fmt.Errorf("update requires image or a locally staged image artifact")
@@ -640,14 +698,36 @@ func runConnect(args []string, out io.Writer) error {
 	f.StringVar(&w.Name, "name", "", "one app name")
 	f.StringVar(&w.Namespace, "n", "default", "app namespace")
 	f.StringVar(&w.Image, "image", "", "initial built image; never execute repository scripts")
-	port := f.Int("port", 80, "container and Service TCP port")
+	service := f.String("service", "", "existing Service name; automatically selected only when exactly one matches")
+	port := f.Int("port", 0, "existing Service TCP port (auto if unique); new app defaults to 80")
 	f.StringVar(&w.HTTPPath, "http-path", "/", "internal Service HTTP path to verify")
 	f.StringVar(&w.Contains, "expect-body", "", "optional response text, maximum 1024 bytes")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
-	if f.NArg() != 0 || !filepath.IsAbs(*file) || !filepath.IsAbs(w.Config) || !apis.IsDNS1123Label(w.Name) || !apis.IsDNS1123Label(w.Namespace) || w.Image == "" || len(w.Image) > 1024 || *port < 1 || *port > 65535 {
-		return fmt.Errorf("connect requires absolute workflow/config paths, valid name/namespace/image/port")
+	if *file == "" && apis.IsDNS1123Label(w.Name) && apis.IsDNS1123Label(w.Namespace) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		*file = filepath.Join(home, ".local", "state", "shearwater", "workflows", w.Namespace+"-"+w.Name+".json")
+	}
+	connectionExplicit := false
+	f.Visit(func(v *flag.Flag) {
+		if v.Name == "config-dir" || v.Name == "listen" {
+			connectionExplicit = true
+		}
+	})
+	var savedIdentity string
+	if !connectionExplicit {
+		defaults, err := clientDefaults()
+		if err != nil {
+			return err
+		}
+		w.Config, w.Listen, savedIdentity = defaults.Config, defaults.Listen, defaults.Identity
+	}
+	if f.NArg() != 0 || !filepath.IsAbs(*file) || !filepath.IsAbs(w.Config) || !apis.IsDNS1123Label(w.Name) || !apis.IsDNS1123Label(w.Namespace) || len(w.Image) > 1024 || *port < 0 || *port > 65535 || *service != "" && !apis.IsDNS1123Label(*service) {
+		return fmt.Errorf("connect requires absolute workflow/config paths and valid name/namespace/port")
 	}
 	w.Port = int32(*port)
 	w.Plans = *file + ".plans"
@@ -661,9 +741,6 @@ func runConnect(args []string, out io.Writer) error {
 			return err
 		}
 	}
-	if err := privateDir(filepath.Dir(*file), true); err != nil {
-		return err
-	}
 	if err := localListen(w.Listen); err != nil {
 		return err
 	}
@@ -675,19 +752,29 @@ func runConnect(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if savedIdentity != "" && savedIdentity != w.Identity {
+		return fmt.Errorf("saved client credentials changed; reconnect using explicit connection options")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), inspectTimeout)
 	defer cancel()
 	d, err := readFocusDeployment(ctx, c, w.focus(c, 0))
 	if err != nil {
 		return err
 	}
-	var svc apis.Service
 	if d != nil {
-		if err = c.get(ctx, "/api/v1/namespaces/"+w.Namespace+"/services/"+w.Name, &svc); err != nil {
+		if err = connectExistingWorkflow(ctx, c, &w, d, *service, int32(*port)); err != nil {
 			return err
 		}
-		w.UID, w.ServiceUID = d.Metadata.UID, svc.Metadata.UID
-		w.Goal = agent.ReadinessGoal{Namespace: w.Namespace, Resource: "deploy/" + w.Name, UID: w.UID, Generation: d.Metadata.Generation}
+	} else {
+		if !validWorkflowImage(w.Image) || *service != "" {
+			return fmt.Errorf("a new app requires --image and cannot attach an existing Service")
+		}
+		if w.Port == 0 {
+			w.Port = 80
+		}
+	}
+	if err = privateDir(filepath.Dir(*file), true); err != nil {
+		return err
 	}
 	if err = privateDir(w.Plans, true); err != nil {
 		return err
@@ -702,7 +789,11 @@ func runConnect(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(out).Encode(map[string]any{"connected": true, "app": w.Namespace + "/" + w.Name, "workflow": *file, "mcpServers": map[string]any{"shearwater": map[string]any{"command": executable, "args": []string{"mcp", "--workflow=" + *file, "--allow-write"}}}, "next": "connect this MCP command in your AI client, then ask it to deploy; local exact-plan approval remains required"})
+	next := "ask the agent to deploy; local exact-plan approval remains required"
+	if w.UID != "" {
+		next = "ask the agent to verify the existing app first, then request an update or diagnosis"
+	}
+	return json.NewEncoder(out).Encode(map[string]any{"connected": true, "app": w.Namespace + "/" + w.Name, "workflow": *file, "service": w.serviceName(), "mcpServers": map[string]any{"shearwater": map[string]any{"command": executable, "args": []string{"mcp", "--workflow=" + *file, "--allow-write"}}}, "next": next})
 }
 
 func runWorkflow(args []string, out io.Writer) error {
@@ -714,6 +805,7 @@ func runWorkflow(args []string, out io.Writer) error {
 	file := f.String("file", "", "absolute workflow file")
 	confirm := f.String("confirm", "", "exact reviewed plan hash (approve/discard)")
 	artifactFile := f.String("image-file", "", "absolute JSON build artifact (stage-image only)")
+	platform := f.String("platform", "linux", "mcp-config only: linux or windows (inside WSL)")
 	if err := f.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -729,6 +821,13 @@ func runWorkflow(args []string, out io.Writer) error {
 	}
 	if action == "status" {
 		return json.NewEncoder(out).Encode(w)
+	}
+	if action == "mcp-config" {
+		config, err := workflowMCPConfig(*file, *platform)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(out).Encode(config)
 	}
 	lock, err := fileLock(filepath.Dir(*file), filepath.Base(*file)+".lock")
 	if err != nil {

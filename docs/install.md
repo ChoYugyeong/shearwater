@@ -1,5 +1,9 @@
 # Shearwater v0.1.0-alpha.10 설치와 첫 웹 앱
 
+**개발판 안내:** alpha.10 이후 소스에는 체크섬 설치 도우미, `sw setup`의 일반 사용자 인증
+준비, 기존 앱 자동 연결을 추가했어. [간단한 설치·AI 연결 순서](onboarding.md)를 봐.
+이 문서 아래의 공개 alpha.10 바이너리에는 새 `setup` 명령이 없으므로 두 절차를 섞지 마.
+
 이 안내는 **WSL 2 / Ubuntu 24.04 / x86_64(amd64)**에서 처음 실행하는 사람을 위한 거야. 내려받은 바이너리를 사용하므로 **Go 설치나 소스 빌드는 필요 없어**. ARM64, Windows 네이티브 실행 파일, 다른 Linux 배포판은 이번 바이너리의 검증 대상이 아니야.
 
 Shearwater는 신뢰하는 로컬 관리자가 사용하는 **실험적 알파**야. 단일 노드·IPv4·TCP ClusterIP를 지원해. DNS·RBAC·NetworkPolicy는 없고, securityContext는 저장만 해. 설정된 프로브는 실행하고 startup/readiness 결과를 Ready에 반영해. 프로브 없는 앱의 실제 응답은 아래 curl로 확인해.
