@@ -1,9 +1,14 @@
 # AI에게 Shearwater 운영 절차 알려 주기
 
-이 문서는 **개발 소스의 새 기능**을 설명해. 공개 alpha.8의 MCP와 집중 모드는 그대로
-쓸 수 있지만, `chat --approved-plan`과 이 스킬 묶음은 다음 릴리스 전에는 소스에서
-빌드한 클라이언트로 사용해야 해. `--task=diagnose`도 개발 소스 추가 기능이야.
+이 문서는 **alpha.9부터 제공하는 기능**을 설명해. [설치 안내](install.md)로 받은
+실행 파일에서 `sw version`이 `0.1.0-alpha.9`인지 확인해. `chat --approved-plan`과
+`--task=diagnose`, 작업별 스킬이 Linux 릴리스 묶음에 함께 들어 있어.
 새 클라이언트를 실행한다고 운영 서버가 교체되지는 않아.
+
+압축을 푼 폴더의 `skills/shearwater-ops/SKILL.md`가 시작점이고, 그 옆 `references/`에
+배포·업데이트·진단 절차가 있어. 연결한 AI에게 이 시작 파일의 절대 경로를 알려 줘.
+이 파일을 읽는 것과 MCP를 연결하는 것은 별개야. 실행 도구는 [MCP 연결 안내](agent-mcp.md)로
+설정하고, 스킬은 그 도구로 어떤 순서와 근거를 지켜야 하는지 알려 주는 역할이야.
 
 ## 스킬은 무엇이고 왜 필요한가
 
@@ -56,7 +61,7 @@ AI가 실제로 본 지침과 도구 목록을 확인해야 해. 이 저장소�
 사용해. 관리자 서버를 실행하는 root로 AI 대화를 실행하지 않아.
 
 ```bash
-SW=/absolute/path/to/development/sw
+SW="$HOME/.local/share/shearwater/v0.1.0-alpha.9/sw"
 CONFIG=/absolute/path/to/user/config
 LISTEN=127.0.0.1:6443
 PLAN=EXACT_64_CHARACTER_PLAN_HASH

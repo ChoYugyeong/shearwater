@@ -8,12 +8,12 @@
 
 alpha.8에는 [AI가 쓰기 쉬운 운영 인터페이스](docs/agent-interface.md)를 추가했어.
 짧은 상태 관찰, 이미지·복제본 변경 계획, 적용한 원래 대상의 결과 검증, Qwen 대화를 같은
-실행 함수에 연결했어. `sw version`이 **0.1.0-alpha.8**인지 확인하고 사용해.
+실행 함수에 연결했어. `sw version`이 **0.1.0-alpha.9**인지 확인하고 사용해.
 앱을 하나 골랐다면 [집중 모드](docs/focused-tools.md)로 대상과 작업을 고정하고,
 조회 도구 1개 또는 변경 계획 도구까지 2개만 AI에게 보여 줄 수 있어.
 
-개발 소스에는 [작업별 운영 스킬과 승인된 계획 이어가기](docs/agent-skills.md)도 있어.
-새 `--approved-plan` 옵션은 공개 alpha.8 이후 변경이므로 사용 전에 문서의 버전 구분을 봐.
+alpha.9에는 [작업별 운영 스킬과 승인된 계획 이어가기](docs/agent-skills.md)도 있어.
+사람이 승인한 계획 하나를 AI가 실행하고, `--task=diagnose`로 고정한 앱의 오류 근거를 읽어.
 
 Shearwater는 **한 대의 Linux 환경에서 작은 앱을 띄우고, 문제를 확인하고, 변경 내용을 검토한 뒤 배포하는** 실험적 컨테이너 운영 도구야. `sw why`로 관측된 실패 이유를 읽고, MCP로 AI에 조회를 연결하고, 정확한 변경 계획을 로컬에서 승인해 실행할 수 있어. 개인 개발자와 오케스트레이터 동작을 공부하는 사람이 직접 시험해 볼 수 있게 코드와 재현 절차를 공개했어.
 
@@ -29,11 +29,11 @@ Shearwater is an experimental single-node container orchestrator for trying smal
 
 [첫 체험 안내](docs/first-try.md)가 시작점이야. 그 안에서 Go 없이 실행 파일을 설치하고
 첫 HTTP 응답까지 확인하는 순서로 이어져.
-현재 릴리스는 **v0.1.0-alpha.8**이며, `sw version`도 `0.1.0-alpha.8`을 표시해.
+현재 릴리스는 **v0.1.0-alpha.9**이며, `sw version`도 `0.1.0-alpha.9`을 표시해.
 [릴리스 변경 사항과 버전 검증 방법](docs/releases.md)도 확인할 수 있어.
 
-alpha.8은 필요한 도구만 보여 주는 대상 고정, 현재 ID를 담은 구조화된 답변,
-Qwen 내장 대화와 외부 MCP를 제공해. 앱 실행 방식과 SQLite 스키마는 alpha.7과 같아.
+alpha.9는 승인된 계획을 한 번 실행하는 대화와 앱 고정 진단을 추가했어.
+Qwen 내장 대화와 외부 MCP를 제공해. 앱 실행 방식과 SQLite 스키마는 alpha.8과 같아.
 AI가 계획해도 적용에는 정확한 계획에 대한 사람의 로컬 승인이 필요해.
 
 alpha.6부터 Windows localhost 접속을 위한 선택적 TCP 중계와 로그인·WSL 재시작

@@ -1,6 +1,6 @@
 # AI에게 조회와 검토한 배포를 연결하기
 
-`sw mcp`는 표준 입력/출력(stdio)으로 MCP 메시지를 주고받아. 이 안내는 alpha.8 기준이야.
+`sw mcp`는 표준 입력/출력(stdio)으로 MCP 메시지를 주고받아. 이 안내는 alpha.9 기준이야.
 네트워크에 별도 MCP 포트를 열지 않고, 기존 로컬 HTTPS API와 인증 파일을 사용해.
 MCP SDK나 Kubernetes 모듈을 추가하지 않고 JSON-RPC 처리를 직접 구현했어.
 
@@ -10,7 +10,7 @@ MCP SDK나 Kubernetes 모듈을 추가하지 않고 JSON-RPC 처리를 직접 �
 Shearwater 서버가 시작되는 것은 아니야. 설치 안내를 따랐다면 **Ubuntu Bash**에서:
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.8/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.9/sw"
 test -x "$sw" && "$sw" version
 sudo "$sw" status
 printf '%s\n' "$sw"
@@ -53,7 +53,7 @@ if ($LASTEXITCODE -ne 0) { throw '등록한 MCP 연결을 조회하지 못했어
 ```
 
 Claude Code의 해당 프로젝트 세션에서 `/mcp`로 연결 상태와 도구를 확인해.
-alpha.8 일반 조회 모드는 11개야. [집중 모드](focused-tools.md)로 앱과 작업을 고르면
+alpha.9 일반 조회 모드는 11개야. [집중 모드](focused-tools.md)로 앱과 작업을 고르면
 조회 도구 1개만 보여. 예전 alpha.7의 6개 목록과 구분해.
 다음처럼 요청해서 실제 서버 응답을 받아 봐.
 
@@ -75,7 +75,7 @@ Claude Code 자체의 도구 사용 확인과 Shearwater의 배포 승인은 별
 {
   "command": "wsl.exe",
   "args": ["-d", "YOUR_WSL_DISTRO", "-u", "root", "--exec",
-           "/home/YOUR_LINUX_USER/.local/share/shearwater/v0.1.0-alpha.8/sw", "mcp"]
+           "/home/YOUR_LINUX_USER/.local/share/shearwater/v0.1.0-alpha.9/sw", "mcp"]
 }
 ```
 
@@ -85,7 +85,7 @@ root 예시는 기본 root 소유 인증을 읽기 위한 것이야. 이 연결�
 아니고 별도의 제한된 서버 자격도 아니야. 같은 사용자의 관리자 자격을 사용하므로 신뢰하는
 로컬 MCP 호스트에만 연결해. 인증 파일 내용은 도구 결과에 출력하지 않아.
 
-alpha.8의 기본 도구는 `sw_status`, `sw_tree`, `sw_get`, `sw_logs`, `sw_events`, `sw_why`와
+alpha.9의 기본 도구는 `sw_status`, `sw_tree`, `sw_get`, `sw_logs`, `sw_events`, `sw_why`와
 `sw_capabilities`, `sw_observe`, `sw_verify`, `sw_verify_plan`, `sw_receipt`로,
 읽기 도구가 11개야. [AI 운영 인터페이스](agent-interface.md)에 버전 차이와 사용 순서를 설명했어.
 객체 이름·namespace·container 같은 구조화된 인자만 받고 임의 셸 명령이나 파일 경로를 받지 않아.
@@ -119,7 +119,7 @@ if ($LASTEXITCODE -ne 0) { throw '등록한 쓰기 MCP 연결을 조회하지 �
 ```
 
 Claude Code의 `/mcp`에서 새 연결을 확인하고, 계획·적용은 `shearwater-write` 연결의 도구로 요청해.
-`tools/list` 또는 앱의 도구 목록에서 alpha.8 일반 쓰기 모드는 조회11개와 변경3개,
+`tools/list` 또는 앱의 도구 목록에서 alpha.9 일반 쓰기 모드는 조회11개와 변경3개,
 총14개인지 확인해. 집중 모드는 조회1개+선택한 계획1개뿐이며 적용 도구를 노출하지 않아.
 등록으로 계획 승인이 생기지는 않아. 다음처럼 계획별 로컬 승인은 계속 필요해.
 
@@ -187,7 +187,7 @@ Service의 생략된 ClusterIP는 기존 할당을 유지해. before/after를 �
 이름을 바꿀 때는 파일의 이름·라벨·selector와 아래 확인·정리 명령을 함께 바꿔야 해.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.8/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.9/sw"
 export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
 k() {

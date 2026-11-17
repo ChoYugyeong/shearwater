@@ -1,5 +1,26 @@
 # 릴리스와 버전 확인
 
+## v0.1.0-alpha.9
+
+AI가 만든 계획을 사람이 검토·승인한 뒤, 새 대화에서 그 계획 하나만 실행하도록
+`chat --allow-write --approved-plan=HASH`를 추가했어. 시작할 때 계획 해시·유효 기간·
+접속 주소·인증 정보·로컬 승인 기록을 확인해. 일반 한 질문 대화에는 사용할 수 없는
+적용 도구를 보여 주지 않고, 승인 실행 대화에는 적용·영수증·원래 목표 검증만 보여 줘.
+응답이 불확실하더라도 같은 계획을 자동으로 다시 적용하지 않아.
+
+`--target=deployment/이름 --task=diagnose`는 앱의 namespace·UID·세대를 고정하고
+실제 소유 관계로 이어진 Pod의 오류를 짧게 모아 줘. 다른 앱의 비슷한 이름이나 라벨을
+따라가지 않고, 대상이 바뀌면 `stale`로 멈춰. 실제 HTTP 응답을 확인하지 않았다면
+준비 상태와 웹 접속 성공을 구분해. 로그·환경변수·annotation은 이 진단에 포함하지 않아.
+
+Linux 묶음에는 배포·업데이트·진단용 `skills/shearwater-ops/`와 초보자용
+[작업별 운영 안내](agent-skills.md)가 들어 있어. Qwen은 내장 대화, DeepSeek 등 기존
+AI 앱은 stdio MCP로 연결해. 모델별 답변 품질을 보장하거나 사람의 승인을 대신하지 않아.
+
+CLI·API·Node 제품 버전은 `0.1.0-alpha.9`야. SQLite 스키마·앱 실행·Service 전달·
+Windows 중계 코드는 alpha.8과 같아. [설치 안내](install.md)의 백업·교체 순서를 따라.
+공개 소스 재빌드·실제 모델 연결·기존 앱 보존 검사의 실행 결과는 GitHub 릴리스 본문에 기록해.
+
 ## v0.1.0-alpha.8
 
 AI가 필요한 사실을 읽고, 작은 변경 계획을 만들고, 원래 대상의 결과를 확인하는 흐름을
@@ -152,7 +173,7 @@ Git 태그에만 붙는 앞의 `v`는 그 값에 넣지 않아. Git이 없는 �
 bash hack/t.sh ./...
 python3 -m unittest discover -s hack -p 'test_*.py'
 bash hack/build.sh
-python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.8
+python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.9
 python3 hack/notices.py
 ```
 
