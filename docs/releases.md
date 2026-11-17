@@ -2,6 +2,11 @@
 
 ## v0.1.0-alpha.10
 
+**기존 앱 연결 제한:** 새 workflow의 HTTP 검사는 표준 Service 선택 규칙
+`app.kubernetes.io/name: 앱이름`을 요구해. `app: 앱이름` 등 다른 규칙의 기존 앱은
+연결·진단이 가능해도 이 HTTP 검사를 통과하지 않아. 연결 성공을 전체 지원으로 해석하지 말고
+[기존 앱의 제한과 대안](agent-workflow.md#기존-앱을-연결할-때의-alpha10-제한)을 먼저 봐.
+
 `sw connect`로 서버·앱·확인할 HTTP 주소를 한 번 고정한 뒤, `sw workflow`와
 AI용 `sw_workflow` 도구 하나로 배포·업데이트·장애 진단·복구를 이어 갈 수 있어.
 Qwen 내장 대화와 외부 MCP가 같은 작업 기록을 사용해. AI는 다음 행동을 고르지만,
