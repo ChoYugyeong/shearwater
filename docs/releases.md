@@ -1,5 +1,27 @@
 # 릴리스와 버전 확인
 
+## v0.1.0-alpha.11
+
+기존 앱의 Service 이름·라벨·포트가 기본 예제와 달라도 실제 연결 경로를 발견하고,
+Deployment와 그 소유 Pod·EndpointSlice가 맞는지 확인한 뒤 고정해. 선택이 모호하면
+Service와 포트를 지정해야 하고, 승인한 뒤 연결 경로가 바뀌면 적용 전에 멈춰.
+기존 앱의 라벨을 바꾸어야 했던 alpha.10 workflow의 제약을 줄였어.
+
+`sw setup`은 서버 준비와 일반 사용자 인증을 묶어. 기본은 미리보기이며 `--apply`로
+실행해. 공개 준비 상태 응답뿐 아니라 인증이 필요한 API까지 검사하고, 기존 사용자
+인증을 다른 서버의 인증으로 덮어쓰지 않아. `workflow mcp-config`가 Linux와 Windows용
+AI 연결 명령을 만들며 `install.py`는 릴리스 압축과 내부 실행 파일 체크섬을 확인해.
+
+[처음 설치·AI 연결](onboarding.md)과 [실제 세 모델 검증](onboarding-verification.md)에
+명령, 구조, 실패와 한계를 설명했어. 세 모델 검증은 개발 단계의 모델별 한 사례이며
+일반적인 정확도·속도 우위를 보장하지 않아. 릴리스 재빌드와 운영 교체의 실측은
+[릴리스 본문](https://github.com/ChoYugyeong/shearwater/releases/tag/v0.1.0-alpha.11)에 별도로 남겨.
+
+CLI·API·Node 버전은 `0.1.0-alpha.11`이야. SQLite 스키마·Pod 실행·Service 전달·
+Windows 중계는 alpha.10과 같아. 새 작업 파일로 다시 연결해야 기존 앱의 확장된 경로
+검사를 사용할 수 있어. 기존 작업 파일을 자동으로 다른 대상으로 옮기지 않아.
+관리자 토큰은 여전히 전체 로컬 권한이며, 앱 고정은 사용자별 권한 분리(RBAC)가 아니야.
+
 ## v0.1.0-alpha.10
 
 **기존 앱 연결 제한:** 새 workflow의 HTTP 검사는 표준 Service 선택 규칙

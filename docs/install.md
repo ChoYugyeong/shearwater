@@ -1,8 +1,8 @@
-# Shearwater v0.1.0-alpha.10 설치와 첫 웹 앱
+# Shearwater v0.1.0-alpha.11 설치와 첫 웹 앱
 
-**개발판 안내:** alpha.10 이후 소스에는 체크섬 설치 도우미, `sw setup`의 일반 사용자 인증
-준비, 기존 앱 자동 연결을 추가했어. [간단한 설치·AI 연결 순서](onboarding.md)를 봐.
-이 문서 아래의 공개 alpha.10 바이너리에는 새 `setup` 명령이 없으므로 두 절차를 섞지 마.
+**alpha.11의 간단한 시작:** 체크섬 설치 도우미, `sw setup`의 일반 사용자 인증 준비,
+기존 앱 자동 연결을 제공해. [설치·인증·AI 연결 순서](onboarding.md)를 먼저 봐.
+아래에는 준비물 확인, 수동 설치, 기존 서버 업데이트 방법을 자세히 남겼어.
 
 이 안내는 **WSL 2 / Ubuntu 24.04 / x86_64(amd64)**에서 처음 실행하는 사람을 위한 거야. 내려받은 바이너리를 사용하므로 **Go 설치나 소스 빌드는 필요 없어**. ARM64, Windows 네이티브 실행 파일, 다른 Linux 배포판은 이번 바이너리의 검증 대상이 아니야.
 
@@ -60,7 +60,7 @@ IPv4 전달 값이 0이고 이 호스트를 Pod 네트워크용으로 쓰기로 
 ```bash
 (
   set -euo pipefail
-  version=v0.1.0-alpha.10
+  version=v0.1.0-alpha.11
   base="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
   archive="shearwater-${version}-linux-amd64.tar.gz"
   install_dir="$HOME/.local/share/shearwater/$version"
@@ -88,15 +88,17 @@ IPv4 전달 값이 0이고 이 호스트를 Pod 네트워크용으로 쓰기로 
 **버전 확인:** 다음처럼 실제 릴리스 버전이 나와야 해. 다른 값이 나오면 실행 파일 경로를 먼저 확인해. 동봉 `BUILDINFO.txt`에는 공개 소스 커밋과 빌드 정보, 파일 체크섬도 있어.
 
 ```bash
-"$HOME/.local/share/shearwater/v0.1.0-alpha.10/sw" version
-# sw 0.1.0-alpha.10 (Kubernetes API v1.36.0+shearwater.0.1.0-alpha.10)
+"$HOME/.local/share/shearwater/v0.1.0-alpha.11/sw" version
+# sw 0.1.0-alpha.11 (Kubernetes API v1.36.0+shearwater.0.1.0-alpha.11)
 ```
 
 앞의 숫자는 Shearwater 제품 버전이고, `v1.36.0`은 Kubernetes API 호환 수준이야. 처음 배포한 alpha.1은 `sw 0.0.1`을 표시했지만 alpha.2부터 이 불일치를 고쳤어.
 
-### alpha.10의 AI 연결을 처음 쓴다면
+### alpha.11의 AI 연결을 처음 쓴다면
 
-[한 번 연결해서 배포·업데이트·진단·복구하기](agent-workflow.md)를 먼저 봐.
+[처음 설치·인증·AI 연결](onboarding.md)에서 `sw setup`과 MCP 설정 생성을 따라 해.
+릴리스에는 `install.py`, 압축 안에는 `hack/install.py`와 `ONBOARDING-ko.md`,
+`ONBOARDING-VERIFICATION-ko.md`를 함께 제공해. [한 번 연결해서 배포·업데이트·진단·복구하기](agent-workflow.md)도 봐.
 `sw connect`가 대상과 접속 정보를 보관하고, 빌드 결과 파일의 이미지와 정확한 로컬 승인을
 사용해 작업을 이어가. [시험 앱 체험](agent-workflow-trial.md)에는 성공 조건과 기록 양식이 있어.
 묶음의 `AGENT-WORKFLOW-ko.md`, `CHOOSING-SHEARWATER-ko.md`, `AGENT-WORKFLOW-TRIAL-ko.md`가
@@ -164,7 +166,7 @@ PATH는 현재 터미널에만 적용돼. 새 터미널에서 이 kubectl을 쓰
 설치된 파일을 지정해. 다른 곳에 설치했다면 실제 경로로 바꿔.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.10/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.11/sw"
 test -x "$sw" && "$sw" version
 printf 'MCP에 지정할 Linux 절대 경로: %s\n' "$sw"
 ```
@@ -177,8 +179,8 @@ MCP 설정에도 이 **Linux 절대 경로**를 넣어. Windows의 `C:\...` 경�
 다음 변수와 함수도 현재 터미널에서만 유지돼. 새 터미널에서 작업을 이어갈 때 다시 선언해.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.10/sw"
-example="$HOME/.local/share/shearwater/v0.1.0-alpha.10/examples/web.yaml"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.11/sw"
+example="$HOME/.local/share/shearwater/v0.1.0-alpha.11/examples/web.yaml"
 export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
 k() {
@@ -230,7 +232,7 @@ sudo "$sw" why "pod/$pod" -n default
 읽을 수 있어. 컨테이너가 여러 개면 `-c NAME`을 지정해. `why`가 성공해도 앱 정상
 판정은 아니야. 상태·이벤트·제한된 로그를 잘 수집했다는 뜻이고 HTTP 응답은 따로 확인해.
 자세한 출력 해석과 오류 해결은 동봉 `TROUBLESHOOTING-ko.md` 또는
-[온라인 진단 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.10/docs/troubleshooting.md)를 봐.
+[온라인 진단 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.11/docs/troubleshooting.md)를 봐.
 
 ## 6. 재시작과 종료
 
@@ -266,7 +268,7 @@ sudo "$sw" down --all --node-name=shearwater
 | Ready인데 HTTP 실패 | 실제 앱 준비 시간, Service selector, EndpointSlice와 로그 |
 | 다른 터미널에서 명령 실패 | sw/example/kubectl_bin 변수, k 함수, PATH를 다시 선언했는지 |
 
-자세한 [호환 범위](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.10/docs/compatibility.md), [운영 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.10/docs/operations.md), [보안 제보](https://github.com/ChoYugyeong/shearwater/security/advisories/new)를 참고해.
+자세한 [호환 범위](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.11/docs/compatibility.md), [운영 안내](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.11/docs/operations.md), [보안 제보](https://github.com/ChoYugyeong/shearwater/security/advisories/new)를 참고해.
 
 ## 8. alpha.4의 새 운영 기능
 
@@ -281,7 +283,7 @@ sudo "$sw" down --all --node-name=shearwater
 ## 10. alpha.6의 Windows 중계와 자동 시작
 
 Windows localhost만 멈출 때 쓸 선택적 TCP 중계와 로그인 자동 시작 도구를
-별도 `shearwater-v0.1.0-alpha.10-windows-forward.zip`에 제공해. Linux 압축에도
+별도 `shearwater-v0.1.0-alpha.11-windows-forward.zip`에 제공해. Linux 압축에도
 같은 `hack/` 파일이 있어. Windows·WSL에 Python 3.11 이상이 필요하고, NAT의
 단일 eth0 IPv4 환경용이야. Windows 네이티브 sw 바이너리가 아니야.
 

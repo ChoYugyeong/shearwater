@@ -105,7 +105,7 @@ def extract_verified(archive, destination):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', required=True, help='exact published version, e.g. v0.1.0-alpha.10')
+    parser.add_argument('--version', required=True, help='exact published version, e.g. v0.1.0-alpha.11')
     parser.add_argument('--destination', type=Path, help='new version directory; never overwritten')
     parser.add_argument('--apply', action='store_true', help='download and install after reviewing the default preview')
     args = parser.parse_args()
@@ -130,7 +130,7 @@ def main():
     extract_verified(download_dir / name, destination)
     print(json.dumps(dict(installed=True, executable=str(destination / 'sw'),
                          checksumVerified=True, serverChanged=False,
-                         next='run this sw version and follow its bundled INSTALL-ko.md; sw setup requires a release that includes that command')))
+                         next='run this sw version; alpha.11 and later include ONBOARDING-ko.md for setup and AI connection; older releases use INSTALL-ko.md')))
 
 
 if __name__ == '__main__':

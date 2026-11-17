@@ -1,9 +1,9 @@
 # 설치부터 AI 연결까지: 먼저 한 앱만 연결하기
 
-이 문서는 **alpha.10 이후의 개발 소스**에 추가한 `sw setup`, 기존 Service 자동 탐색,
-MCP 설정 내보내기를 설명해. 현재 공개 alpha.10 실행 파일에는 `setup`이 없어.
-개발 소스로 빌드한 실행 파일을 별도 위치에서 시험하거나, 이 변경을 포함한 릴리스가
-나온 뒤 사용해. 기존 운영 서버를 새 파일로 덮어쓰라는 안내가 아니야.
+이 문서는 **v0.1.0-alpha.11**의 `sw setup`, 기존 Service 자동 탐색,
+MCP 설정 내보내기를 설명해. 이전 alpha.10 실행 파일에는 `setup`이 없어.
+새 버전은 별도 폴더에 설치해. 실행 중인 서버 교체는 [백업·업데이트 순서](install.md)를
+따로 따라야 하며, 아래 설치기는 기존 운영 서버를 덮어쓰지 않아.
 
 ## 처음에 무엇을 준비하는가
 
@@ -22,33 +22,39 @@ Shearwater는 컨테이너를 실행하고, 원하는 앱 상태를 유지하고
 
 ## 1. 실행 파일 받기
 
-공개 릴리스를 설치할 때 `hack/install.py`를 소스에서 받아 내용을 검토한 뒤 실행해.
+릴리스에 동봉한 `install.py`와 체크섬을 받아 설치기 자체를 먼저 검사해.
 Python 3 표준 라이브러리만 쓰며 추가 Python 패키지는 필요 없어. Ubuntu Bash에서:
 
 ```bash
-python3 hack/install.py --version v0.1.0-alpha.10
-python3 hack/install.py --version v0.1.0-alpha.10 --apply
+download_dir=$(mktemp -d)
+cd "$download_dir"
+release=https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.11
+curl --fail --location --proto '=https' --tlsv1.2 "$release/install.py" -o install.py
+curl --fail --location --proto '=https' --tlsv1.2 "$release/SHA256SUMS" -o SHA256SUMS
+sha256sum --check --ignore-missing SHA256SUMS
+# install.py: OK를 확인하고, 설치기 내용을 검토한 뒤 진행해.
+python3 install.py --version v0.1.0-alpha.11
+python3 install.py --version v0.1.0-alpha.11 --apply
 ```
 
-첫 줄은 설치 위치를 보여 주기만 해. 둘째 줄은 정확한 버전의 압축과 SHA256SUMS를 받아
+첫 Python 명령은 설치 위치를 보여 주기만 해. 둘째 Python 명령은 정확한 버전의 압축과 SHA256SUMS를 받아
 전체 압축 해시를 확인하고, 새 버전 폴더에 풀고, 내부 `sw.sha256`도 확인해.
 이미 있는 설치 폴더는 덮어쓰지 않아. 압축 안의 상위 경로 이동·심볼릭 링크·장치 파일도
 받지 않아. 다운로드 흔적은 출력한 임시 폴더에 남겨. SHA-256은 무결성 검사이고,
 릴리스 게시자와 독립된 서명은 아니야.
 
 설치기는 WSL·containerd·모델을 설치하거나, 실행 중인 서버·PATH·AI 설정을 바꾸지 않아.
-Linux x86_64용이야. 공개 alpha.10 설치 후에는 동봉 `INSTALL-ko.md`를 사용해.
-아래 새 명령을 시험하려면 [소스 빌드 안내](quickstart.md)로 만든 **새 경로의 바이너리**를
-지정해. 예를 들어 실제 빌드 출력이 `dist/sw`라면:
+Linux x86_64용이야. 설치한 폴더에는 `INSTALL-ko.md`와 이 안내인 `ONBOARDING-ko.md`가 있어.
+이후 명령에 쓸 실행 파일을 지정해. 별도 설치 위치를 골랐다면 그 위치로 바꿔:
 
 ```bash
-sw="$PWD/dist/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.11/sw"
 "$sw" version
 "$sw" setup -h
 ```
 
 이후 `$sw`는 그 **Linux 절대 경로**야. 새 터미널에서는 이 변수를 다시 지정해.
-Go 빌드 여부를 기억하기보다 `setup -h`가 실제로 있는지 확인하면 돼.
+버전이 `0.1.0-alpha.11`인지 확인해. 직접 빌드하려면 [소스 빌드 안내](quickstart.md)를 사용해.
 
 ## 2. 서버 준비와 인증을 한 번에
 

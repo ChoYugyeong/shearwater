@@ -1,6 +1,8 @@
 # 기존 앱 연결·설치·세 AI 실제 검증
 
 2026-11-17, alpha.10 이후 개발 변경의 기록이야. **새 릴리스나 운영 서버 교체 기록은 아니야.**
+이 변경은 alpha.11에 포함돼. [alpha.11 릴리스](https://github.com/ChoYugyeong/shearwater/releases/tag/v0.1.0-alpha.11)의
+공개 소스 빌드·교체 검증과 아래 개발 단계의 모델 시험은 별개의 기록이야.
 사용법은 [설치부터 AI 연결까지](onboarding.md), 전체 운영 흐름은 [AI 앱 운영](agent-workflow.md)을 봐.
 
 ## 무엇이 달라졌나

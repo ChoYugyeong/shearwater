@@ -1,6 +1,6 @@
 # AI에게 조회와 검토한 배포를 연결하기
 
-처음 연결한다면 [설치·인증·AI 연결 안내](onboarding.md)를 먼저 봐. 개발판에서는
+처음 연결한다면 [설치·인증·AI 연결 안내](onboarding.md)를 먼저 봐. alpha.11에서는
 `sw setup`이 일반 사용자 인증을 준비하고 `sw workflow mcp-config`가 Linux 또는 Windows의
 정확한 실행 인자를 만들어 줘. 아래는 공개 alpha.10까지도 사용할 수 있는 수동 연결 안내야.
 
@@ -14,7 +14,7 @@ MCP SDK나 Kubernetes 모듈을 추가하지 않고 JSON-RPC 처리를 직접 �
 Shearwater 서버가 시작되는 것은 아니야. 설치 안내를 따랐다면 **Ubuntu Bash**에서:
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.10/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.11/sw"
 test -x "$sw" && "$sw" version
 sudo "$sw" status
 printf '%s\n' "$sw"
@@ -79,7 +79,7 @@ Claude Code 자체의 도구 사용 확인과 Shearwater의 배포 승인은 별
 {
   "command": "wsl.exe",
   "args": ["-d", "YOUR_WSL_DISTRO", "-u", "root", "--exec",
-           "/home/YOUR_LINUX_USER/.local/share/shearwater/v0.1.0-alpha.10/sw", "mcp"]
+           "/home/YOUR_LINUX_USER/.local/share/shearwater/v0.1.0-alpha.11/sw", "mcp"]
 }
 ```
 
@@ -191,7 +191,7 @@ Service의 생략된 ClusterIP는 기존 할당을 유지해. before/after를 �
 이름을 바꿀 때는 파일의 이름·라벨·selector와 아래 확인·정리 명령을 함께 바꿔야 해.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.10/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.11/sw"
 export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
 k() {

@@ -103,7 +103,7 @@ alpha.5는 커널에 Service 전달 규칙을 남겨, 같은 호스트에서 sw�
 ## Windows 로그인부터 중계까지 자동으로 시작하기
 
 Windows 보조 스크립트는 `sw` 바이너리와 별도야. alpha.6 릴리스의
-`shearwater-v0.1.0-alpha.10-windows-forward.zip`에 스크립트와 이 안내를 동봉해.
+`shearwater-v0.1.0-alpha.11-windows-forward.zip`에 스크립트와 이 안내를 동봉해.
 Linux 압축에도 같은 `hack/` 보조 파일을 넣었어. 내려받기만 하면 자동 설치되지는 않아.
 Windows와 WSL에 Python
 3.11 이상이 이미 있고, WSL 2 NAT·eth0 단일 IPv4 환경인 경우를 대상으로 해.
@@ -142,7 +142,7 @@ ID로 종료 요청을 전달해. 잠금 파일은 지우지 마. 프로세스�
 폴더만 만들고, 기존 파일은 덮어쓰지 않아. 다운로드한 코드를 바로 실행하지 않아.
 
 ```powershell
-$version = 'v0.1.0-alpha.10'
+$version = 'v0.1.0-alpha.11'
 $ErrorActionPreference = 'Stop'
 $archive = "shearwater-$version-windows-forward.zip"
 $download = Join-Path $env:TEMP ('shearwater-alpha6-' + [guid]::NewGuid().ToString('N'))

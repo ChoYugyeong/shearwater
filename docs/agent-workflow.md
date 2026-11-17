@@ -1,7 +1,7 @@
 # AI에게 작은 웹 앱의 운영을 맡기기
 
 기본 작업 흐름은 **alpha.10**부터 있어. 아래 기존 Service 확장과 `sw setup`은
-**alpha.10 이후 개발 소스**의 변경이며 아직 공개 alpha.10 실행 파일에는 없어.
+**alpha.11**부터 제공해. 이전 버전의 파일을 자동으로 덮어쓰지 않으니 실행 경로를 확인해.
 [처음 설치·인증·AI 연결](onboarding.md), [공개 버전 설치](install.md),
 [기존 AI 연결](agent-mcp.md), [지원 범위](compatibility.md)를 함께 봐.
 처음 실습하려면 [작은 시험 앱으로 AI 운영 체험](agent-workflow-trial.md)을 따라 해.
@@ -56,7 +56,7 @@ flowchart LR
 
 ### 기존 앱은 실제 연결 관계를 확인해 고정해
 
-개발판은 현재 Deployment 이미지를 읽고, 그 앱의 라벨을 선택하는 Service를 찾아.
+alpha.11은 현재 Deployment 이미지를 읽고, 그 앱의 라벨을 선택하는 Service를 찾아.
 `app: 앱이름` 같은 라벨도 되고, 여러 라벨·앱과 다른 Service 이름·이름 붙은 targetPort도 돼.
 한 개만 일치하면 자동으로 고르고, 여러 후보는 `--service=이름`, 여러 TCP 포트는
 `--port=Service포트`로 명시해야 해. 연결 검사가 실패하면 작업 파일을 만들지 않아.
@@ -68,7 +68,7 @@ EndpointSlice의 Service·Pod 신원도 확인해. 같은 라벨을 붙인 다�
 검사 직후 다른 관리자가 동시에 수정하는 것까지 차단하지는 않아. 적용 후에도 원래 목표와
 경로를 다시 확인하며, 기존 앱의 라벨이나 Service를 바꿀 필요는 없어.
 
-공개 alpha.10은 같은 이름의 Service·단일 포트·`app.kubernetes.io/name` 한 라벨만 허용해.
+이전 alpha.10은 같은 이름의 Service·단일 포트·`app.kubernetes.io/name` 한 라벨만 허용해.
 그 버전의 기존 작업 파일을 임의 편집하지 말고, 새 클라이언트로 새 작업 파일에 연결해.
 `connected`는 신원과 경로를 기록했다는 뜻이고 `healthy`가 실제 내부 HTTP까지 통과한 상태야.
 
@@ -77,7 +77,7 @@ EndpointSlice의 Service·Pod 신원도 확인해. 같은 라벨을 붙인 다�
 일반 Linux 사용자로 실행해. 경로와 이미지는 자신의 실제 값으로 바꿔.
 작업 폴더는 그 사용자만 읽고 쓸 수 있어야 해.
 
-개발판에서 기본 `sw setup`을 마쳤다면 기존 앱은 `sw connect --name=web`만으로 연결할 수
+alpha.11에서 기본 `sw setup`을 마쳤다면 기존 앱은 `sw connect --name=web`만으로 연결할 수
 있어. 이미지·인증 경로·포트는 유일하게 확인되는 값만 사용하며, 기존 파일은 덮어쓰지 않아.
 아래처럼 모두 명시하는 방식도 그대로 지원해.
 
@@ -127,7 +127,7 @@ sw workflow approve --file=/absolute/private/web.json --confirm=EXACT_PLAN_HASH
 
 AI에게 “방금 계획을 승인했어. 끝까지 진행해 줘”라고 말해. 같은 연결의 `continue` 동작은
 승인을 확인해 한 번만 적용하고, 제한 시간 동안 준비 상태와 실제 HTTP를 검사해.
-더 기다려야 하면 `verify`를 호출해. 개발판의 verify도 약 18초의 대기 예산으로 확인하고,
+더 기다려야 하면 `verify`를 호출해. alpha.11의 verify도 약 18초의 대기 예산으로 확인하고,
 전체 도구 요청은 30초로 제한해. 기다리려고 적용을 반복하면 안 돼.
 
 `healthy`가 되려면 다음 조건이 모두 필요해.
