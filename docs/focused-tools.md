@@ -25,6 +25,10 @@ AI에게 도구를 많이 주면 상황마다 맞는 도구와 인자를 골라�
 현재 지원 대상은 **기존 Deployment 한 개**야. 새 앱 만들기, Pod 상세 로그, Service,
 소스 이미지 빌드는 [일반 연결](agent-interface.md)의 다른 흐름을 사용해.
 
+**개발 소스 추가:** `--task=diagnose`는 고정한 Deployment의 실제 소유 Pod를 찾아
+`sw_target_diagnose` 하나로 오류 근거를 읽어. 쓰기 허용 없이 사용할 수 있고,
+공개 alpha.8에는 아직 없어. 자세한 사용법은 [작업별 운영 안내](agent-skills.md)를 봐.
+
 이 기능은 이 클라이언트 연결의 실수 방지 장치야. 서버 RBAC나 다른 OS 프로그램까지
 제한하는 권한 격리는 아니야. 같은 관리자 인증을 가진 별도 CLI는 다른 리소스에도 접근할 수 있어.
 
@@ -119,6 +123,10 @@ python .\hack\chat-windows.py `
 Windows 도우미는 한 질문의 도구 호출과 답변을 전달해. 그 창의 대화형 승인은 지원하지 않아.
 계획을 만들려면 `--task image --target-container app --allow-write`를 사용하고 Linux CLI에서
 검토·승인해. 이 도우미는 모델이나 포트·인증을 새로 설치하지 않아.
+
+개발 소스의 새 도우미는 검토·승인 뒤 `--target`을 빼고 `--approved-plan HASH`로 새
+실행 연결을 시작할 수 있어. 선택한 계획만 적용·검증하며 스스로 승인하지 않아.
+공개 alpha.8에는 이 옵션이 없으므로 [버전 구분과 전체 절차](agent-skills.md)를 먼저 봐.
 
 ## 무엇을 고정하고 무엇을 새로 읽나
 

@@ -41,6 +41,7 @@ type chatMessage struct {
 type chatOptions struct {
 	mcpOptions
 	Provider, Model, Endpoint, KeyEnv string
+	ApprovedPlan                      string
 	ModelStdio                        bool
 }
 type chatTransport func(context.Context, []byte) ([]byte, error)
@@ -224,6 +225,8 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 			var callErr error
 			if !allowed {
 				callErr = fmt.Errorf("tool is not available in this chat")
+			} else if s.o.ApprovedPlan != "" {
+				callErr = s.checkResumedCall(call.Function.Name, call.Function.Arguments)
 			} else if call.Function.Name == "sw_apply" {
 				var a struct {
 					Plan string `json:"plan"`
@@ -363,13 +366,14 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 	f.StringVar(&o.Listen, "listen", defaultListen, "local HTTPS API")
 	f.StringVar(&o.Plans, "plan-dir", "", "private plan directory")
 	f.BoolVar(&o.Write, "allow-write", false, "allow planning and locally approved apply")
+	f.StringVar(&o.ApprovedPlan, "approved-plan", "", "resume exactly one already locally approved plan; requires --allow-write and --prompt, does not approve")
 	addFocusFlags(f, &o.mcpOptions)
 	f.StringVar(&o.Provider, "provider", "ollama", "ollama (Qwen/local DeepSeek) or deepseek (API)")
 	f.StringVar(&o.Model, "model", "", "explicit model name")
 	f.StringVar(&o.Endpoint, "endpoint", "", "model origin URL")
 	f.StringVar(&o.KeyEnv, "key-env", "DEEPSEEK_API_KEY", "environment variable holding DeepSeek API key")
 	f.BoolVar(&o.ModelStdio, "model-stdio", false, "framed local model transport for the Windows launcher (requires --prompt)")
-	prompt := f.String("prompt", "", "one read/plan conversation and exit; approvals require an interactive terminal")
+	prompt := f.String("prompt", "", "one conversation and exit; apply requires a pre-approved exact plan via --approved-plan")
 	if err := f.Parse(args); err != nil {
 		return err
 	}
@@ -398,6 +402,9 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 	if focusErr != nil {
 		return focusErr
 	}
+	if err := validateChatResume(o, *prompt != ""); err != nil {
+		return err
+	}
 	var transport chatTransport
 	var err error
 	if o.ModelStdio {
@@ -415,6 +422,9 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 	s := chatSession{o: o, tools: chatToolsFor(o.mcpOptions), transport: transport, approved: map[string]bool{}}
 	s.call = func(name string, raw json.RawMessage) (string, error) { return mcpCall(o.mcpOptions, name, raw) }
 	s.reset()
+	if err := s.configureExecution(*prompt != ""); err != nil {
+		return err
+	}
 	fmt.Fprintf(out, "[Shearwater] %s / %s. 질문과 선택한 도구 결과가 이 모델로 전달돼. 대화는 파일에 저장하지 않아.\n", o.Provider, printableChat(o.Model))
 	if o.Focus != nil {
 		fmt.Fprintln(out, "[Shearwater 집중 모드] "+printableChat(focusLabel(o.mcpOptions))+". 새 목표는 새 세션에서 시작해.")

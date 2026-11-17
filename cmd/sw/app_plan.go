@@ -166,7 +166,10 @@ func saveAppPlan(ctx context.Context, c *agentClient, o mcpOptions, i appIntent)
 		targets = append(targets, planTarget(a))
 		warnings = append(warnings, a.Warnings...)
 	}
-	b, err := json.Marshal(map[string]any{"format": "shearwater.app-plan/v1", "plan": id, "expires": p.Expires, "intent": i, "targets": targets, "warnings": warnings, "applied": false, "reviewRequired": true, "reviewCommand": "sw plan --plan=" + id, "limits": []string{"internal TCP Service only; no public URL", "multiple targets are not transactional", "TCP readiness does not verify HTTP content"}})
+	// 검토용 plan 명령은 승인하지 않는다. 실제 모델이 둘을 혼동했으므로
+	// 상태와 다음 단계 의미를 분리한다. 명령은 설명용이며 같은 config/listen/
+	// plan-dir를 사용해야 한다. API 인증값이나 셸 실행 권한을 모델에 넘기지 않는다.
+	b, err := json.Marshal(map[string]any{"format": "shearwater.app-plan/v1", "plan": id, "expires": p.Expires, "intent": i, "targets": targets, "warnings": warnings, "applied": false, "approved": false, "reviewRequired": true, "approvalRequired": true, "reviewCommand": "sw plan --plan=" + id, "nextSteps": []string{"review: sw plan only displays the saved before/after; it does not approve", "approve: the local operator uses sw approve --plan=HASH --confirm=HASH after review", "apply once, then verify the same plan; use the same config-dir/listen/plan-dir for every step"}, "limits": []string{"internal TCP Service only; no public URL", "multiple targets are not transactional", "TCP readiness does not verify HTTP content"}})
 	return string(b), err
 }
 

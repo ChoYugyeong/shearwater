@@ -29,7 +29,7 @@ func addFocusFlags(f *flag.FlagSet, o *mcpOptions) {
 	s := o.Focus
 	f.StringVar(&s.Target, "target", "", "fixed Deployment, e.g. deploy/web; enables focused tools")
 	f.StringVar(&s.Namespace, "n", "", "fixed target namespace (default: default)")
-	f.StringVar(&s.Task, "task", "", "focused task: inspect (default), image, or scale")
+	f.StringVar(&s.Task, "task", "", "focused task: inspect (default), diagnose, image, or scale")
 	f.StringVar(&s.Container, "target-container", "", "fixed container for image task; required when there is more than one")
 	f.StringVar(&s.UID, "target-uid", "", "original goal UID; pair with target-generation, otherwise pin current target once")
 	f.Int64Var(&s.Generation, "target-generation", 0, "original goal generation; pair with target-uid")
@@ -63,10 +63,10 @@ func normalizeFocus(o *mcpOptions) error {
 	if s.Task == "" {
 		s.Task = "inspect"
 	}
-	if s.Task != "inspect" && s.Task != "image" && s.Task != "scale" {
-		return fmt.Errorf("focused task must be inspect, image, or scale")
+	if s.Task != "inspect" && s.Task != "diagnose" && s.Task != "image" && s.Task != "scale" {
+		return fmt.Errorf("focused task must be inspect, diagnose, image, or scale")
 	}
-	if s.Task != "inspect" && !o.Write {
+	if (s.Task == "image" || s.Task == "scale") && !o.Write {
 		return fmt.Errorf("image/scale planning requires --allow-write; approval remains local")
 	}
 	if s.Container != "" && (s.Task != "image" || !apis.IsDNS1123Label(s.Container)) {
@@ -173,6 +173,9 @@ func availableMCPTools(o mcpOptions) []mcpTool {
 	ro := map[string]any{"readOnlyHint": true, "destructiveHint": false, "openWorldHint": false}
 	plan := map[string]any{"readOnlyHint": false, "destructiveHint": false, "openWorldHint": false}
 	target := o.Focus.Namespace + "/" + o.Focus.Target
+	if o.Focus.Task == "diagnose" {
+		return []mcpTool{{"sw_target_diagnose", "Read failure evidence for " + target + " and its owned Pods only. No arguments. Return the complete answer JSON; HTTP remains not_checked. Does not change anything.", toolSchema(map[string]any{}), ro}}
+	}
 	// 호출 설명에 답변의 ID 필드를 길게 나열하면 작은 모델이 이를 입력 인자로
 	// 오해할 수 있다. 인자 없는 조회 계약은 기존 표현을 유지하고, 답변 값은
 	// 실행 뒤의 answer 구조에서 전달한다. 모르는 인자는 분배기가 계속 거부한다.
@@ -233,6 +236,9 @@ func callFocusTool(o mcpOptions, name string, raw json.RawMessage) (string, erro
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	if name == "sw_target_diagnose" {
+		return diagnoseFocus(ctx, s)
+	}
 	d, err := readFocusDeployment(ctx, s.client, s)
 	if err != nil {
 		return "", err

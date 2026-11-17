@@ -30,6 +30,26 @@ class Process:
 
 
 class RelayTests(unittest.TestCase):
+    def test_fixed_diagnosis_needs_no_write_permission(self):
+        base = ['--sw=/home/user/sw', '--model=mock', '--config-dir=/home/user/config', '--prompt=diagnose']
+        command = bridge.chat_command(base + ['--target=deploy/demo', '-n=bench', '--task=diagnose'])
+        self.assertIn('--task=diagnose', command)
+        self.assertIn('-n=bench', command)
+        self.assertNotIn('--allow-write', command)
+        with patch.object(bridge.sys, 'stderr', io.StringIO()), self.assertRaises(SystemExit):
+            bridge.chat_command(base + ['--task=diagnose'])
+
+    def test_resume_only_for_one_explicit_approved_hash(self):
+        base = ['--sw=/home/user/sw', '--model=mock', '--config-dir=/home/user/config', '--prompt=apply']
+        plan = 'a' * 64
+        command = bridge.chat_command(base + ['--allow-write', '--approved-plan=' + plan])
+        self.assertIn('--approved-plan=' + plan, command)
+        for extra in (['--approved-plan=' + plan], ['--allow-write', '--approved-plan=not-a-hash'],
+                      ['--allow-write', '--approved-plan=' + plan, '--target=deploy/demo']):
+            with self.subTest(extra=extra), patch.object(bridge.sys, 'stderr', io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    bridge.chat_command(base + extra)
+
     def test_focused_cli_uses_list_arguments(self):
         prompt = '확인; $(must-stay-text) & > ignored'
         base = ['--sw=/home/user/sw', '--model=mock', '--config-dir=/home/user/config', '--prompt=' + prompt]

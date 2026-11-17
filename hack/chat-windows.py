@@ -3,8 +3,9 @@
 
 No packages, model downloads, listeners, credentials or machine configuration
 are installed. The launcher relays typed model frames; it never executes model
-text. This one-shot entry supports reads/plans; human approval stays in sw's
-interactive Linux CLI. For a multi-turn chat, run sw chat beside Linux Ollama.
+text. This one-shot entry supports reads/plans, and can resume one exact plan
+already reviewed and approved with the Linux CLI. --approved-plan never grants
+approval. For a multi-turn chat, run sw chat beside Linux Ollama.
 """
 import argparse
 import json
@@ -72,9 +73,10 @@ def chat_command(argv=None):
     parser.add_argument('--listen', default='127.0.0.1:6443')
     parser.add_argument('--prompt', required=True)
     parser.add_argument('--allow-write', action='store_true', help='allow creating plans; no automatic approval')
+    parser.add_argument('--approved-plan', help='resume one already locally approved exact plan; does not approve')
     parser.add_argument('--target', default='', help='one deploy/NAME for a focused session')
     parser.add_argument('-n', '--namespace', default=None, help='target namespace (default: default)')
-    parser.add_argument('--task', choices=('inspect', 'image', 'scale'), default=None)
+    parser.add_argument('--task', choices=('inspect', 'diagnose', 'image', 'scale'), default=None)
     parser.add_argument('--target-container', default=None)
     parser.add_argument('--target-uid', default=None)
     parser.add_argument('--target-generation', type=int, default=None)
@@ -86,6 +88,10 @@ def chat_command(argv=None):
                '--listen=' + args.listen, '--prompt=' + args.prompt]
     if args.allow_write:
         command.append('--allow-write')
+    if args.approved_plan is not None:
+        if not re.fullmatch(r'[0-9a-f]{64}', args.approved_plan) or not args.allow_write or args.target:
+            parser.error('approved-plan requires a lowercase SHA256, --allow-write and no --target')
+        command.append('--approved-plan=' + args.approved_plan)
     focus_values = (args.namespace, args.task, args.target_container, args.target_uid, args.target_generation)
     if not args.target:
         if any(value is not None for value in focus_values):
@@ -100,7 +106,7 @@ def chat_command(argv=None):
     if len(namespace) > 63 or not re.fullmatch(label, namespace):
         parser.error('invalid target namespace')
     task = args.task or 'inspect'
-    if task != 'inspect' and not args.allow_write:
+    if task in ('image', 'scale') and not args.allow_write:
         parser.error('image and scale tasks require --allow-write')
     if args.target_container is not None and (task != 'image' or len(args.target_container) > 63 or not re.fullmatch(label, args.target_container)):
         parser.error('target-container requires an image task and a valid container name')
