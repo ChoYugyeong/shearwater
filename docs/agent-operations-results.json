@@ -1,0 +1,2712 @@
+{
+  "date": "2026-11-18",
+  "format": "shearwater.agent-operations-comparison/v1",
+  "cohorts": [
+    {
+      "name": "initial-development",
+      "baselineSHA256": "c7a3aa6db6dd8fc85f7bc8fff3afac21cf7d8bd8ce94c7e86b27f697b312906f",
+      "candidateSHA256": "5e1a3bc447f5e64b0260a0f4bac4f323a87dba71f6c9abe4b43992813171b500",
+      "cases": [
+        {
+          "arm": "legacy",
+          "model": "claude",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 91.644,
+          "attemptedTokens": 44915,
+          "toolCalls": 10,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 11.93,
+              "nativeTokens": 8076,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 19.447,
+              "nativeTokens": 5107,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 8.985,
+              "nativeTokens": 5164,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 9.269,
+              "nativeTokens": 5412,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 19.14,
+              "nativeTokens": 5272,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 14.513,
+              "nativeTokens": 10616,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 8.361,
+              "nativeTokens": 5268,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "claude",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 103.205,
+          "attemptedTokens": 44858,
+          "toolCalls": 10,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 13.818,
+              "nativeTokens": 8074,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 19.516,
+              "nativeTokens": 5027,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 11.12,
+              "nativeTokens": 5175,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 11.15,
+              "nativeTokens": 5416,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 20.599,
+              "nativeTokens": 5266,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 17.143,
+              "nativeTokens": 10627,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 9.859,
+              "nativeTokens": 5273,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": false,
+          "attemptedStages": 6,
+          "attemptedSeconds": 83.682,
+          "attemptedTokens": 15175,
+          "toolCalls": 10,
+          "toolErrors": 1,
+          "normalApprovals": 2,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 9.965,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 13.02,
+              "nativeTokens": 2077,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 5.377,
+              "nativeTokens": 2231,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.892,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 12.937,
+              "nativeTokens": 2231,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 39.49,
+              "nativeTokens": 5762,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": false,
+          "attemptedStages": 6,
+          "attemptedSeconds": 68.162,
+          "attemptedTokens": 12729,
+          "toolCalls": 8,
+          "toolErrors": 1,
+          "normalApprovals": 2,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 10.461,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 12.039,
+              "nativeTokens": 2077,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 5.837,
+              "nativeTokens": 2245,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.864,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 12.962,
+              "nativeTokens": 2231,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 23.999,
+              "nativeTokens": 3302,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "deepseek",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 185.475,
+          "attemptedTokens": 39497,
+          "toolCalls": 11,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 41.685,
+              "nativeTokens": 11388,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 22.151,
+              "nativeTokens": 3172,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 14.6,
+              "nativeTokens": 3680,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 19.296,
+              "nativeTokens": 4641,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 21.987,
+              "nativeTokens": 3275,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 51.577,
+              "nativeTokens": 9946,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 14.18,
+              "nativeTokens": 3395,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "deepseek",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 185.631,
+          "attemptedTokens": 40699,
+          "toolCalls": 11,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 29.306,
+              "nativeTokens": 8409,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 27.726,
+              "nativeTokens": 3878,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 13.52,
+              "nativeTokens": 3319,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 18.384,
+              "nativeTokens": 4490,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 22.726,
+              "nativeTokens": 3265,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 60.174,
+              "nativeTokens": 14012,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 13.794,
+              "nativeTokens": 3326,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "claude",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 137.826,
+          "attemptedTokens": 52884,
+          "toolCalls": 13,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 14.895,
+              "nativeTokens": 8565,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 20.687,
+              "nativeTokens": 5052,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 10.145,
+              "nativeTokens": 4898,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 13.527,
+              "nativeTokens": 6174,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 22.141,
+              "nativeTokens": 8773,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 33.316,
+              "nativeTokens": 10707,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 23.114,
+              "nativeTokens": 8715,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "claude",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 146.472,
+          "attemptedTokens": 56550,
+          "toolCalls": 14,
+          "toolErrors": 1,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 20.379,
+              "nativeTokens": 11596,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 20.982,
+              "nativeTokens": 5036,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 9.52,
+              "nativeTokens": 4903,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 15.129,
+              "nativeTokens": 6182,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 22.385,
+              "nativeTokens": 8821,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 34.539,
+              "nativeTokens": 11023,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 23.537,
+              "nativeTokens": 8989,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": false,
+          "attemptedStages": 1,
+          "attemptedSeconds": 9.955,
+          "attemptedTokens": 1869,
+          "toolCalls": 1,
+          "toolErrors": 1,
+          "normalApprovals": 0,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 9.955,
+              "nativeTokens": 1869,
+              "toolCalls": 1,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": false,
+          "attemptedStages": 1,
+          "attemptedSeconds": 10.088,
+          "attemptedTokens": 1869,
+          "toolCalls": 1,
+          "toolErrors": 1,
+          "normalApprovals": 0,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 10.088,
+              "nativeTokens": 1869,
+              "toolCalls": 1,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "deepseek",
+          "repeat": 1,
+          "completedAllSevenStages": false,
+          "attemptedStages": 4,
+          "attemptedSeconds": 176.099,
+          "attemptedTokens": 32670,
+          "toolCalls": 8,
+          "toolErrors": 0,
+          "normalApprovals": 1,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 45.027,
+              "nativeTokens": 10774,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 29.89,
+              "nativeTokens": 3909,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 15.897,
+              "nativeTokens": 3598,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 85.285,
+              "nativeTokens": 14389,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "deepseek",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 203.721,
+          "attemptedTokens": 52869,
+          "toolCalls": 16,
+          "toolErrors": 1,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 37.601,
+              "nativeTokens": 15722,
+              "toolCalls": 5,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 28.862,
+              "nativeTokens": 6010,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 15.146,
+              "nativeTokens": 3393,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 29.198,
+              "nativeTokens": 8166,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 23.796,
+              "nativeTokens": 3444,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 41.232,
+              "nativeTokens": 10015,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 27.887,
+              "nativeTokens": 6119,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        }
+      ],
+      "unstartedCases": 0,
+      "setupStopReason": null
+    },
+    {
+      "name": "revised-development",
+      "baselineSHA256": "c7a3aa6db6dd8fc85f7bc8fff3afac21cf7d8bd8ce94c7e86b27f697b312906f",
+      "candidateSHA256": "7e8652347743c5b7e92f152ef8fe336bd46908997c1ae98d72a544322e7a5059",
+      "cases": [
+        {
+          "arm": "legacy",
+          "model": "claude",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 102.687,
+          "attemptedTokens": 44910,
+          "toolCalls": 10,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 13.022,
+              "nativeTokens": 8175,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 20.638,
+              "nativeTokens": 5032,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 10.561,
+              "nativeTokens": 5164,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 12.497,
+              "nativeTokens": 5408,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 21.113,
+              "nativeTokens": 5334,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 15.344,
+              "nativeTokens": 10511,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 9.512,
+              "nativeTokens": 5286,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "claude",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 104.624,
+          "attemptedTokens": 44864,
+          "toolCalls": 10,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 12.882,
+              "nativeTokens": 8034,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 20.557,
+              "nativeTokens": 5094,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 11.705,
+              "nativeTokens": 5176,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 10.239,
+              "nativeTokens": 5399,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 20.225,
+              "nativeTokens": 5257,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 18.352,
+              "nativeTokens": 10605,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 10.664,
+              "nativeTokens": 5299,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 81.012,
+          "attemptedTokens": 14881,
+          "toolCalls": 11,
+          "toolErrors": 1,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 5.925,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 11.6,
+              "nativeTokens": 2069,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 7.036,
+              "nativeTokens": 2298,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.841,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 12.537,
+              "nativeTokens": 2223,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 39.127,
+              "nativeTokens": 3194,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 1.946,
+              "nativeTokens": 2223,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 80.677,
+          "attemptedTokens": 14821,
+          "toolCalls": 11,
+          "toolErrors": 1,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 8.063,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 11.846,
+              "nativeTokens": 2075,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 4.79,
+              "nativeTokens": 2215,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.692,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 12.82,
+              "nativeTokens": 2229,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 38.579,
+              "nativeTokens": 3199,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 1.886,
+              "nativeTokens": 2229,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "deepseek",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 173.476,
+          "attemptedTokens": 37258,
+          "toolCalls": 11,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 30.042,
+              "nativeTokens": 9037,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 21.026,
+              "nativeTokens": 3086,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 13.319,
+              "nativeTokens": 3484,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 16.724,
+              "nativeTokens": 4168,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 24.342,
+              "nativeTokens": 3518,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 55.039,
+              "nativeTokens": 10658,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 12.985,
+              "nativeTokens": 3307,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "deepseek",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 183.235,
+          "attemptedTokens": 32947,
+          "toolCalls": 11,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 50.927,
+              "nativeTokens": 5361,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 22.638,
+              "nativeTokens": 3169,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 11.427,
+              "nativeTokens": 3256,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 13.711,
+              "nativeTokens": 3920,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 22.367,
+              "nativeTokens": 3383,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 47.683,
+              "nativeTokens": 10234,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 14.482,
+              "nativeTokens": 3624,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "claude",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 120.94,
+          "attemptedTokens": 46325,
+          "toolCalls": 11,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 14.043,
+              "nativeTokens": 8619,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 21.935,
+              "nativeTokens": 5149,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 12.916,
+              "nativeTokens": 5961,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 12.49,
+              "nativeTokens": 5846,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 20.631,
+              "nativeTokens": 5310,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 18.942,
+              "nativeTokens": 10335,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 19.982,
+              "nativeTokens": 5105,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "claude",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 137.665,
+          "attemptedTokens": 47207,
+          "toolCalls": 12,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 13.587,
+              "nativeTokens": 8537,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 20.667,
+              "nativeTokens": 5335,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 12.823,
+              "nativeTokens": 5864,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 13.556,
+              "nativeTokens": 5973,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 22.563,
+              "nativeTokens": 5200,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 34.103,
+              "nativeTokens": 11216,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 20.366,
+              "nativeTokens": 5082,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": false,
+          "attemptedStages": 3,
+          "attemptedSeconds": 28.721,
+          "attemptedTokens": 6199,
+          "toolCalls": 4,
+          "toolErrors": 2,
+          "normalApprovals": 1,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 7.95,
+              "nativeTokens": 1880,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 19.25,
+              "nativeTokens": 3620,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 1.521,
+              "nativeTokens": 699,
+              "toolCalls": 0,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": false,
+          "attemptedStages": 3,
+          "attemptedSeconds": 30.542,
+          "attemptedTokens": 13672,
+          "toolCalls": 6,
+          "toolErrors": 2,
+          "normalApprovals": 1,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 6.321,
+              "nativeTokens": 1868,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 22.894,
+              "nativeTokens": 11105,
+              "toolCalls": 4,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 1.328,
+              "nativeTokens": 699,
+              "toolCalls": 0,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "deepseek",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 209.49,
+          "attemptedTokens": 48549,
+          "toolCalls": 15,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 21.712,
+              "nativeTokens": 7602,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 26.044,
+              "nativeTokens": 6049,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 19.106,
+              "nativeTokens": 4715,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 18.957,
+              "nativeTokens": 4651,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 44.739,
+              "nativeTokens": 11180,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 52.503,
+              "nativeTokens": 10548,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 26.428,
+              "nativeTokens": 3804,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "deepseek",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 192.387,
+          "attemptedTokens": 45203,
+          "toolCalls": 16,
+          "toolErrors": 0,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 23.129,
+              "nativeTokens": 9817,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 24.014,
+              "nativeTokens": 5517,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 19.727,
+              "nativeTokens": 4903,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 16.782,
+              "nativeTokens": 6260,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 21.579,
+              "nativeTokens": 3201,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 57.946,
+              "nativeTokens": 10982,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 29.21,
+              "nativeTokens": 4523,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        }
+      ],
+      "unstartedCases": 0,
+      "setupStopReason": null
+    },
+    {
+      "name": "stable-catalog-qwen",
+      "baselineSHA256": "c7a3aa6db6dd8fc85f7bc8fff3afac21cf7d8bd8ce94c7e86b27f697b312906f",
+      "candidateSHA256": "1a378528bf9e62a9a6de913a67de231ce9e595be359f0b8f31ae57726851ec55",
+      "cases": [
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": false,
+          "attemptedStages": 6,
+          "attemptedSeconds": 79.375,
+          "attemptedTokens": 15149,
+          "toolCalls": 10,
+          "toolErrors": 1,
+          "normalApprovals": 2,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 8.229,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 11.848,
+              "nativeTokens": 2075,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 4.729,
+              "nativeTokens": 2215,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.691,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 12.798,
+              "nativeTokens": 2229,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 39.08,
+              "nativeTokens": 5756,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 51.381,
+          "attemptedTokens": 14784,
+          "toolCalls": 10,
+          "toolErrors": 1,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 6.068,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 2.573,
+              "nativeTokens": 2071,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 4.968,
+              "nativeTokens": 2225,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.699,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 12.543,
+              "nativeTokens": 2225,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 20.909,
+              "nativeTokens": 3164,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 1.621,
+              "nativeTokens": 2225,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": false,
+          "attemptedStages": 1,
+          "attemptedSeconds": 75.69,
+          "attemptedTokens": 48444,
+          "toolCalls": 16,
+          "toolErrors": 15,
+          "normalApprovals": 0,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 75.69,
+              "nativeTokens": 48444,
+              "toolCalls": 16,
+              "toolErrors": 15,
+              "modelResponseCompleted": false,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": false,
+          "attemptedStages": 1,
+          "attemptedSeconds": 95.452,
+          "attemptedTokens": 56394,
+          "toolCalls": 16,
+          "toolErrors": 15,
+          "normalApprovals": 0,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 95.452,
+              "nativeTokens": 56394,
+              "toolCalls": 16,
+              "toolErrors": 15,
+              "modelResponseCompleted": false,
+              "emptyResponseRetries": 0
+            }
+          ]
+        }
+      ],
+      "unstartedCases": 0,
+      "setupStopReason": null
+    },
+    {
+      "name": "fixed-image-memory-limited",
+      "baselineSHA256": "c7a3aa6db6dd8fc85f7bc8fff3afac21cf7d8bd8ce94c7e86b27f697b312906f",
+      "candidateSHA256": "5a5297f198d179aebcd665a7072890a5a8a6dc1dabb6a6bb57fcfeb4f60ad10d",
+      "cases": [
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 77.88,
+          "attemptedTokens": 14812,
+          "toolCalls": 11,
+          "toolErrors": 1,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 5.819,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 12.282,
+              "nativeTokens": 2077,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 4.029,
+              "nativeTokens": 2200,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.688,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 12.5,
+              "nativeTokens": 2231,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 38.791,
+              "nativeTokens": 3199,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 1.771,
+              "nativeTokens": 2231,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 101.038,
+          "attemptedTokens": 32758,
+          "toolCalls": 14,
+          "toolErrors": 3,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 4.183,
+              "nativeTokens": 2254,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 20.934,
+              "nativeTokens": 4013,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 9.88,
+              "nativeTokens": 3025,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.653,
+              "nativeTokens": 939,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 33.739,
+              "nativeTokens": 10482,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 9.26,
+              "nativeTokens": 2737,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 20.389,
+              "nativeTokens": 9308,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": false,
+          "attemptedStages": 2,
+          "attemptedSeconds": 97.762,
+          "attemptedTokens": 104816,
+          "toolCalls": 18,
+          "toolErrors": 1,
+          "normalApprovals": 1,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 3.768,
+              "nativeTokens": 2254,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 93.994,
+              "nativeTokens": 102562,
+              "toolCalls": 16,
+              "toolErrors": 1,
+              "modelResponseCompleted": false,
+              "emptyResponseRetries": 0
+            }
+          ]
+        }
+      ],
+      "unstartedCases": 1,
+      "setupStopReason": "host memory reserve insufficient"
+    },
+    {
+      "name": "terminal-guard-qwen",
+      "baselineSHA256": "c7a3aa6db6dd8fc85f7bc8fff3afac21cf7d8bd8ce94c7e86b27f697b312906f",
+      "candidateSHA256": "75171b18c3779bd0e4424ba159559fa97bfd14815fe9a3bdafcdc8692fdd7637",
+      "cases": [
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 81.749,
+          "attemptedTokens": 13352,
+          "toolCalls": 11,
+          "toolErrors": 1,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 9.565,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 12.048,
+              "nativeTokens": 769,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 5.45,
+              "nativeTokens": 2245,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.727,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 11.956,
+              "nativeTokens": 851,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 38.892,
+              "nativeTokens": 5762,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 1.111,
+              "nativeTokens": 851,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 76.543,
+          "attemptedTokens": 13266,
+          "toolCalls": 11,
+          "toolErrors": 1,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 5.659,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 11.751,
+              "nativeTokens": 769,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 4.693,
+              "nativeTokens": 2215,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.664,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 11.725,
+              "nativeTokens": 851,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 38.932,
+              "nativeTokens": 5706,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 1.119,
+              "nativeTokens": 851,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 86.711,
+          "attemptedTokens": 31915,
+          "toolCalls": 14,
+          "toolErrors": 3,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 4.088,
+              "nativeTokens": 2250,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 18.775,
+              "nativeTokens": 3921,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 9.811,
+              "nativeTokens": 3024,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.627,
+              "nativeTokens": 939,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 20.497,
+              "nativeTokens": 9753,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 9.017,
+              "nativeTokens": 2734,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 21.895,
+              "nativeTokens": 9294,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 80.405,
+          "attemptedTokens": 31661,
+          "toolCalls": 15,
+          "toolErrors": 3,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 3.752,
+              "nativeTokens": 2252,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 16.738,
+              "nativeTokens": 3858,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 9.465,
+              "nativeTokens": 3010,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.542,
+              "nativeTokens": 939,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 22.726,
+              "nativeTokens": 9870,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 6.242,
+              "nativeTokens": 2616,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 18.94,
+              "nativeTokens": 9116,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        }
+      ],
+      "unstartedCases": 0,
+      "setupStopReason": null
+    },
+    {
+      "name": "final-receipt-qwen",
+      "baselineSHA256": "c7a3aa6db6dd8fc85f7bc8fff3afac21cf7d8bd8ce94c7e86b27f697b312906f",
+      "candidateSHA256": "9d3f7021f427e7f6a24aa9b171c5a7d9616b36031220fb0f85c90f2c37c6487a",
+      "cases": [
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": false,
+          "attemptedStages": 6,
+          "attemptedSeconds": 60.483,
+          "attemptedTokens": 9908,
+          "toolCalls": 9,
+          "toolErrors": 1,
+          "normalApprovals": 2,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 8.082,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 11.944,
+              "nativeTokens": 769,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 4.697,
+              "nativeTokens": 2217,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.673,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 11.948,
+              "nativeTokens": 851,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 21.139,
+              "nativeTokens": 3197,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "legacy",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": false,
+          "attemptedStages": 6,
+          "attemptedSeconds": 75.976,
+          "attemptedTokens": 12423,
+          "toolCalls": 10,
+          "toolErrors": 1,
+          "normalApprovals": 2,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 5.827,
+              "nativeTokens": 1958,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 11.679,
+              "nativeTokens": 769,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 4.884,
+              "nativeTokens": 2217,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.653,
+              "nativeTokens": 916,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 11.971,
+              "nativeTokens": 851,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 38.963,
+              "nativeTokens": 5712,
+              "toolCalls": 4,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 1,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 107.192,
+          "attemptedTokens": 26056,
+          "toolCalls": 15,
+          "toolErrors": 3,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 4.086,
+              "nativeTokens": 2242,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 13.444,
+              "nativeTokens": 1795,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 12.326,
+              "nativeTokens": 3131,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.598,
+              "nativeTokens": 939,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 15.063,
+              "nativeTokens": 6107,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 44.144,
+              "nativeTokens": 6179,
+              "toolCalls": 3,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 15.531,
+              "nativeTokens": 5663,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        },
+        {
+          "arm": "managed",
+          "model": "qwen",
+          "repeat": 2,
+          "completedAllSevenStages": true,
+          "attemptedStages": 7,
+          "attemptedSeconds": 64.655,
+          "attemptedTokens": 22170,
+          "toolCalls": 14,
+          "toolErrors": 3,
+          "normalApprovals": 3,
+          "unplannedHumanInterventionsOffered": 0,
+          "stages": [
+            {
+              "phase": "deploy-plan",
+              "seconds": 3.757,
+              "nativeTokens": 2252,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "deploy-apply",
+              "seconds": 13.029,
+              "nativeTokens": 1795,
+              "toolCalls": 2,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "existing-verify",
+              "seconds": 9.636,
+              "nativeTokens": 3043,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-plan",
+              "seconds": 2.568,
+              "nativeTokens": 939,
+              "toolCalls": 1,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "update-apply",
+              "seconds": 14.577,
+              "nativeTokens": 5947,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "diagnose-recover",
+              "seconds": 5.665,
+              "nativeTokens": 2598,
+              "toolCalls": 2,
+              "toolErrors": 0,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            },
+            {
+              "phase": "recover-apply",
+              "seconds": 15.424,
+              "nativeTokens": 5596,
+              "toolCalls": 3,
+              "toolErrors": 1,
+              "modelResponseCompleted": true,
+              "emptyResponseRetries": 0
+            }
+          ]
+        }
+      ],
+      "unstartedCases": 0,
+      "setupStopReason": null
+    }
+  ],
+  "notes": [
+    "Failed incomplete cases are not complete-operation speed records.",
+    "Claude includes native cache reads/writes; DeepSeek sums native step totalTokens; Qwen uses prompt_eval_count+eval_count.",
+    "Only compare arms within one model; these counters are not API prices.",
+    "Wall time sums model turns including MCP/CLI setup; fixture setup, fault injection, operator approval and independent checks excluded.",
+    "Initial/revised development used to find defects; brief regression/build commands overlapped some timings.",
+    "Terminal-guard-qwen repeats Qwen after fixed-image normalization and verified-continue completion handling.",
+    "Final-receipt-qwen repeats the same four cases after retaining the applied plan receipt during read-only readiness polling.",
+    "The last two Qwen cohorts apply the same empty-response retry and completed-continue stop policy to both arms; all attempts count in token/time totals.",
+    "Host completion is not evidence that the model stopped on its own; this is an MCP interface comparison with a shared host policy, not unmodified alpha.11 sw chat.",
+    "One fixed-image-memory-limited case never started due to low host memory; it is neither a model success nor failure.",
+    "No unplanned rescue was offered. Zero rescue offered does not mean failed cases needed no help.",
+    "Exact DeepSeek model ID not observed; requested deepseek-v4-pro/high.",
+    "Native token totals count cache fields according to provider, not API price."
+  ]
+}

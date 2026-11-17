@@ -56,6 +56,7 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw connect     check an app connection and create its private AI workflow
   sw setup       check/start a local server and prepare a normal user's credentials
   sw workflow    review/approve/resume the saved app workflow without copying connection flags
+  sw task        delegate one app, approve server plans, inspect evidence, or resume with a new token
 
 Run "sw COMMAND -h" for the flags of a command.
 `
@@ -102,6 +103,8 @@ func main() {
 		err = receiveClient(args, os.Stdin, os.Stdout)
 	case "workflow":
 		err = runWorkflow(args, os.Stdout)
+	case "task":
+		err = runTask(args, os.Stdout)
 	case "down":
 		err = runDown(args)
 	case "status":

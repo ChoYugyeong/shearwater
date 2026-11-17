@@ -132,6 +132,9 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 	for k := range args {
 		if _, ok := props[k]; !ok {
 			if o.Workflow != nil {
+				if _, hasImage := props["image"]; !hasImage {
+					return "", fmt.Errorf("unknown argument %s; all task inputs are already fixed. Send only action, for example {\"action\":\"deploy\"}, {\"action\":\"update\"} or {\"action\":\"verify\"}, using a native tool call. Do not send image, app_name, name, port, namespace or UID", k)
+				}
 				return "", fmt.Errorf("unknown argument %s; the app, namespace and port are already fixed. Send only action and optional image. To deploy use exactly {\"action\":\"deploy\"}; to inspect use {\"action\":\"status\"}. Do not send name, object, port, namespace or UID", k)
 			}
 			return "", fmt.Errorf("unknown argument %s", k)

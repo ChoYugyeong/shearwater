@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"shearwater/internal/apis"
+	"shearwater/internal/operation"
 	"shearwater/internal/store"
 )
 
@@ -49,10 +50,12 @@ type Server struct {
 	// LogDir is where the node agent has container logs written (`kubectl logs`).
 	LogDir string
 
-	traceMu sync.Mutex
-	openapi sync.Once
-	oaDocs  map[string][]byte // "api/v1" -> document
-	oaRoot  []byte
+	traceMu       sync.Mutex
+	openapi       sync.Once
+	oaDocs        map[string][]byte // "api/v1" -> document
+	oaRoot        []byte
+	operationInit sync.Once
+	operationErr  error
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -74,6 +77,10 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]string{
 			"major": "1", "minor": "36", "gitVersion": GitVersion, "platform": "linux/amd64",
 		})
+		return
+	}
+	if p == operation.Prefix || strings.HasPrefix(p, operation.Prefix+"/") {
+		s.serveOperation(w, r)
 		return
 	}
 	if !s.authorized(r) {

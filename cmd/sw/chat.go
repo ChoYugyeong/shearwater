@@ -96,9 +96,36 @@ func (s *chatSession) reset() {
 func (s *chatSession) reviewablePlan(id string) bool {
 	if s.o.Workflow != nil {
 		w, err := loadWorkflow(s.o.Workflow.Path)
+		if err == nil && w.Operation != "" {
+			r, e := remoteStatus(w)
+			return e == nil && validPlanID(id) && id == r.Plan
+		}
 		return err == nil && validPlanID(id) && id == w.Pending
 	}
 	return validPlanID(id) && (s.o.Focus == nil || focusPlanKnown(s.o.mcpOptions, id))
+}
+
+// 승인한 적용을 실제 HTTP까지 확인하면 프로그램이 이번 턴을 끝낸다.
+// 작은 모델이 healthy 뒤에도 continue를 반복하는 실측 사례가 있었다.
+// 단순 verify는 새 계획을 만들기 전의 사전 검사일 수 있으므로 종료 근거가
+// 아니다. 이 판단은 모델 문장이 아니라 성공한 continue 도구의 결과에만 쓴다.
+func workflowAppliedAndHealthy(args, raw []byte) bool {
+	var call struct{ Action string }
+	var r struct {
+		Format, State, UID, VerifiedImage, StagedImage string
+		Operation, Plan, LastPlan, ProofID             string
+		GoalGeneration                                 int64
+		Applied, Approved                              bool
+		VerifiedPods                                   int
+		HTTP                                           struct{ State string }
+	}
+	if json.Unmarshal(args, &call) != nil || call.Action != "continue" || json.Unmarshal(raw, &r) != nil || r.Format != "shearwater.workflow-result/v1" || r.State != "healthy" || r.HTTP.State != "passed" || r.UID == "" || r.GoalGeneration < 1 || r.VerifiedImage == "" || r.StagedImage != "" {
+		return false
+	}
+	if r.Operation != "" {
+		return r.Applied && r.Approved && validPlanID(r.Plan) && r.Plan == r.LastPlan && validPlanID(r.ProofID) && r.VerifiedPods > 0
+	}
+	return true // the older local workflow also verifies before returning healthy
 }
 
 func printableChat(s string) string {
@@ -118,6 +145,7 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 		s.o.Focus.answer = nil
 	}
 	s.messages = append(s.messages, chatMessage{Role: "user", Content: text})
+	emptyRetried, attemptedTool := false, false
 	for step := 0; step < 8; step++ {
 		var definitions []any
 		for _, t := range s.tools {
@@ -198,6 +226,16 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 		if msg.Role != "assistant" || len(msg.Calls) > 4 {
 			return fmt.Errorf("unexpected model role or too many tool calls")
 		}
+		// 실제 Qwen 시험에서 done=true인데 답변과 도구 호출이 모두 빈 응답이
+		// 나왔다. 아직 어떤 도구도 시도하지 않았을 때만 모델에게 한 번 더
+		// 응답을 요청한다. 이미 쓰기를 시도했다면 이 경로로 반복하지 않는다.
+		// JSON처럼 보이는 글을 실행하거나 성공한 작업으로 간주하지도 않는다.
+		if !attemptedTool && !emptyRetried && len(msg.Calls) == 0 && strings.TrimSpace(msg.Content) == "" {
+			emptyRetried = true
+			fmt.Fprintln(out, "[Shearwater] 모델이 빈 응답을 보내서 한 번 더 요청해. 아직 도구는 실행하지 않았어.")
+			s.messages = append(s.messages, msg, chatMessage{Role: "user", Content: "Your last response contained neither an answer nor a native tool call. Respond to the original request using the supplied native tools when needed. Do not invent evidence, parse reply text as a tool, or repeat an earlier action."})
+			continue
+		}
 		if msg.Content != "" && s.o.Focus == nil && s.o.Workflow == nil {
 			fmt.Fprintln(out, "[모델 답변 · 사실 여부는 아래 도구 결과로 확인]\n"+printableChat(msg.Content))
 		}
@@ -231,6 +269,7 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 			return nil
 		}
 		for _, call := range msg.Calls {
+			attemptedTool = true
 			if s.o.Workflow != nil {
 				s.o.Workflow.answer = nil
 			}
@@ -278,6 +317,13 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 				// 도구 호출을 멈춘다. 같은 답변에 다른 호출이 함께 있어도 실행하지
 				// 않는다. 미완성 호출 묶음 대신 확인한 결과만 대화에 남겨 다음
 				// /review, /approve 뒤에 잘못된 도구 이력을 보내지 않는다.
+				s.messages = append(s.messages[:messageStart], chatMessage{Role: "assistant", Content: result})
+				fmt.Fprintln(out, "[Shearwater 확인 결과]\n"+result)
+				return nil
+			}
+			if callErr == nil && call.Function.Name == "sw_workflow" && s.o.Workflow != nil && workflowAppliedAndHealthy(call.Function.Arguments, []byte(result)) {
+				// Drop any remaining calls in this same model response as well.
+				// The next user turn may ask for new work using a fresh observation.
 				s.messages = append(s.messages[:messageStart], chatMessage{Role: "assistant", Content: result})
 				fmt.Fprintln(out, "[Shearwater 확인 결과]\n"+result)
 				return nil
@@ -489,6 +535,12 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 			reviewed = ""
 			continue
 		case line == "/review" || strings.HasPrefix(line, "/review "):
+			if o.Workflow != nil {
+				if w, e := loadWorkflow(o.Workflow.Path); e == nil && w.Operation != "" {
+					err = runWorkflow([]string{"review", "--file=" + o.Workflow.Path}, out)
+					break
+				}
+			}
 			id := s.pendingPlan
 			if line != "/review" {
 				id = strings.TrimSpace(strings.TrimPrefix(line, "/review "))
@@ -508,6 +560,12 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 				fmt.Fprintln(out, "[Shearwater] 검토 대상: "+id+". 원문을 확인했다면 /approve 입력. 여러 객체는 한 번에 취소되는 트랜잭션이 아니야.")
 			}
 		case line == "/approve" || strings.HasPrefix(line, "/approve "):
+			if o.Workflow != nil {
+				if w, e := loadWorkflow(o.Workflow.Path); e == nil && w.Operation != "" {
+					err = fmt.Errorf("this delegated connection cannot approve; use sw task approve with separate operator credentials")
+					break
+				}
+			}
 			id := reviewed
 			if line != "/approve" {
 				id = strings.TrimSpace(strings.TrimPrefix(line, "/approve "))

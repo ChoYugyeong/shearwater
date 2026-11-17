@@ -28,6 +28,8 @@ import (
 )
 
 type appWorkflow struct {
+	Operation    string              `json:"operation,omitempty"`
+	Allowed      []string            `json:"allowed,omitempty"`
 	Format       string              `json:"format"`
 	Config       string              `json:"config"`
 	Listen       string              `json:"listen"`
@@ -82,6 +84,9 @@ func loadWorkflow(path string) (appWorkflow, error) {
 	if err := readPrivateJSON(path, &w); err != nil {
 		return w, err
 	}
+	if w.Format == "shearwater.workflow/v2" {
+		return w, validateRemoteWorkflow(w)
+	}
 	if w.Format != "shearwater.workflow/v1" || !apis.IsDNS1123Label(w.Name) || !apis.IsDNS1123Label(w.Namespace) || w.Port < 1 || w.Port > 65535 || w.Image == "" || !filepath.IsAbs(w.Config) || !filepath.IsAbs(w.Plans) || w.Identity == "" {
 		return w, fmt.Errorf("invalid workflow file")
 	}
@@ -131,7 +136,7 @@ func initWorkflow(o *mcpOptions) error {
 	// 파일에 기록한 환경이 기준이다. 호출 때 다른 접속 옵션을 덧붙여도
 	// 조용히 다른 서버로 이동하지 않으며, 인증 신원도 호출마다 다시 검사한다.
 	o.Config, o.Listen, o.Plans, o.Focus = w.Config, w.Listen, w.Plans, nil
-	c, err := localAPI(w.Config, w.Listen)
+	c, err := workflowAPI(w)
 	if err != nil {
 		return err
 	}
@@ -215,6 +220,10 @@ func workflowNeedsApproval(path string, raw []byte) bool {
 		return false
 	}
 	w, err := loadWorkflow(path)
+	if err == nil && w.Operation != "" {
+		current, e := remoteStatus(w)
+		return e == nil && current.Plan == r.Plan && current.State == "awaiting_approval" && !current.Approved
+	}
 	return err == nil && w.Pending == r.Plan && !workflowApproved(w)
 }
 
@@ -567,6 +576,9 @@ func callWorkflow(o mcpOptions, raw json.RawMessage) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if w.Operation != "" {
+		return callRemoteWorkflow(o, w, a.Action, a.Image)
+	}
 	c, err := localAPI(w.Config, w.Listen)
 	if err != nil {
 		return "", err
@@ -818,6 +830,16 @@ func runWorkflow(args []string, out io.Writer) error {
 	w, err := loadWorkflow(*file)
 	if err != nil {
 		return err
+	}
+	if w.Operation != "" && action != "mcp-config" {
+		if action != "status" && action != "review" {
+			return fmt.Errorf("delegated clients cannot approve, discard or stage; use sw task with separate operator credentials")
+		}
+		result, e := remoteStatus(w)
+		if e != nil {
+			return e
+		}
+		return json.NewEncoder(out).Encode(result)
 	}
 	if action == "status" {
 		return json.NewEncoder(out).Encode(w)

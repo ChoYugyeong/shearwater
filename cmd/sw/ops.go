@@ -107,6 +107,10 @@ type agentClient struct {
 }
 
 func localAPI(configDir, listen string) (*agentClient, error) {
+	return localAPIWithToken(configDir, listen, "admin.token")
+}
+
+func localAPIWithToken(configDir, listen, tokenFile string) (*agentClient, error) {
 	if err := localListen(listen); err != nil {
 		return nil, err
 	}
@@ -114,7 +118,7 @@ func localAPI(configDir, listen string) (*agentClient, error) {
 	if err != nil {
 		return nil, localConfigError(configDir, err)
 	}
-	token, err := os.ReadFile(filepath.Join(configDir, "admin.token"))
+	token, err := os.ReadFile(filepath.Join(configDir, tokenFile))
 	if err != nil {
 		return nil, localConfigError(configDir, err)
 	}
