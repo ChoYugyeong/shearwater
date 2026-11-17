@@ -1,8 +1,9 @@
 # AI에게 작은 웹 앱의 운영을 맡기기
 
-이 문서는 **alpha.9 다음 개발판**의 `sw connect`, `sw workflow`, `--workflow`를 설명해.
-alpha.9 공개 실행 파일에는 아직 이 기능이 없어. [기존 설치](install.md),
+이 문서는 **alpha.10**의 `sw connect`, `sw workflow`, `--workflow`를 설명해.
+`sw version`에서 `0.1.0-alpha.10`을 확인해. [설치](install.md),
 [기존 AI 연결](agent-mcp.md), [지원 범위](compatibility.md)를 함께 봐.
+처음 실습하려면 [작은 시험 앱으로 AI 운영 체험](agent-workflow-trial.md)을 따라 해.
 
 ## 어떤 상황에 쓰나
 

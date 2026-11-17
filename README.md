@@ -4,9 +4,11 @@
 컨테이너 실행과 재시작 복구를 유지하면서, 사람이 앱 ID와 명령을 단계마다 옮겨 적는 일을 줄여.
 작은 서비스에서 Compose도 유용한 선택이며, 모든 사용자에게 이전을 권하는 제품은 아니야.
 
-**alpha.9 다음 개발판**에는 [한 번 연결하고 작업을 이어가는 AI 운영 흐름](docs/agent-workflow.md)을
-추가하고 있어. `sw connect`가 앱과 연결 정보를 보관하고, 같은 MCP·내장 대화에서 계획 →
-로컬 승인 → 실행 → 실제 내부 HTTP 검사까지 이어가. 공개 alpha.9 기능과 구분해서 사용해.
+**alpha.10**에는 [한 번 연결하고 작업을 이어가는 AI 운영 흐름](docs/agent-workflow.md)이 있어.
+`sw connect`가 앱과 연결 정보를 보관하고, 같은 MCP·내장 대화에서 계획 → 로컬 승인 →
+실행 → 실제 내부 HTTP 검사까지 이어가. 이미지 파일 입력과 승인 대기 중단은 프로그램이 맡아.
+[다른 도구와 비교해서 선택하기](docs/choosing-shearwater.md)와 [AI 운영 체험](docs/agent-workflow-trial.md)에서
+적합한 사용자, 현재 한계, 직접 확인할 순서를 볼 수 있어.
 
 | 목적 | 먼저 검토할 선택 |
 | --- | --- |
@@ -16,7 +18,7 @@
 
 alpha.8에는 [AI가 쓰기 쉬운 운영 인터페이스](docs/agent-interface.md)를 추가했어.
 짧은 상태 관찰, 이미지·복제본 변경 계획, 적용한 원래 대상의 결과 검증, Qwen 대화를 같은
-실행 함수에 연결했어. `sw version`이 **0.1.0-alpha.9**인지 확인하고 사용해.
+실행 함수에 연결했어. `sw version`이 **0.1.0-alpha.10**인지 확인하고 사용해.
 앱을 하나 골랐다면 [집중 모드](docs/focused-tools.md)로 대상과 작업을 고정하고,
 조회 도구 1개 또는 변경 계획 도구까지 2개만 AI에게 보여 줄 수 있어.
 
@@ -37,11 +39,11 @@ Shearwater is an experimental single-node container orchestrator for trying smal
 
 [첫 체험 안내](docs/first-try.md)가 시작점이야. 그 안에서 Go 없이 실행 파일을 설치하고
 첫 HTTP 응답까지 확인하는 순서로 이어져.
-현재 릴리스는 **v0.1.0-alpha.9**이며, `sw version`도 `0.1.0-alpha.9`을 표시해.
+현재 릴리스는 **v0.1.0-alpha.10**이며, `sw version`도 `0.1.0-alpha.10`을 표시해.
 [릴리스 변경 사항과 버전 검증 방법](docs/releases.md)도 확인할 수 있어.
 
-alpha.9는 승인된 계획을 한 번 실행하는 대화와 앱 고정 진단을 추가했어.
-Qwen 내장 대화와 외부 MCP를 제공해. 앱 실행 방식과 SQLite 스키마는 alpha.8과 같아.
+alpha.10은 연결한 앱의 배포·업데이트·진단·복구를 같은 작업 파일에서 이어가.
+Qwen 내장 대화와 외부 MCP를 제공해. 앱 실행 방식과 SQLite 스키마는 alpha.9와 같아.
 AI가 계획해도 적용에는 정확한 계획에 대한 사람의 로컬 승인이 필요해.
 
 alpha.6부터 Windows localhost 접속을 위한 선택적 TCP 중계와 로그인·WSL 재시작

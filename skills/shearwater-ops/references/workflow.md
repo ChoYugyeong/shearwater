@@ -1,6 +1,6 @@
 # One connected app
 
-This guide requires the development `sw_workflow` tool. Check the actual catalog.
+This guide requires alpha.10's `sw_workflow` tool. Check the actual catalog.
 The operator connects once using `sw connect`; the private workflow holds target,
 server identity, pending plan, original write goals and last HTTP-verified image.
 
