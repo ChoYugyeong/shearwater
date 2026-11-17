@@ -23,6 +23,7 @@ type mcpOptions struct {
 	Config, Listen, Plans string
 	Write                 bool
 	Focus                 *focusSession
+	Workflow              *workflowSession
 }
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -102,6 +103,9 @@ func decodeStrict(b []byte, v any) error {
 	return nil
 }
 func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
+	if o.Workflow != nil {
+		o.Workflow.answer = nil
+	}
 	if o.Focus != nil {
 		o.Focus.answer = nil
 	} // 스키마/도구 거부도 이전 답변을 무효화한다.
@@ -127,6 +131,9 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 	props := schema["properties"].(map[string]any)
 	for k := range args {
 		if _, ok := props[k]; !ok {
+			if o.Workflow != nil {
+				return "", fmt.Errorf("unknown argument %s; the app, namespace and port are already fixed. Send only action and optional image. To deploy use exactly {\"action\":\"deploy\"}; to inspect use {\"action\":\"status\"}. Do not send name, object, port, namespace or UID", k)
+			}
 			return "", fmt.Errorf("unknown argument %s", k)
 		}
 	}
@@ -162,6 +169,9 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 	boolean := func(k string) bool { var b bool; json.Unmarshal(args[k], &b); return b }
 	base := []string{"--config-dir=" + o.Config, "--listen=" + o.Listen}
 	var out bytes.Buffer
+	if o.Workflow != nil {
+		return callWorkflow(o, raw)
+	}
 	if o.Focus != nil {
 		return callFocusTool(o, name, raw)
 	}
@@ -426,7 +436,7 @@ func serveMCP(in io.Reader, out io.Writer, o mcpOptions) error {
 			result := map[string]any{"content": []any{map[string]any{"type": "text", "text": boundedMCPText(text, p.Name == "sw_logs")}}, "isError": callErr != nil}
 			// Keep compatibility text and machine-readable JSON in sync. An
 			// oversized object is an explicit error, never a clipped JSON success.
-			if callErr == nil && (p.Name == "sw_observe" || p.Name == "sw_verify" || p.Name == "sw_verify_plan" || p.Name == "sw_capabilities" || strings.HasPrefix(p.Name, "sw_target_")) {
+			if callErr == nil && (p.Name == "sw_workflow" || p.Name == "sw_observe" || p.Name == "sw_verify" || p.Name == "sw_verify_plan" || p.Name == "sw_capabilities" || strings.HasPrefix(p.Name, "sw_target_")) {
 				var v map[string]any
 				if len(text) > 256<<10 || json.Unmarshal([]byte(text), &v) != nil {
 					result = map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": "structured response exceeded budget; narrow namespace/resource/limit"}}}
@@ -472,11 +482,15 @@ func runMCP(args []string, in io.Reader, out io.Writer) error {
 	f.StringVar(&o.Plans, "plan-dir", "", "private plan directory")
 	f.BoolVar(&o.Write, "allow-write", false, "expose plan/apply; exact local approval is still required")
 	addFocusFlags(f, &o)
+	addWorkflowFlag(f, &o)
 	if err := f.Parse(args); err != nil {
 		return err
 	}
 	if f.NArg() != 0 {
 		return fmt.Errorf("unexpected MCP arguments")
+	}
+	if err := initWorkflow(&o); err != nil {
+		return err
 	}
 	if err := localListen(o.Listen); err != nil {
 		return err

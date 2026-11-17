@@ -45,6 +45,8 @@ jobs:
         run: python3 hack/chat-resume-check.py "$PWD/dist/sw"
       - name: Focused target scope, hidden tools and terminal apply (no runtime)
         run: python3 hack/focus-check.py "$PWD/dist/sw"
+      - name: Connected workflow, approval recovery and truthful results (no runtime)
+        run: python3 hack/workflow-check.py "$PWD/dist/sw"
       - name: Verify executable version (release tags must match)
         shell: bash
         run: |

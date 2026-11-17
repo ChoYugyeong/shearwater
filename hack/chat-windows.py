@@ -69,7 +69,8 @@ def chat_command(argv=None):
     parser.add_argument('--sw', required=True, help='absolute Linux sw path')
     parser.add_argument('--distro', default='Ubuntu-24.04')
     parser.add_argument('--model', required=True, help='installed Windows Ollama model name')
-    parser.add_argument('--config-dir', required=True, help='user-owned Linux delegated config')
+    parser.add_argument('--config-dir', help='user-owned Linux delegated config; unnecessary with --workflow')
+    parser.add_argument('--workflow', help='absolute Linux app workflow made by sw connect')
     parser.add_argument('--listen', default='127.0.0.1:6443')
     parser.add_argument('--prompt', required=True)
     parser.add_argument('--allow-write', action='store_true', help='allow creating plans; no automatic approval')
@@ -81,11 +82,19 @@ def chat_command(argv=None):
     parser.add_argument('--target-uid', default=None)
     parser.add_argument('--target-generation', type=int, default=None)
     args = parser.parse_args(argv)
-    if not args.sw.startswith('/') or not args.config_dir.startswith('/'):
+    if not args.sw.startswith('/') or (args.config_dir is not None and not args.config_dir.startswith('/')):
         parser.error('sw and config-dir must be absolute Linux paths')
+    if not args.workflow and not args.config_dir:
+        parser.error('config-dir or workflow is required')
+    if args.workflow and (not args.workflow.startswith('/') or args.target or args.approved_plan):
+        parser.error('workflow must be an absolute Linux path, without target/approved-plan')
     command = ['wsl.exe', '-d', args.distro, '--exec', args.sw, 'chat', '--model-stdio',
-               '--model=' + args.model, '--config-dir=' + args.config_dir,
+               '--model=' + args.model,
                '--listen=' + args.listen, '--prompt=' + args.prompt]
+    if args.config_dir:
+        command.append('--config-dir=' + args.config_dir)
+    if args.workflow:
+        command.append('--workflow=' + args.workflow)
     if args.allow_write:
         command.append('--allow-write')
     if args.approved_plan is not None:

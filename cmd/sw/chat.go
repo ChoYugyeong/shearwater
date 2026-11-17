@@ -69,7 +69,7 @@ func chatTools(write bool) []mcpTool {
 }
 
 func chatToolsFor(o mcpOptions) []mcpTool {
-	if o.Focus != nil {
+	if o.Focus != nil || o.Workflow != nil {
 		return availableMCPTools(o)
 	}
 	return chatTools(o.Write)
@@ -77,13 +77,16 @@ func chatToolsFor(o mcpOptions) []mcpTool {
 
 func (s *chatSession) reset() {
 	instructions := instructionsFor(s.o.mcpOptions) + " Speak Korean."
-	if s.o.Focus == nil {
+	if s.o.Focus == nil && s.o.Workflow == nil {
 		instructions += " Use sw_observe for current facts before making a diagnosis."
 	}
 	instructions += " Never claim a tool was called unless its response is in the conversation. Built-in approval commands can only be entered by the human, not emitted as a tool call."
 	s.messages = []chatMessage{{Role: "system", Content: instructions}}
 	s.approved = map[string]bool{}
 	s.pendingPlan = ""
+	if s.o.Workflow != nil {
+		s.o.Workflow.answer = nil
+	}
 	if s.o.Focus != nil {
 		s.o.Focus.answer = nil
 	}
@@ -91,6 +94,10 @@ func (s *chatSession) reset() {
 }
 
 func (s *chatSession) reviewablePlan(id string) bool {
+	if s.o.Workflow != nil {
+		w, err := loadWorkflow(s.o.Workflow.Path)
+		return err == nil && validPlanID(id) && id == w.Pending
+	}
 	return validPlanID(id) && (s.o.Focus == nil || focusPlanKnown(s.o.mcpOptions, id))
 }
 
@@ -104,6 +111,9 @@ func printableChat(s string) string {
 }
 
 func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) error {
+	if s.o.Workflow != nil {
+		s.o.Workflow.answer = nil
+	}
 	if s.o.Focus != nil {
 		s.o.Focus.answer = nil
 	}
@@ -188,11 +198,20 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 		if msg.Role != "assistant" || len(msg.Calls) > 4 {
 			return fmt.Errorf("unexpected model role or too many tool calls")
 		}
-		if msg.Content != "" && s.o.Focus == nil {
+		if msg.Content != "" && s.o.Focus == nil && s.o.Workflow == nil {
 			fmt.Fprintln(out, "[모델 답변 · 사실 여부는 아래 도구 결과로 확인]\n"+printableChat(msg.Content))
 		}
+		messageStart := len(s.messages)
 		s.messages = append(s.messages, msg)
 		if len(msg.Calls) == 0 {
+			if s.o.Workflow != nil {
+				if len(s.o.Workflow.answer) == 0 {
+					return fmt.Errorf("no successful workflow result in this turn; no verified answer")
+				}
+				fmt.Fprintln(out, "[Shearwater 확인 결과]\n"+string(s.o.Workflow.answer))
+				s.messages[len(s.messages)-1].Content = string(s.o.Workflow.answer)
+				return nil
+			}
 			if s.o.Focus != nil {
 				// 집중 작업의 결과를 모델이 다시 쓰게 하면 ID 전사와 JSON 형식에서
 				// 또 오류가 날 수 있다. 이 질문에서 성공한 도구가 만든 JSON을 직접
@@ -212,6 +231,9 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 			return nil
 		}
 		for _, call := range msg.Calls {
+			if s.o.Workflow != nil {
+				s.o.Workflow.answer = nil
+			}
 			if s.o.Focus != nil {
 				s.o.Focus.answer = nil
 			}
@@ -238,7 +260,7 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 			if callErr == nil {
 				result, callErr = s.call(call.Function.Name, call.Function.Arguments)
 			}
-			if callErr == nil && (call.Function.Name == "sw_app_plan" || s.o.Focus != nil && (call.Function.Name == "sw_target_image" || call.Function.Name == "sw_target_scale")) {
+			if callErr == nil && (call.Function.Name == "sw_workflow" || call.Function.Name == "sw_app_plan" || s.o.Focus != nil && (call.Function.Name == "sw_target_image" || call.Function.Name == "sw_target_scale")) {
 				var saved struct {
 					Plan string `json:"plan"`
 				}
@@ -249,6 +271,16 @@ func (s *chatSession) turn(ctx context.Context, text string, out io.Writer) erro
 				if json.Unmarshal(planResult, &saved) == nil && s.reviewablePlan(saved.Plan) {
 					s.pendingPlan = saved.Plan
 				}
+			}
+			if callErr == nil && call.Function.Name == "sw_workflow" && s.o.Workflow != nil && workflowNeedsApproval(s.o.Workflow.Path, []byte(result)) {
+				// 승인 대기는 모델이 판단할 일이 아니라 프로그램의 상태다.
+				// 실제 저장된 미승인 계획을 확인하면 추가 모델 요청과 나머지
+				// 도구 호출을 멈춘다. 같은 답변에 다른 호출이 함께 있어도 실행하지
+				// 않는다. 미완성 호출 묶음 대신 확인한 결과만 대화에 남겨 다음
+				// /review, /approve 뒤에 잘못된 도구 이력을 보내지 않는다.
+				s.messages = append(s.messages[:messageStart], chatMessage{Role: "assistant", Content: result})
+				fmt.Fprintln(out, "[Shearwater 확인 결과]\n"+result)
+				return nil
 			}
 			if callErr != nil {
 				result = "Tool error: " + callErr.Error() + "\n" + result
@@ -368,6 +400,7 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 	f.BoolVar(&o.Write, "allow-write", false, "allow planning and locally approved apply")
 	f.StringVar(&o.ApprovedPlan, "approved-plan", "", "resume exactly one already locally approved plan; requires --allow-write and --prompt, does not approve")
 	addFocusFlags(f, &o.mcpOptions)
+	addWorkflowFlag(f, &o.mcpOptions)
 	f.StringVar(&o.Provider, "provider", "ollama", "ollama (Qwen/local DeepSeek) or deepseek (API)")
 	f.StringVar(&o.Model, "model", "", "explicit model name")
 	f.StringVar(&o.Endpoint, "endpoint", "", "model origin URL")
@@ -382,6 +415,9 @@ func runChat(args []string, in *os.File, out io.Writer) error {
 	}
 	if os.Geteuid() == 0 {
 		return fmt.Errorf("run chat as an ordinary user with delegated config; the model loop must not run as root")
+	}
+	if err := initWorkflow(&o.mcpOptions); err != nil {
+		return err
 	}
 	if err := localListen(o.Listen); err != nil {
 		return err

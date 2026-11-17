@@ -53,6 +53,8 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw apply       execute an approved plan, checking for concurrent changes
   sw mcp         serve diagnostics and optional reviewed deployment over stdio
   sw chat        talk through the shared tools using Qwen/Ollama or DeepSeek
+  sw connect     check an app connection and create its private AI workflow
+  sw workflow    review/approve/resume the saved app workflow without copying connection flags
 
 Run "sw COMMAND -h" for the flags of a command.
 `
@@ -91,6 +93,10 @@ func main() {
 		err = runMCP(args, os.Stdin, os.Stdout)
 	case "chat":
 		err = runChat(args, os.Stdin, os.Stdout)
+	case "connect":
+		err = runConnect(args, os.Stdout)
+	case "workflow":
+		err = runWorkflow(args, os.Stdout)
 	case "down":
 		err = runDown(args)
 	case "status":

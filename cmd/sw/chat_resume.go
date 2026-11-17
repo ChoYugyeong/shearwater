@@ -14,7 +14,7 @@ func validateChatResume(o chatOptions, oneShot bool) error {
 	if o.ApprovedPlan == "" {
 		return nil
 	}
-	if !validPlanID(o.ApprovedPlan) || !o.Write || !oneShot || o.Focus != nil {
+	if !validPlanID(o.ApprovedPlan) || !o.Write || !oneShot || o.Focus != nil || o.Workflow != nil {
 		return fmt.Errorf("approved-plan requires an exact plan hash, --allow-write and --prompt; do not combine it with --target")
 	}
 	return nil

@@ -6,6 +6,9 @@ description: Operate apps through Shearwater sw CLI or MCP. Use for planning a n
 # Shearwater operations
 
 Use the available Shearwater tools; never invent a shell or approval tool.
+If the catalog contains `sw_workflow`, use the [connected workflow](references/workflow.md)
+instead of the legacy guides below. The application and connection are already
+selected; do not ask the user to repeat IDs, namespace, port or plan-directory flags.
 First identify the connection, namespace and app. Ask for missing choices that
 would change the target. Do not infer the production target from a test example.
 

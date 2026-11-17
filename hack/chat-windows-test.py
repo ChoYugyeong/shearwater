@@ -30,6 +30,16 @@ class Process:
 
 
 class RelayTests(unittest.TestCase):
+    def test_workflow_reuses_connection_without_config_flags(self):
+        base = ['--sw=/home/user/sw', '--model=mock', '--prompt=continue', '--workflow=/home/user/web.json']
+        command = bridge.chat_command(base + ['--allow-write'])
+        self.assertIn('--workflow=/home/user/web.json', command)
+        self.assertNotIn('bash', command)
+        self.assertFalse(any(value.startswith('--config-dir=') for value in command))
+        for extra in (['--target=deploy/other'], ['--approved-plan='+'a'*64], ['--task=diagnose']):
+            with self.subTest(extra=extra), patch.object(bridge.sys, 'stderr', io.StringIO()), self.assertRaises(SystemExit):
+                bridge.chat_command(base + extra)
+
     def test_fixed_diagnosis_needs_no_write_permission(self):
         base = ['--sw=/home/user/sw', '--model=mock', '--config-dir=/home/user/config', '--prompt=diagnose']
         command = bridge.chat_command(base + ['--target=deploy/demo', '-n=bench', '--task=diagnose'])
