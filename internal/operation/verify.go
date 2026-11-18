@@ -82,10 +82,18 @@ func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Res
 		}
 		proof.Pods = append(proof.Pods, pp)
 	}
-	for _, c := range proof.Checks {
-		hp := probe(ctx, before.obs.FrontIP, before.obs.FrontPort, c)
-		proof.Service = append(proof.Service, hp)
-		passed = passed && hp.Passed
+	if before.obs.FrontIP != "" {
+		for _, c := range proof.Checks {
+			hp := probe(ctx, before.obs.FrontIP, before.obs.FrontPort, c)
+			proof.Service = append(proof.Service, hp)
+			passed = passed && hp.Passed
+		}
+	}
+	// Never let an empty replica set pass vacuously.
+	passed = passed && len(proof.Pods) > 0
+	scope := before.obs.Scope
+	if scope == "" {
+		scope = "new-release Pods directly and bound internal Service"
 	}
 	result := before.result
 	err = m.Store.Write(false, func(tx *store.Tx) error {
@@ -101,7 +109,7 @@ func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Res
 		}
 		result = after.result
 		result.State = "http_failed"
-		result.HTTP = map[string]any{"state": "failed", "scope": "new-release Pods directly and bound internal Service"}
+		result.HTTP = map[string]any{"state": "failed", "scope": scope}
 		result.ProofID = digest(proof)
 		result.CheckedAt = &proof.At
 		result.VerifiedPods = len(proof.Pods)
@@ -113,7 +121,7 @@ func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Res
 		if passed {
 			result.State = "healthy"
 			result.VerifiedImage = proof.Image
-			result.HTTP = map[string]any{"state": "passed", "scope": "new-release Pods directly and bound internal Service"}
+			result.HTTP = map[string]any{"state": "passed", "scope": scope}
 			result.Next = "goal verified; stop calling tools"
 			if after.record.StagedImage != "" {
 				// A healthy deployed image does not complete a request to update

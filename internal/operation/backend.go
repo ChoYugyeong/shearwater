@@ -57,11 +57,15 @@ type Observation struct {
 	// only those replicas. Only then are Image, Replicas and Front filled.
 	Ready bool
 	// Facts are short, model-readable observations in the order found.
-	Facts       []string
-	Image       string
-	Replicas    []Replica
+	Facts    []string
+	Image    string
+	Replicas []Replica
+	// FrontIP and FrontPort address the route that fronts every replica. An
+	// empty FrontIP means the app has no such route and only replicas are
+	// checked. Scope describes what the HTTP proof covered.
 	FrontIP     string
 	FrontPort   int32
+	Scope       string
 	Fingerprint string
 }
 

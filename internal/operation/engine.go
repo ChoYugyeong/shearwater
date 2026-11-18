@@ -299,6 +299,7 @@ func (Engine) Observe(tx *store.Tx, r Record) (Observation, error) {
 	o.Fingerprint = digest([]any{r.UID, r.Generation, d.Spec, r.Route, r.GoalChecks, identities})
 	o.Image = d.Spec.Template.Spec.Containers[0].Image
 	o.FrontIP, o.FrontPort = r.Route.IP, r.Route.Port.Port
+	o.Scope = "new-release Pods directly and bound internal Service"
 	o.Ready = true
 	return o, nil
 }
