@@ -57,6 +57,7 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw setup       check/start a local server and prepare a normal user's credentials
   sw workflow    review/approve/resume the saved app workflow without copying connection flags
   sw task        delegate one app, approve server plans, inspect evidence, or resume with a new token
+  sw compose     serve the same delegated operations for an existing Docker Compose project
 
 Run "sw COMMAND -h" for the flags of a command.
 `
@@ -105,6 +106,8 @@ func main() {
 		err = runWorkflow(args, os.Stdout)
 	case "task":
 		err = runTask(args, os.Stdout)
+	case "compose":
+		err = runCompose(args, os.Stdout)
 	case "down":
 		err = runDown(args)
 	case "status":

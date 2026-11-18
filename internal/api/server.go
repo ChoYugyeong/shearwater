@@ -49,6 +49,9 @@ type Server struct {
 	NodeName string
 	// LogDir is where the node agent has container logs written (`kubectl logs`).
 	LogDir string
+	// Operations runs delegated app operations. Nil selects Shearwater's own
+	// engine; `sw compose serve` supplies a Docker Compose backend.
+	Operations operation.Backend
 
 	traceMu       sync.Mutex
 	openapi       sync.Once

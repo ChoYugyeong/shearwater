@@ -53,7 +53,7 @@ func (s *Server) serveOperation(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, newErr(500, "InternalError", "INTERNAL", "never", "operation store unavailable"))
 		return
 	}
-	m := operation.Manager{Store: s.Store}
+	m := operation.Manager{Store: s.Store, Backend: s.Operations}
 	path := strings.TrimPrefix(r.URL.Path, operation.Prefix)
 	var value any
 	var err error
