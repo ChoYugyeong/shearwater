@@ -605,7 +605,11 @@ func (a *Agent) syncContainer(ctx context.Context, pod *apis.Pod, c *apis.Contai
 	if err != nil {
 		return waiting("CreateContainerConfigError", err)
 	}
-	cfg.Env = containerEnv(c.Env, links)
+	explicit, err := a.secretEnv(pod.Metadata.Namespace, c)
+	if err != nil {
+		return waiting("CreateContainerConfigError", err)
+	}
+	cfg.Env = containerEnv(explicit, links)
 	if ctx.Err() != nil {
 		return cs, 0
 	}
