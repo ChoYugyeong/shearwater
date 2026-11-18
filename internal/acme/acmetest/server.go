@@ -287,3 +287,16 @@ func (a *Authority) serve(w http.ResponseWriter, r *http.Request) {
 		a.problem(w, 404, "malformed", "unknown endpoint")
 	}
 }
+
+// RootPEM is the authority's root certificate, for clients that verify the
+// certificates it issued.
+func (a *Authority) RootPEM() []byte {
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: a.caCert.Raw})
+}
+
+// Log returns the domains issued and the protocol violations seen so far.
+func (a *Authority) Log() (issued, rejected []string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]string(nil), a.Issued...), append([]string(nil), a.Rejected...)
+}
