@@ -5,7 +5,7 @@ No real models, root, container runtime, production credentials or app mutations
 The unfinished app is intentionally never marked HTTP-healthy. Temporary evidence
 is retained so a failing check can be inspected rather than erased.
 """
-import json,os,pathlib,select,socket,subprocess,sys,tempfile,time
+import json,os,pathlib,select,socket,ssl,subprocess,sys,tempfile,time,urllib.error,urllib.request
 SW=str(pathlib.Path(sys.argv[1]).resolve(strict=True))
 assert os.geteuid()!=0
 root=pathlib.Path(tempfile.mkdtemp(prefix='sw-workflow-check-'));root.chmod(0o700)
@@ -18,6 +18,31 @@ def cli(*args,fail=False):
     p=subprocess.run([SW,*args],capture_output=True,text=True,timeout=35)
     assert (p.returncode!=0)==fail,p.stdout+p.stderr
     return p.stdout
+
+def wait_for_api(process, config, listen):
+    # Credentials are written before the listener starts. Their existence is
+    # not readiness: a fast CI client can otherwise get connection refused.
+    # Retry only this read-only startup probe, never a workflow action. Use the
+    # actual CA and a protected endpoint so public /readyz alone is insufficient.
+    deadline=time.monotonic()+8
+    last_error=None
+    while time.monotonic()<deadline:
+        assert process.poll() is None, 'test API exited before becoming ready; inspect server.log'
+        try:
+            context=ssl.create_default_context(cafile=str(config/'ca.crt'))
+            opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPSHandler(context=context))
+            request=urllib.request.Request('https://'+listen+'/apis/apps/v1/namespaces/default/deployments',
+                headers={'Authorization':'Bearer '+(config/'admin.token').read_text().strip()})
+            with opener.open(request,timeout=.5) as response:
+                assert response.status==200 and json.load(response)['kind']=='DeploymentList'
+            return
+        except urllib.error.HTTPError:
+            raise # Authentication/API errors are real failures, not startup waits.
+        except (OSError,urllib.error.URLError) as error:
+            last_error=error
+            time.sleep(.1)
+    raise RuntimeError('test API did not become ready within 8 seconds') from last_error
+
 server=subprocess.Popen([SW,'server','--runtime=none','--listen='+listen,'--config-dir='+str(config),'--data-dir='+str(root/'data')],stdout=subprocess.DEVNULL,stderr=(root/'server.log').open('w'))
 class MCP:
     def __init__(self,write=True):
@@ -31,9 +56,7 @@ class MCP:
         return json.loads(self.p.stdout.readline())['result']
     def call(self,action,**kwargs):return self.rpc('tools/call',dict(name='sw_workflow',arguments=dict(action=action,**kwargs)))
 try:
-    for _ in range(80):
-        if (config/'admin.token').exists():break
-        assert server.poll() is None;time.sleep(.1)
+    wait_for_api(server,config,listen)
     connection=json.loads(cli('connect','--workflow='+str(work),'--config-dir='+str(config),'--listen='+listen,'--name=web','--image=nginx:alpine','--expect-body=welcome'))
     check('connect emits usable fixed MCP config',connection['connected'] and connection['mcpServers']['shearwater']['args']==['mcp','--workflow='+str(work),'--allow-write'])
     artifact=root/'release-image.json';artifact.write_text(json.dumps({'image':'nginx:1.28'}))
