@@ -32,7 +32,7 @@ package protobuf
 // Field numbers, copied by hand from the generated.proto files of the
 // Kubernetes v1.36.6 tag (staging/src/k8s.io/...):
 //
-//	api/core/v1/generated.proto                    Pod, PodSpec, Container, Volume, Service, Namespace, ...
+//	api/core/v1/generated.proto                    Pod, PodSpec, Container, Volume, Service, Namespace, Secret, ...
 //	api/apps/v1/generated.proto                    Deployment, DeploymentSpec, DeploymentStrategy, ...
 //	apimachinery/pkg/apis/meta/v1/generated.proto  ObjectMeta, OwnerReference, LabelSelector, Time
 //	apimachinery/pkg/runtime/generated.proto       Unknown, TypeMeta (the envelope, in protobuf.go)
@@ -55,6 +55,7 @@ const (
 	tMsg
 	tInline   // a message whose members belong to the enclosing JSON object
 	tStrMap   // map<string, string>
+	tBytesMap // map<string, bytes>, written to JSON as base64 like Go's []byte
 	tQtyMap   // map<string, Quantity>
 	tTime     // meta/v1 Time
 	tIntOrStr // intstr.IntOrString
@@ -96,6 +97,8 @@ func nonePtr(name string) field            { return field{name: name, kind: tMsg
 func nones(name string) field              { return field{name: name, kind: tMsg, rep: true} }
 func strMap(name string) field             { return field{name: name, kind: tStrMap} }
 func qtyMap(name string) field             { return field{name: name, kind: tQtyMap} }
+func bytesMap(name string) field           { return field{name: name, kind: tBytesMap} }
+func inline(name string, m *message) field { return field{name: name, kind: tInline, msg: m} }
 func status() field                        { return field{name: "status", kind: tSkip} }
 
 // roots are the bodies read at all, keyed by "apiVersion kind" from the envelope.
@@ -103,6 +106,7 @@ var roots = map[string]*message{
 	"v1 Pod":             pod,
 	"v1 Service":         service,
 	"v1 Namespace":       namespace,
+	"v1 Secret":          secret,
 	"apps/v1 Deployment": deployment,
 }
 
@@ -153,7 +157,7 @@ var podSpec = &message{"PodSpec", map[int]field{
 
 var container = &message{"Container", map[int]field{
 	1: str("name"), 2: str("image"), 3: strs("command"), 4: strs("args"), 5: str("workingDir"),
-	6: msgs("ports", containerPort), 19: nones("envFrom"), 7: msgs("env", envVar), 8: msg("resources", resourceRequirements),
+	6: msgs("ports", containerPort), 19: msgs("envFrom", envFromSource), 7: msgs("env", envVar), 8: msg("resources", resourceRequirements),
 	23: nones("resizePolicy"), 24: strPtr("restartPolicy"), 25: nones("restartPolicyRules"),
 	9: msgs("volumeMounts", volumeMount), 21: nones("volumeDevices"),
 	10: nonePtr("livenessProbe"), 11: nonePtr("readinessProbe"), 22: nonePtr("startupProbe"), 12: nonePtr("lifecycle"),
@@ -165,7 +169,31 @@ var containerPort = &message{"ContainerPort", map[int]field{
 	1: str("name"), 2: integer("hostPort"), 3: integer("containerPort"), 4: str("protocol"), 5: str("hostIP"),
 }}
 
-var envVar = &message{"EnvVar", map[int]field{1: str("name"), 2: str("value"), 3: nonePtr("valueFrom")}}
+var envVar = &message{"EnvVar", map[int]field{1: str("name"), 2: str("value"), 3: msgPtr("valueFrom", envVarSource)}}
+
+// Only the Secret sources are read; the others are refused as before.
+var envVarSource = &message{"EnvVarSource", map[int]field{
+	1: nonePtr("fieldRef"), 2: nonePtr("resourceFieldRef"), 3: nonePtr("configMapKeyRef"),
+	4: msgPtr("secretKeyRef", secretKeySelector), 5: nonePtr("fileKeyRef"),
+}}
+
+var secretKeySelector = &message{"SecretKeySelector", map[int]field{
+	1: inline("localObjectReference", localObjectReference), 2: str("key"), 3: boolPtr("optional"),
+}}
+
+var envFromSource = &message{"EnvFromSource", map[int]field{
+	1: str("prefix"), 2: nonePtr("configMapRef"), 3: msgPtr("secretRef", secretEnvSource),
+}}
+
+var secretEnvSource = &message{"SecretEnvSource", map[int]field{
+	1: inline("localObjectReference", localObjectReference), 2: boolPtr("optional"),
+}}
+
+var localObjectReference = &message{"LocalObjectReference", map[int]field{1: str("name")}}
+
+var secret = &message{"Secret", map[int]field{
+	1: msg("metadata", objectMeta), 2: bytesMap("data"), 3: str("type"), 4: strMap("stringData"), 5: boolPtr("immutable"),
+}}
 
 var resourceRequirements = &message{"ResourceRequirements", map[int]field{
 	1: qtyMap("limits"), 2: qtyMap("requests"), 3: nones("claims"),

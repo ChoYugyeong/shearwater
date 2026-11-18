@@ -43,6 +43,7 @@ package protobuf
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -110,7 +111,7 @@ func Decode(body []byte) (apiVersion, kind string, js []byte, err error) {
 	}
 	root, ok := roots[apiVersion+" "+kind]
 	if !ok {
-		return apiVersion, kind, nil, fmt.Errorf("protobuf bodies are read for v1 Pod, Service, Namespace and apps/v1 Deployment only, not %s %s", apiVersion, kind)
+		return apiVersion, kind, nil, fmt.Errorf("protobuf bodies are read for v1 Pod, Service, Namespace, Secret and apps/v1 Deployment only, not %s %s", apiVersion, kind)
 	}
 	out := map[string]any{}
 	if err := decodeMessage(root, raw, out, 0); err != nil {
@@ -170,8 +171,8 @@ func decodeMessage(m *message, data []byte, out map[string]any, depth int) error
 					return fmt.Errorf("%s: not valid UTF-8", where)
 				}
 				v, zero = string(p), len(p) == 0
-			case tStrMap, tQtyMap:
-				k, val, err := mapEntry(p, f.kind == tQtyMap)
+			case tStrMap, tQtyMap, tBytesMap:
+				k, val, err := mapEntry(p, f.kind)
 				if err != nil {
 					return fmt.Errorf("%s: %v", where, err)
 				}
@@ -233,7 +234,7 @@ func decodeMessage(m *message, data []byte, out map[string]any, depth int) error
 }
 
 // mapEntry reads one map entry: key = 1, value = 2.
-func mapEntry(p []byte, quantityValue bool) (key string, value any, err error) {
+func mapEntry(p []byte, valueKind kind) (key string, value any, err error) {
 	r := reader{b: p}
 	value = ""
 	for !r.done() {
@@ -251,10 +252,12 @@ func mapEntry(p []byte, quantityValue bool) (key string, value any, err error) {
 		switch {
 		case num == 1:
 			key = string(b)
-		case quantityValue:
+		case valueKind == tQtyMap:
 			if value, err = quantity(b); err != nil {
 				return "", nil, err
 			}
+		case valueKind == tBytesMap:
+			value = base64.StdEncoding.EncodeToString(b)
 		default:
 			value = string(b)
 		}

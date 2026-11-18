@@ -322,3 +322,49 @@ func must[T any](v T, err error) T {
 	}
 	return v
 }
+
+// Secret bodies, as `kubectl create secret generic --from-literal` sends them.
+// Field numbers are from Kubernetes v1.36.6 core/v1 generated.proto.
+func TestSecretAndEnvSources(t *testing.T) {
+	entry := func(k string, v []byte) []byte { return cat(sfield(1, k), bfield(2, v)) }
+	body := envelope("v1", "Secret", cat(
+		bfield(1, cat(sfield(1, "db"), sfield(3, "shop"))),
+		bfield(2, entry("password", []byte("p@ss\x00word"))),
+		bfield(2, entry("empty", nil)),
+		sfield(3, "Opaque"),
+		bfield(4, cat(sfield(1, "user"), sfield(2, "app"))),
+		vfield(5, 1),
+	))
+	v := mustDecode(t, body)
+	if at(v, "data", "password") != "cEBzcwB3b3Jk" || at(v, "data", "empty") != "" || at(v, "stringData", "user") != "app" || at(v, "type") != "Opaque" || at(v, "immutable") != true {
+		t.Fatalf("secret decoded wrongly: %v", v)
+	}
+	out, unknown := decodeLikeTheServer(t, "Secret", must(json.Marshal(v)))
+	if len(unknown) > 0 || !strings.Contains(out, `"password":"cEBzcwB3b3Jk"`) {
+		t.Fatalf("server decode: %s %v", out, unknown)
+	}
+
+	// env[].valueFrom.secretKeyRef and envFrom[].secretRef inline the reference name.
+	ref := cat(bfield(1, sfield(1, "db")), sfield(2, "password"), vfield(3, 0))
+	env := bfield(7, cat(sfield(1, "DB_PASSWORD"), bfield(3, bfield(4, ref))))
+	from := bfield(19, cat(sfield(1, "APP_"), bfield(3, cat(bfield(1, sfield(1, "db")), vfield(2, 1)))))
+	v = mustDecode(t, podBody(bfield(2, cat(sfield(1, "c"), sfield(2, "img"), env, from))))
+	if !equalJSON(at(v, "spec", "containers", 0, "env", 0, "valueFrom"), `{"secretKeyRef":{"key":"password","name":"db","optional":false}}`) {
+		t.Errorf("secretKeyRef: %v", at(v, "spec", "containers", 0, "env", 0))
+	}
+	if !equalJSON(at(v, "spec", "containers", 0, "envFrom", 0), `{"prefix":"APP_","secretRef":{"name":"db","optional":true}}`) {
+		t.Errorf("envFrom: %v", at(v, "spec", "containers", 0, "envFrom"))
+	}
+
+	// The other sources stay refused.
+	for name, src := range map[string][]byte{"fieldRef": bfield(1, sfield(2, "metadata.name")), "configMapKeyRef": bfield(3, sfield(2, "k"))} {
+		body := podBody(bfield(2, cat(sfield(1, "c"), sfield(2, "img"), bfield(7, cat(sfield(1, "A"), bfield(3, src))))))
+		if _, _, _, err := protobuf.Decode(body); err == nil || !strings.Contains(err.Error(), "EnvVarSource."+name) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	cm := podBody(bfield(2, cat(sfield(1, "c"), sfield(2, "img"), bfield(19, bfield(2, bfield(1, sfield(1, "x")))))))
+	if _, _, _, err := protobuf.Decode(cm); err == nil || !strings.Contains(err.Error(), "EnvFromSource.configMapRef") {
+		t.Errorf("configMapRef: %v", err)
+	}
+}
