@@ -4,10 +4,10 @@
 `sw setup`이 일반 사용자 인증을 준비하고 `sw workflow mcp-config`가 Linux 또는 Windows의
 정확한 실행 인자를 만들어 줘. 아래는 공개 alpha.10까지도 사용할 수 있는 수동 연결 안내야.
 
-개발 소스에는 [앱별 제한 토큰으로 연결하는 MCP](agent-operations.md)가 추가됐어.
+alpha.12에는 [앱별 제한 토큰으로 연결하는 MCP](agent-operations.md)가 추가됐어.
 아래 기존 연결은 관리자 인증을 사용해. 도구 목록을 줄이는 것과 서버가 권한을 제한하는 것은
 다르며, 앱별 권한·승인·실행 기록을 서버에서 강제하려면 새 `sw task` 안내를 봐.
-공개 alpha.11 실행 파일에서는 새 명령을 사용할 수 없어.
+서버와 클라이언트 모두 alpha.12가 필요해. 기존 연결이 자동으로 제한 토큰으로 바뀌지는 않아.
 
 `sw mcp`는 표준 입력/출력(stdio)으로 MCP 메시지를 주고받아. 이 안내는 alpha.9 기준이야.
 네트워크에 별도 MCP 포트를 열지 않고, 기존 로컬 HTTPS API와 인증 파일을 사용해.
@@ -19,7 +19,7 @@ MCP SDK나 Kubernetes 모듈을 추가하지 않고 JSON-RPC 처리를 직접 �
 Shearwater 서버가 시작되는 것은 아니야. 설치 안내를 따랐다면 **Ubuntu Bash**에서:
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.11/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.12/sw"
 test -x "$sw" && "$sw" version
 sudo "$sw" status
 printf '%s\n' "$sw"
@@ -84,7 +84,7 @@ Claude Code 자체의 도구 사용 확인과 Shearwater의 배포 승인은 별
 {
   "command": "wsl.exe",
   "args": ["-d", "YOUR_WSL_DISTRO", "-u", "root", "--exec",
-           "/home/YOUR_LINUX_USER/.local/share/shearwater/v0.1.0-alpha.11/sw", "mcp"]
+           "/home/YOUR_LINUX_USER/.local/share/shearwater/v0.1.0-alpha.12/sw", "mcp"]
 }
 ```
 
@@ -196,7 +196,7 @@ Service의 생략된 ClusterIP는 기존 할당을 유지해. before/after를 �
 이름을 바꿀 때는 파일의 이름·라벨·selector와 아래 확인·정리 명령을 함께 바꿔야 해.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.11/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.12/sw"
 export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
 k() {

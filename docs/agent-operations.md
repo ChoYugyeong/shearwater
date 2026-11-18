@@ -1,7 +1,7 @@
 # 앱 하나의 운영을 AI에게 위임하기
 
-이 문서는 alpha.11 이후 개발 중인 서버 작업 기능을 설명해. alpha.11 공개 실행 파일에는
-`sw task`가 없어. 이 기능을 포함한 소스로 빌드한 서버와 클라이언트를 함께 사용해야 해.
+이 문서는 **alpha.12부터 제공하는** 서버 작업 기능을 설명해. alpha.11에는 `sw task`가 없어.
+[설치 안내](install.md)를 따라 서버와 클라이언트를 모두 alpha.12로 준비해야 해.
 구현은 [internal/operation](../internal/operation), 명령 연결은
 [cmd/sw/operation.go](../cmd/sw/operation.go)에 있어.
 

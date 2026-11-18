@@ -14,10 +14,10 @@
 `sw setup`으로 인증을 준비하고 MCP 설정을 내보내는 [간단한 시작 절차](docs/onboarding.md)를
 제공해. 설치 도우미와 처음 연결하는 순서, 실제 세 AI의 검증 결과를 함께 동봉했어.
 
-현재 개발 소스에는 [앱 하나의 운영을 AI에게 위임하는 기능](docs/agent-operations.md)을
+**alpha.12**에는 [앱 하나의 운영을 AI에게 위임하는 기능](docs/agent-operations.md)을
 추가했어. `sw task`로 앱별 권한·만료 시간을 서버에 고정하고, 정확히 승인한 계획의 적용
 기록을 보관해. 새 컨테이너와 내부 Service를 직접 검사한 근거로 완료를 판단하고,
-대화나 모델이 바뀌어도 같은 작업을 이어가. **공개 alpha.11에는 아직 없는 기능**이야.
+대화나 모델이 바뀌어도 같은 작업을 이어가. 서버와 클라이언트 모두 alpha.12가 필요해.
 [실제 세 모델 비교와 검증 범위](docs/agent-operations-verification.md)를 함께 봐.
 
 | 목적 | 먼저 검토할 선택 |
@@ -28,7 +28,7 @@
 
 alpha.8에는 [AI가 쓰기 쉬운 운영 인터페이스](docs/agent-interface.md)를 추가했어.
 짧은 상태 관찰, 이미지·복제본 변경 계획, 적용한 원래 대상의 결과 검증, Qwen 대화를 같은
-실행 함수에 연결했어. `sw version`이 **0.1.0-alpha.11**인지 확인하고 사용해.
+실행 함수에 연결했어. `sw version`이 **0.1.0-alpha.12**인지 확인하고 사용해.
 앱을 하나 골랐다면 [집중 모드](docs/focused-tools.md)로 대상과 작업을 고정하고,
 조회 도구 1개 또는 변경 계획 도구까지 2개만 AI에게 보여 줄 수 있어.
 
@@ -49,12 +49,12 @@ Shearwater is an experimental single-node container orchestrator for trying smal
 
 [첫 체험 안내](docs/first-try.md)가 시작점이야. 그 안에서 Go 없이 실행 파일을 설치하고
 첫 HTTP 응답까지 확인하는 순서로 이어져.
-현재 릴리스는 **v0.1.0-alpha.11**이며, `sw version`도 `0.1.0-alpha.11`을 표시해.
+현재 릴리스는 **v0.1.0-alpha.12**이며, `sw version`도 `0.1.0-alpha.12`을 표시해.
 [릴리스 변경 사항과 버전 검증 방법](docs/releases.md)도 확인할 수 있어.
 
-alpha.11은 연결한 앱의 배포·업데이트·진단·복구를 같은 작업 파일에서 이어가.
-Qwen 내장 대화와 외부 MCP를 제공해. 앱 실행 방식과 SQLite 스키마는 alpha.10과 같아.
-AI가 계획해도 적용에는 정확한 계획에 대한 사람의 로컬 승인이 필요해.
+alpha.12는 앱별 제한 토큰과 서버에 저장한 작업으로 배포·업데이트·진단·복구를 이어가.
+Qwen 내장 대화와 외부 MCP를 제공해. 최초 위임 API 요청 때 SQLite에 내부 작업 표 하나를
+추가하고 기존 앱 리소스는 유지해. AI가 계획해도 적용에는 별도 운영자의 정확한 승인이 필요해.
 
 alpha.6부터 Windows localhost 접속을 위한 선택적 TCP 중계와 로그인·WSL 재시작
 자동 복구 도구를 동봉해. [Windows 접속 문제 구분](docs/windows-localhost.md)과

@@ -29,7 +29,7 @@ import (
 // kubectl uses that prefix for compatibility checks. Our product version belongs
 // in build metadata; releasing Shearwater does not change the API level.
 const (
-	Version    = "0.1.0-alpha.11"
+	Version    = "0.1.0-alpha.12"
 	GitVersion = "v1.36.0+shearwater." + Version
 )
 
