@@ -156,8 +156,12 @@ func (e *Error) Error() string        { return e.Code + ": " + e.Message }
 func fail(code, message string) error { return &Error{code, message} }
 
 type Manager struct {
+	// Store holds the operation ledger. The engine backend also keeps the app
+	// objects there, so application and receipt commit together.
 	Store *store.Store
-	Now   func() time.Time
+	// Backend runs the bound app. Nil selects Shearwater's own engine.
+	Backend Backend
+	Now     func() time.Time
 	// Probe is injectable for deterministic tests. Production always uses the
 	// restricted direct-IP HTTP implementation, never an agent-supplied URL.
 	Probe func(context.Context, string, int32, Check) HTTPProof

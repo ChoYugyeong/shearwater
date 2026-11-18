@@ -3,14 +3,10 @@ package operation
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"slices"
 	"time"
 
 	"shearwater/internal/apis"
-	"shearwater/internal/objects"
 	"shearwater/internal/store"
 )
 
@@ -48,38 +44,17 @@ func (m *Manager) Create(spec Spec) (Result, string, error) {
 	token := "swop_" + randomID(32)
 	r := Record{ID: randomID(16), TokenHash: digest(token), Spec: spec, GoalChecks: spec.Checks}
 	err := m.Store.Write(false, func(tx *store.Tx) error {
-		if _, e := tx.Get(key("namespaces", "", spec.Namespace)); e != nil {
+		found, e := m.backend().Bind(tx, &r)
+		if e != nil {
 			return e
 		}
-		rec, e := tx.Get(key("deployments", spec.Namespace, spec.Name))
-		if e == nil {
-			var d apis.Deployment
-			if e = decode(rec, &d); e != nil {
-				return e
-			}
-			if e = eligible(d); e != nil {
-				return e
-			}
-			r.UID, r.Generation = d.Metadata.UID, d.Metadata.Generation
-			r.Route, e = discoverRoute(tx, r, d)
-			if e != nil {
-				return e
-			}
-			if spec.Image == "" {
-				r.Spec.Image = d.Spec.Template.Spec.Containers[0].Image
-			}
-		} else if errors.Is(e, store.ErrNotFound) {
+		if !found {
 			if !seen["deploy"] || !validImage(spec.Image) || spec.Port == 0 {
 				return fail("INVALID", "a missing app needs deploy permission, image and port")
 			}
-			if spec.Service != "" && spec.Service != spec.Name {
-				return fail("INVALID", "a new app uses a same-named Service")
+			if e = m.backend().Reserve(tx, r); e != nil {
+				return e
 			}
-			if _, e = tx.Get(key("services", spec.Namespace, spec.Name)); !errors.Is(e, store.ErrNotFound) {
-				return fail("CONFLICT", "new app Service name is already present or unreadable")
-			}
-		} else {
-			return e
 		}
 		if e = save(tx, r, true); e != nil {
 			return e
@@ -88,13 +63,6 @@ func (m *Manager) Create(spec Spec) (Result, string, error) {
 		return nil
 	})
 	return result, token, err
-}
-
-func eligible(d apis.Deployment) error {
-	if d.Metadata.DeletionTimestamp != nil || d.Spec.Paused || len(d.Spec.Template.Spec.Containers) != 1 || d.Spec.Replicas == nil || *d.Spec.Replicas < 1 || *d.Spec.Replicas > 16 {
-		return fail("UNSUPPORTED", "operations support an active one-container Deployment with 1..16 replicas")
-	}
-	return nil
 }
 
 // Renew rotates the secret, never the app identity or permitted actions. A new
@@ -335,23 +303,15 @@ func (m *Manager) plan(tx *store.Tx, r *Record, q Request) error {
 			return fail("CONFLICT", "initial image is already selected; omit image")
 		}
 		p.Image = r.Spec.Image
-		for _, resource := range []string{"deployments", "services"} {
-			if _, e := tx.Get(key(resource, r.Spec.Namespace, r.Spec.Name)); !errors.Is(e, store.ErrNotFound) {
-				return fail("STALE", "unselected object already occupies app or Service name")
-			}
+		if e := m.backend().Vacant(tx, *r); e != nil {
+			return e
 		}
 	} else {
-		d, _, e := current(tx, *r)
+		base, before, e := m.backend().Base(tx, *r)
 		if e != nil {
 			return e
 		}
-		if d.Metadata.Generation != r.Generation {
-			return fail("STALE", "app was changed outside this operation; operator must reconnect")
-		}
-		if _, e = checkRoute(tx, *r, d); e != nil {
-			return e
-		}
-		p.BaseSpec, p.BeforeImage = digest(d.Spec), d.Spec.Template.Spec.Containers[0].Image
+		p.BaseSpec, p.BeforeImage = base, before
 		p.Image = q.Image
 		if q.Action == "recover" {
 			if r.LastGood == nil {
@@ -386,21 +346,6 @@ func (m *Manager) plan(tx *store.Tx, r *Record, q Request) error {
 	return nil
 }
 
-func current(tx *store.Tx, r Record) (apis.Deployment, store.Record, error) {
-	var d apis.Deployment
-	rec, e := tx.Get(key("deployments", r.Spec.Namespace, r.Spec.Name))
-	if e != nil {
-		return d, rec, e
-	}
-	if e = decode(rec, &d); e != nil {
-		return d, rec, e
-	}
-	if r.UID == "" || d.Metadata.UID != r.UID {
-		return d, rec, fail("STALE", "selected app identity was removed or replaced")
-	}
-	return d, rec, eligible(d)
-}
-
 func (m *Manager) apply(tx *store.Tx, r *Record, hash string) error {
 	if !ValidHash(hash) {
 		return fail("INVALID", "continue needs the exact observed plan hash")
@@ -430,59 +375,8 @@ func (m *Manager) apply(tx *store.Tx, r *Record, hash string) error {
 	if p.BaseUID != r.UID || p.BaseGeneration != r.Generation || p.RouteHash != digest(r.Route) {
 		return fail("STALE", "operation target changed after planning")
 	}
-	var d apis.Deployment
-	res := apis.Lookup("apps", "v1", "deployments")
-	if p.Action == "deploy" {
-		for _, resource := range []string{"deployments", "services"} {
-			if _, e := tx.Get(key(resource, r.Spec.Namespace, r.Spec.Name)); !errors.Is(e, store.ErrNotFound) {
-				return fail("STALE", "app or Service appeared after approval")
-			}
-		}
-		d = newDeployment(*r, *p)
-		objects.Stamp(res, &d)
-		if e := res.Validate(&d); len(e) > 0 {
-			return fail("INVALID", fmt.Sprint(e))
-		}
-		if _, e := tx.Create(objects.Put(res, &d)); e != nil {
-			return e
-		}
-		r.UID, r.Generation = d.Metadata.UID, d.Metadata.Generation
-		route, e := createService(tx, *r, d)
-		if e != nil {
-			return e
-		}
-		r.Route = route
-	} else {
-		old, rec, e := current(tx, *r)
-		if e != nil {
-			return e
-		}
-		if old.Metadata.Generation != p.BaseGeneration || digest(old.Spec) != p.BaseSpec {
-			return fail("STALE", "app specification changed after plan approval")
-		}
-		if _, e = checkRoute(tx, *r, old); e != nil {
-			return e
-		}
-		b, _ := json.Marshal(old)
-		if e = json.Unmarshal(b, &d); e != nil {
-			return e
-		}
-		d.Spec.Template.Spec.Containers[0].Image = p.Image
-		if d.Spec.Template.Metadata.Annotations == nil {
-			d.Spec.Template.Metadata.Annotations = map[string]string{}
-		}
-		d.Spec.Template.Metadata.Annotations[Marker] = p.Hash
-		d.Metadata.Generation++
-		if errs := res.Validate(&d); len(errs) > 0 {
-			return fail("INVALID", fmt.Sprint(errs))
-		}
-		if errs := res.ValidateUpdate(&d, &old); len(errs) > 0 {
-			return fail("INVALID", fmt.Sprint(errs))
-		}
-		if _, _, e = tx.Update(objects.Put(res, &d), rec.Rev); e != nil {
-			return e
-		}
-		r.Generation = d.Metadata.Generation
+	if e := m.backend().Apply(tx, r, *p); e != nil {
+		return e
 	}
 	p.Applied, p.Generation = true, r.Generation
 	r.GoalChecks = p.Checks
@@ -490,11 +384,4 @@ func (m *Manager) apply(tx *store.Tx, r *Record, hash string) error {
 	r.StagedImage = ""
 	r.StagedChecks = nil
 	return nil
-}
-
-func newDeployment(r Record, p Plan) apis.Deployment {
-	n := int32(1)
-	labels := map[string]string{"app.kubernetes.io/name": r.Spec.Name, "shearwater.io/task": r.ID}
-	probe, _ := json.Marshal(map[string]any{"tcpSocket": map[string]any{"port": r.Spec.Port}})
-	return apis.Deployment{Metadata: apis.ObjectMeta{Name: r.Spec.Name, Namespace: r.Spec.Namespace}, Spec: apis.DeploymentSpec{Replicas: &n, Selector: &apis.LabelSelector{MatchLabels: labels}, Template: apis.PodTemplateSpec{Metadata: apis.ObjectMeta{Labels: labels, Annotations: map[string]string{Marker: p.Hash}}, Spec: apis.PodSpec{Containers: []apis.Container{{Name: "app", Image: p.Image, Ports: []apis.ContainerPort{{ContainerPort: r.Spec.Port}}, ReadinessProbe: probe}}}}}}
 }
