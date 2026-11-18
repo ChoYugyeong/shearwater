@@ -10,6 +10,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -255,6 +256,9 @@ func (s *Server) traced(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case len(body) == 0:
+	case secretPath(r.URL.Path):
+		// Secret values must not reach the development trace file.
+		entry["bodyRedacted"] = len(body)
 	case utf8.Valid(body) && !bytes.ContainsRune(body, 0):
 		entry["body"] = string(body)
 	default:
@@ -264,6 +268,11 @@ func (s *Server) traced(w http.ResponseWriter, r *http.Request) {
 	s.traceMu.Lock()
 	s.Trace.Write(append(line, '\n'))
 	s.traceMu.Unlock()
+}
+
+func secretPath(p string) bool {
+	segs := strings.Split(strings.Trim(p, "/"), "/")
+	return len(segs) >= 3 && segs[0] == "api" && slices.Contains(segs[2:], "secrets")
 }
 
 // Bootstrap creates the namespaces every cluster starts with. It writes
