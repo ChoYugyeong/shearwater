@@ -137,6 +137,10 @@ var tableColumns = map[string][]tableColumn{
 		col("Kernel-Version", "string", 1, "Kernel of the node"),
 		col("Container-Runtime", "string", 1, "Container runtime of the node")},
 	"Namespace": {nameCol, col("Status", "string", 0, "Phase of the namespace"), ageCol},
+	"Secret": {nameCol,
+		col("Type", "string", 0, "Type of the secret"),
+		col("Data", "integer", 0, "Number of keys; values are never shown in tables"),
+		ageCol},
 	"Event": {
 		col("Last Seen", "string", 0, "Time since the event last happened"),
 		col("Type", "string", 0, "Normal or Warning"),
@@ -373,6 +377,8 @@ func cells(obj apis.Object, now time.Time) []any {
 		return nodeCells(o, now)
 	case *apis.Namespace:
 		return []any{m.Name, o.Status.Phase, age}
+	case *apis.Secret:
+		return []any{m.Name, o.SecretType, len(o.Data), age}
 	case *apis.Event:
 		last := o.LastTimestamp
 		if last == nil {

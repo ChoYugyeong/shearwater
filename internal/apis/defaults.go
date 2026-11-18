@@ -89,3 +89,20 @@ func DefaultService(s *Service) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// DefaultSecret sets the type and merges the write-only stringData into data,
+// as the Kubernetes API server does; stringData is never stored or returned.
+func DefaultSecret(s *Secret) {
+	if s.SecretType == "" {
+		s.SecretType = SecretTypeOpaque
+	}
+	if len(s.StringData) > 0 {
+		if s.Data == nil {
+			s.Data = make(map[string][]byte, len(s.StringData))
+		}
+		for k, v := range s.StringData {
+			s.Data[k] = []byte(v)
+		}
+	}
+	s.StringData = nil
+}

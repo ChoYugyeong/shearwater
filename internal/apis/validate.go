@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"net/netip"
 	"slices"
@@ -197,16 +198,28 @@ func validatePodSpec(s *PodSpec, path string, errs *ErrorList) {
 		if !slices.Contains([]string{"Always", "IfNotPresent", "Never"}, c.ImagePullPolicy) {
 			errs.oneOf(f+".imagePullPolicy", c.ImagePullPolicy, "Always", "IfNotPresent", "Never")
 		}
-		if !rawEmpty(c.EnvFrom) {
-			errs.unsupported(f+".envFrom", "there are no ConfigMaps or Secrets; list the variables under env with literal values")
+		for j, s := range c.EnvFrom {
+			sf := fmt.Sprintf("%s.envFrom[%d]", f, j)
+			if !rawEmpty(s.ConfigMapRef) {
+				errs.unsupported(sf+".configMapRef", "there are no ConfigMaps; use secretRef or literal values under env")
+			}
+			switch {
+			case s.SecretRef == nil:
+				errs.required(sf + ".secretRef")
+			case !IsDNS1123Subdomain(s.SecretRef.Name):
+				errs.invalid(sf+".secretRef.name", s.SecretRef.Name, "must be "+nameSubdomain)
+			}
+			if strings.Contains(s.Prefix, "=") {
+				errs.invalid(sf+".prefix", s.Prefix, "must not contain '='")
+			}
 		}
 		for j, e := range c.Env {
 			ef := fmt.Sprintf("%s.env[%d]", f, j)
 			if e.Name == "" {
 				errs.required(ef + ".name")
 			}
-			if !rawEmpty(e.ValueFrom) {
-				errs.unsupported(ef+".valueFrom", "there are no ConfigMaps, Secrets or downward API; use a literal value")
+			if e.ValueFrom != nil {
+				validateEnvSource(ef+".valueFrom", e, errs)
 			}
 		}
 		for j, p := range c.Ports {
@@ -448,5 +461,90 @@ func ValidateServiceUpdate(s, old *Service) ErrorList {
 func ValidateNamespace(n *Namespace) ErrorList {
 	var errs ErrorList
 	validateMeta(&n.Metadata, IsDNS1123Label, nameLabel, &errs)
+	return errs
+}
+
+// validateEnvSource accepts exactly one secretKeyRef. Other Kubernetes
+// sources would need objects or a downward API that Shearwater does not have.
+func validateEnvSource(f string, e EnvVar, errs *ErrorList) {
+	s := e.ValueFrom
+	if e.Value != "" {
+		errs.invalid(f, "", "may not be specified when value is not empty")
+	}
+	for name, raw := range map[string]json.RawMessage{"fieldRef": s.FieldRef, "resourceFieldRef": s.ResourceFieldRef, "configMapKeyRef": s.ConfigMapKeyRef, "fileKeyRef": s.FileKeyRef} {
+		if !rawEmpty(raw) {
+			errs.unsupported(f+"."+name, "only secretKeyRef is implemented; there are no ConfigMaps or downward API")
+		}
+	}
+	ref := s.SecretKeyRef
+	if ref == nil {
+		errs.required(f + ".secretKeyRef")
+		return
+	}
+	if !IsDNS1123Subdomain(ref.Name) {
+		errs.invalid(f+".secretKeyRef.name", ref.Name, "must be "+nameSubdomain)
+	}
+	if !IsSecretKey(ref.Key) {
+		errs.invalid(f+".secretKeyRef.key", ref.Key, secretKeyRule)
+	}
+}
+
+const secretKeyRule = "must consist of alphanumeric characters, '-', '_' or '.', at most 253 characters, and not be '.' or '..'"
+
+// IsSecretKey is the Kubernetes rule for data keys (IsConfigMapKey).
+func IsSecretKey(k string) bool {
+	if k == "" || len(k) > 253 || k == "." || k == ".." {
+		return false
+	}
+	for _, r := range k {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.') {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidateSecret runs after DefaultSecret has merged stringData into data.
+func ValidateSecret(s *Secret) ErrorList {
+	var errs ErrorList
+	validateMeta(&s.Metadata, IsDNS1123Subdomain, nameSubdomain, &errs)
+	size := 0
+	for k, v := range s.Data {
+		if !IsSecretKey(k) {
+			errs.invalid("data", k, secretKeyRule)
+		}
+		size += len(v)
+	}
+	if size > MaxSecretSize {
+		errs.invalid("data", size, fmt.Sprintf("total size must be at most %d bytes", MaxSecretSize))
+	}
+	switch {
+	case s.SecretType == "":
+		errs.required("type")
+	case len(s.SecretType) > 253 || strings.ContainsAny(s.SecretType, " \t\r\n"):
+		errs.invalid("type", s.SecretType, "must be at most 253 characters without whitespace")
+	case s.SecretType == SecretTypeTLS:
+		for _, k := range []string{"tls.crt", "tls.key"} {
+			if _, ok := s.Data[k]; !ok {
+				errs.required("data[" + k + "]")
+			}
+		}
+	}
+	return errs
+}
+
+func ValidateSecretUpdate(s, old *Secret) ErrorList {
+	errs := ValidateSecret(s)
+	if s.SecretType != old.SecretType {
+		errs.forbidden("type", "field is immutable")
+	}
+	if old.Immutable != nil && *old.Immutable {
+		if s.Immutable == nil || !*s.Immutable {
+			errs.forbidden("immutable", "field is immutable when `immutable` is set")
+		}
+		if !maps.EqualFunc(s.Data, old.Data, bytes.Equal) {
+			errs.forbidden("data", "field is immutable when `immutable` is set")
+		}
+	}
 	return errs
 }

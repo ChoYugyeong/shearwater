@@ -88,6 +88,14 @@ var Resources = []*Resource{
 		ValidateUpdate: func(o, old Object) ErrorList { return ValidateServiceUpdate(o.(*Service), old.(*Service)) },
 	},
 	{
+		Version: "v1", Plural: "secrets", Singular: "secret", Kind: "Secret",
+		Namespaced: true, Create: true, Update: true, Delete: true,
+		New:            func() Object { return &Secret{} },
+		Default:        func(o Object) { DefaultSecret(o.(*Secret)) },
+		Validate:       func(o Object) ErrorList { return ValidateSecret(o.(*Secret)) },
+		ValidateUpdate: func(o, old Object) ErrorList { return ValidateSecretUpdate(o.(*Secret), old.(*Secret)) },
+	},
+	{
 		Version: "v1", Plural: "events", Singular: "event", Kind: "Event", ShortNames: []string{"ev"},
 		Namespaced: true,
 		Fields: []string{"involvedObject.kind", "involvedObject.namespace", "involvedObject.name", "involvedObject.uid",

@@ -57,8 +57,8 @@ type Container struct {
 	StartupProbe    json.RawMessage `json:"startupProbe,omitempty"`
 	SecurityContext json.RawMessage `json:"securityContext,omitempty"` // stored only
 
-	// rejected when set
-	EnvFrom json.RawMessage `json:"envFrom,omitempty"`
+	// Only secretRef sources are implemented; configMapRef is rejected.
+	EnvFrom []EnvFromSource `json:"envFrom,omitempty"`
 }
 
 type ContainerPort struct {
@@ -68,9 +68,37 @@ type ContainerPort struct {
 }
 
 type EnvVar struct {
-	Name      string          `json:"name"`
-	Value     string          `json:"value,omitempty"`
-	ValueFrom json.RawMessage `json:"valueFrom,omitempty"` // rejected when set
+	Name      string        `json:"name"`
+	Value     string        `json:"value,omitempty"`
+	ValueFrom *EnvVarSource `json:"valueFrom,omitempty"`
+}
+
+// EnvVarSource reads a variable from a Secret key. The other Kubernetes
+// sources are kept as raw JSON only so validation can name them as unsupported.
+type EnvVarSource struct {
+	SecretKeyRef     *SecretKeySelector `json:"secretKeyRef,omitempty"`
+	FieldRef         json.RawMessage    `json:"fieldRef,omitempty"`         // rejected
+	ResourceFieldRef json.RawMessage    `json:"resourceFieldRef,omitempty"` // rejected
+	ConfigMapKeyRef  json.RawMessage    `json:"configMapKeyRef,omitempty"`  // rejected
+	FileKeyRef       json.RawMessage    `json:"fileKeyRef,omitempty"`       // rejected
+}
+
+type SecretKeySelector struct {
+	Name     string `json:"name"`
+	Key      string `json:"key"`
+	Optional *bool  `json:"optional,omitempty"`
+}
+
+// EnvFromSource turns every key of a Secret into a variable.
+type EnvFromSource struct {
+	Prefix       string           `json:"prefix,omitempty"`
+	SecretRef    *SecretEnvSource `json:"secretRef,omitempty"`
+	ConfigMapRef json.RawMessage  `json:"configMapRef,omitempty"` // rejected
+}
+
+type SecretEnvSource struct {
+	Name     string `json:"name"`
+	Optional *bool  `json:"optional,omitempty"`
 }
 
 type ResourceRequirements struct {
@@ -272,6 +300,29 @@ type ServicePort struct {
 type ServiceStatus struct {
 	LoadBalancer json.RawMessage `json:"loadBalancer,omitempty"`
 }
+
+// ---- Secret ----
+
+// Secret holds small values for containers. Like Kubernetes without an
+// encryption provider, the values are stored base64-encoded, not encrypted:
+// the database must stay readable by root only.
+type Secret struct {
+	TypeMeta
+	Metadata   ObjectMeta        `json:"metadata"`
+	SecretType string            `json:"type,omitempty"` // Go name avoids the Object.Type method
+	Data       map[string][]byte `json:"data,omitempty"`
+	StringData map[string]string `json:"stringData,omitempty"` // write-only: merged into data
+	Immutable  *bool             `json:"immutable,omitempty"`
+}
+
+func (o *Secret) Meta() *ObjectMeta { return &o.Metadata }
+
+const (
+	SecretTypeOpaque = "Opaque"
+	SecretTypeTLS    = "kubernetes.io/tls"
+	// MaxSecretSize is the Kubernetes limit for the decoded data of a Secret.
+	MaxSecretSize = 1 << 20
+)
 
 // ---- Namespace ----
 
