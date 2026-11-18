@@ -3,8 +3,11 @@ package operation
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"slices"
+	"strings"
 	"time"
+	"unicode"
 
 	"shearwater/internal/apis"
 	"shearwater/internal/store"
@@ -121,11 +124,19 @@ func summary(r Record) Result {
 				result.Handoff = ""
 				result.Next = "continue the exact approved plan; do not create another plan"
 			}
+			if p.Failure != "" {
+				result.Facts = append(result.Facts, "execution of the approved plan did not finish: "+p.Failure)
+				result.Next = "continue retries this same plan without applying it twice; diagnose first if the failure repeats; the operator may discard it"
+			}
 			break
 		}
 	} else if len(r.Plans) > 0 {
 		p := r.Plans[len(r.Plans)-1]
 		result.Applied = p.Applied
+		if p.Failed {
+			result.Facts = append(result.Facts, "the last plan failed without changing the app: "+p.Failure)
+			result.Next = "diagnose; the failed plan cannot be continued, so make a new plan if a change is still wanted"
+		}
 	}
 	if r.Revoked {
 		result.State = "revoked"
@@ -149,6 +160,10 @@ func (m *Manager) Act(ctx context.Context, id, token string, admin bool, q Reque
 	}
 	if q.Action == "verify" {
 		return m.verify(ctx, id, token, admin)
+	}
+	if x, ok := m.backend().(Executor); ok && q.Action == "continue" {
+		result, err := m.continueExternal(ctx, x, id, token, admin, q)
+		return m.verifyApplied(ctx, id, token, admin, result, err)
 	}
 	err := m.Store.Write(false, func(tx *store.Tx) error {
 		r, e := load(tx, id)
@@ -201,6 +216,9 @@ func (m *Manager) Act(ctx context.Context, id, token string, admin bool, q Reque
 			if p.Hash != q.Plan || p.Applied {
 				return fail("CONFLICT", "pending plan mismatch")
 			}
+			if q.Action == "discard" && p.Started != nil && p.Failure == "" {
+				return fail("CONFLICT", "execution of this plan started; continue it to record the result")
+			}
 			if q.Action == "approve" {
 				if !m.now().Before(p.Expires) {
 					return fail("EXPIRED", "plan expired; discard and prepare a new one")
@@ -234,27 +252,43 @@ func (m *Manager) Act(ctx context.Context, id, token string, admin bool, q Reque
 		}
 		result = summary(r)
 		if q.Action == "continue" {
-			for _, p := range r.Plans {
-				if p.Hash == q.Plan {
-					result.Plan = p.Hash
-					result.Applied = p.Applied
-					result.Approved = p.Approved
-					result.Generation = p.Generation
-					break
-				}
-			}
-			if result.Generation != r.Generation || r.Pending != "" {
-				result.State = "superseded"
-				result.Review = nil
-				result.Next = "this plan already applied; read status for later work; do not repeat it"
-			}
+			result = continued(r, q.Plan)
 		}
 		return nil
 	})
-	// Runtime startup/readiness is deliberately outside the SQL transaction.
-	// Replaying the same plan commits no additional app update, then observes
-	// that plan's goal. A later pending plan cannot be substituted for it.
-	if err == nil && q.Action == "continue" && result.Applied && result.State != "superseded" && result.Review == nil {
+	if q.Action == "continue" {
+		return m.verifyApplied(ctx, id, token, admin, result, err)
+	}
+	return result, err
+}
+
+// continued describes the plan a continue request named, not merely the
+// latest record state. A later plan or generation marks it superseded.
+func continued(r Record, hash string) Result {
+	result := summary(r)
+	for _, p := range r.Plans {
+		if p.Hash == hash {
+			result.Plan = p.Hash
+			result.Applied = p.Applied
+			result.Approved = p.Approved
+			result.Generation = p.Generation
+			break
+		}
+	}
+	if result.Generation != r.Generation || r.Pending != "" {
+		result.State = "superseded"
+		result.Review = nil
+		result.Next = "this plan already applied; read status for later work; do not repeat it"
+	}
+	return result
+}
+
+// verifyApplied observes an applied plan's goal. Runtime startup/readiness is
+// deliberately outside the SQL transaction. Replaying the same plan commits no
+// additional app update, then observes that plan's goal. A later pending plan
+// cannot be substituted for it.
+func (m *Manager) verifyApplied(ctx context.Context, id, token string, admin bool, result Result, err error) (Result, error) {
+	if err == nil && result.Applied && result.State != "superseded" && result.Review == nil {
 		v, e := m.verify(ctx, id, token, admin)
 		if e == nil {
 			v = ContinuationResult(result, v)
@@ -262,6 +296,105 @@ func (m *Manager) Act(ctx context.Context, id, token string, admin bool, q Reque
 		return v, e
 	}
 	return result, err
+}
+
+// continueExternal executes an approved plan through an Executor in three
+// steps: record that execution started, run the backend without holding the
+// database, then record the receipt. A crash between the steps leaves a started
+// plan that the next continue resumes; the backend's plan-hash marker keeps it
+// from being applied twice.
+func (m *Manager) continueExternal(ctx context.Context, x Executor, id, token string, admin bool, q Request) (Result, error) {
+	var result Result
+	var run *Plan
+	var bound Record
+	err := m.Store.Write(false, func(tx *store.Tx) error {
+		r, e := load(tx, id)
+		if e != nil {
+			return e
+		}
+		if e = m.authorize(r, token, admin); e != nil {
+			return e
+		}
+		p, e := m.admit(&r, q.Plan, true)
+		if e != nil {
+			return e
+		}
+		if p == nil {
+			result = continued(r, q.Plan)
+			return nil
+		}
+		if p.Started == nil {
+			at := m.now()
+			p.Started = &at
+		}
+		p.Failure = ""
+		if e = save(tx, r, false); e != nil {
+			return e
+		}
+		copy := *p
+		run, bound = &copy, r
+		return nil
+	})
+	if err != nil || run == nil {
+		return result, err
+	}
+	target, failure := x.Execute(ctx, bound, *run)
+	err = m.Store.Write(false, func(tx *store.Tx) error {
+		r, e := load(tx, id)
+		if e != nil {
+			return e
+		}
+		var p *Plan
+		for i := range r.Plans {
+			if r.Plans[i].Hash == run.Hash {
+				p = &r.Plans[i]
+			}
+		}
+		if p == nil || r.Pending != run.Hash && !p.Applied {
+			return fail("STALE", "plan record changed during execution")
+		}
+		if !p.Applied {
+			var u unchanged
+			switch {
+			case failure == nil:
+				r.UID, r.Generation, r.Route = target.UID, target.Generation, target.Route
+				m.settle(&r, p)
+			case errors.As(failure, &u):
+				p.Failure, p.Failed = bounded(failure.Error()), true
+				r.Pending = ""
+			default:
+				p.Failure = bounded(failure.Error())
+			}
+			if e = save(tx, r, false); e != nil {
+				return e
+			}
+		}
+		result = continued(r, run.Hash)
+		return nil
+	})
+	if failure != nil {
+		var u unchanged
+		if errors.As(failure, &u) {
+			return result, fail("EXECUTION_FAILED", "the app was left unchanged and this plan is closed: "+bounded(failure.Error()))
+		}
+		return result, fail("EXECUTION_FAILED", "execution did not finish; continue retries the same plan, or the operator may discard it: "+bounded(failure.Error()))
+	}
+	return result, err
+}
+
+// bounded keeps execution errors short and printable before they are stored
+// or returned to a model.
+func bounded(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, strings.TrimSpace(s))
+	if len(s) > 400 {
+		s = s[:400] + "..."
+	}
+	return s
 }
 
 // ContinuationResult keeps an applied receipt attached to matching observations.
@@ -347,8 +480,23 @@ func (m *Manager) plan(tx *store.Tx, r *Record, q Request) error {
 }
 
 func (m *Manager) apply(tx *store.Tx, r *Record, hash string) error {
+	p, e := m.admit(r, hash, false)
+	if e != nil || p == nil {
+		return e // a nil plan was already applied: the transaction is the receipt
+	}
+	if e = m.backend().Apply(tx, r, *p); e != nil {
+		return e
+	}
+	m.settle(r, p)
+	return nil
+}
+
+// admit returns the approved pending plan a continue request may execute, or
+// nil when that plan was already applied. With resume, a plan whose external
+// execution already started is returned even after expiry so it can finish.
+func (m *Manager) admit(r *Record, hash string, resume bool) (*Plan, error) {
 	if !ValidHash(hash) {
-		return fail("INVALID", "continue needs the exact observed plan hash")
+		return nil, fail("INVALID", "continue needs the exact observed plan hash")
 	}
 	var p *Plan
 	for i := range r.Plans {
@@ -358,30 +506,37 @@ func (m *Manager) apply(tx *store.Tx, r *Record, hash string) error {
 		}
 	}
 	if p == nil {
-		return fail("FORBIDDEN", "plan does not belong to this operation")
+		return nil, fail("FORBIDDEN", "plan does not belong to this operation")
 	}
 	if !slices.Contains(r.Spec.Allow, p.Action) {
-		return fail("FORBIDDEN", "plan action is not delegated")
+		return nil, fail("FORBIDDEN", "plan action is not delegated")
 	}
 	if p.Applied {
-		return nil
-	} // the database transaction is the execution receipt
+		return nil, nil
+	}
+	if p.Failed {
+		return nil, fail("EXECUTION_FAILED", "this plan failed without changing the app; make a new plan")
+	}
 	if r.Pending != hash || !p.Approved || p.Discarded {
-		return fail("APPROVAL_REQUIRED", "the operator must approve this exact pending plan")
+		return nil, fail("APPROVAL_REQUIRED", "the operator must approve this exact pending plan")
+	}
+	if resume && p.Started != nil {
+		return p, nil
 	}
 	if !m.now().Before(p.Expires) {
-		return fail("EXPIRED", "plan expired; do not replay it")
+		return nil, fail("EXPIRED", "plan expired; do not replay it")
 	}
 	if p.BaseUID != r.UID || p.BaseGeneration != r.Generation || p.RouteHash != digest(r.Route) {
-		return fail("STALE", "operation target changed after planning")
+		return nil, fail("STALE", "operation target changed after planning")
 	}
-	if e := m.backend().Apply(tx, r, *p); e != nil {
-		return e
-	}
+	return p, nil
+}
+
+// settle records an applied plan as the operation's new goal.
+func (m *Manager) settle(r *Record, p *Plan) {
 	p.Applied, p.Generation = true, r.Generation
 	r.GoalChecks = p.Checks
 	r.Pending = ""
 	r.StagedImage = ""
 	r.StagedChecks = nil
-	return nil
 }

@@ -1,6 +1,7 @@
 package operation
 
 import (
+	"context"
 	"net/netip"
 
 	"shearwater/internal/store"
@@ -63,6 +64,33 @@ type Observation struct {
 	FrontPort   int32
 	Fingerprint string
 }
+
+// Executor is implemented by a backend whose changes happen outside the
+// ledger database, such as docker compose. The Manager records that execution
+// started, releases the database, calls Execute, and records the receipt in a
+// second transaction. Execute must be idempotent for one plan hash: when the
+// app already carries that plan it reports the target without changing it
+// again. A backend that implements Executor is never asked to Apply.
+type Executor interface {
+	Execute(ctx context.Context, r Record, p Plan) (Target, error)
+}
+
+// Target is the app identity and goal after a plan was executed.
+type Target struct {
+	UID        string
+	Generation int64
+	Route      *Route
+}
+
+type unchanged struct{ err error }
+
+func (u unchanged) Error() string { return u.err.Error() }
+func (u unchanged) Unwrap() error { return u.err }
+
+// Unchanged marks an execution error after which the backend confirmed that
+// the app was not modified, for example when a new image could not be pulled.
+// The plan is then closed as failed instead of waiting for a retry.
+func Unchanged(err error) error { return unchanged{err} }
 
 func (m *Manager) backend() Backend {
 	if m.Backend != nil {

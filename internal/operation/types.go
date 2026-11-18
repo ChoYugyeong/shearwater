@@ -69,6 +69,14 @@ type Plan struct {
 	Applied        bool      `json:"applied"`
 	Discarded      bool      `json:"discarded,omitempty"`
 	Generation     int64     `json:"generation,omitempty"`
+	// Started marks an approved plan whose execution began outside the ledger
+	// database. It may be resumed after expiry: the backend applies one plan
+	// hash at most once. Failure is the last bounded execution error. Failed
+	// means the backend confirmed the app was left unchanged, so the plan is
+	// closed without being applied and a new plan may be made.
+	Started *time.Time `json:"started,omitempty"`
+	Failure string     `json:"failure,omitempty"`
+	Failed  bool       `json:"failed,omitempty"`
 }
 
 type Proof struct {
