@@ -1,36 +1,38 @@
 # Shearwater
 
+**English** · [한국어](README.ko.md)
+
 *Human-approved updates for single-node containers.*
 
-**“웹 앱을 새 이미지로 바꾸고, 새 버전이 실제로 응답하는지 확인해 줘.”**
+> “Update my web app to the new image and check that it serves the new version.”
 
-Shearwater는 Linux 서버 한 대에서 작은 웹 앱을 운영하는 오픈소스 도구예요. AI가 변경을 제안하면 사람이 대상과 내용을 보고 그 계획 하나만 승인해요. 대화나 서버가 중간에 끊겨도 같은 작업을 이어가고, 새 앱 사본(Pod)과 내부 접속 주소(Service)에 HTTP 요청을 보내 결과를 확인해요.
+Shearwater lets an AI agent operate a small web app on one Linux server. The agent proposes a change to a specific app. You review and approve that plan. If the conversation ends or the server restarts, the agent can resume the same operation and check the HTTP response from every new replica (Pod) and the app’s internal address (Service).
 
-[처음 시작하기](#처음-시작하기) · [앱 하나를 AI에게 맡기기](#앱-하나를-ai에게-맡기기) · [측정 결과](#측정-결과)
+[Quick start](#quick-start) · [Delegate an app](#delegate-an-app) · [Benchmarks](#benchmarks)
 
 <p align="center">
-  <img src="docs/media/approved-update.gif" width="576" alt="실제 업데이트 기록 재생. 승인 대기, 승인 후 미적용, 새 배포 요청 거절, 원래 계획의 HTTP 검증 통과 순서예요.">
+  <img src="docs/media/approved-update-en.gif" width="576" alt="An agent proposes an update. The approved plan waits to run, a second deployment is rejected, and the original update passes its HTTP check.">
 </p>
 
-**기록 재생** · alpha.12 개발 중 Qwen과 nginx로 진행한 시험의 MCP 요청·응답을 발췌했어요. 이 시험에서는 운영자 역할의 검사 프로그램이 계획을 확인하고 승인했어요. [시험 조건과 결과](docs/agent-operations-verification.md)
+This replay shows the Model Context Protocol (MCP) messages from a Qwen test with nginx during alpha.12 development. A test program played the operator’s role and approved the plan. The detailed guides linked below are in Korean. [Test setup and results](docs/agent-operations-verification.md)
 
 <details>
-<summary>네 장면을 글로 읽기</summary>
+<summary>Read the four steps as text</summary>
 
-1. AI가 `update`를 요청하자 `awaiting_approval`이 돌아왔어요. `approved`와 `applied`는 모두 `false`였어요.
-2. 같은 계획을 승인한 뒤 `verify`로 읽은 상태는 `approved_pending`이었어요. `approved`는 `true`, `applied`는 아직 `false`였어요.
-3. 그 사이 AI가 새 `deploy`를 요청했어요. 실행을 기다리는 계획이 있어서 서버가 `409 OperationRejected`로 거절했고, 상태는 `Failure`였어요.
-4. `continue`로 원래 계획을 이어간 결과는 `healthy`였어요. 검사한 새 Pod 수(`verifiedPods`)는 1이었고, 내부 Service까지 검사한 결과(`http.state`)는 `passed`였어요.
+1. The agent requests `update`. The server returns `awaiting_approval`, with both `approved` and `applied` set to `false`.
+2. After approval, `verify` reports `approved_pending`. The plan is approved and still waiting to run.
+3. The agent requests another `deploy`. The server returns HTTP `409` with reason `OperationRejected` because the first plan is pending.
+4. The agent calls `continue` on the original plan. The operation reports `healthy`. One new Pod was checked (`verifiedPods: 1`) and HTTP verification passed for the Pod and its internal Service (`http.state: passed`).
 
 </details>
 
-## 처음 시작하기
+## Quick start
 
-WSL 2의 Ubuntu 24.04(amd64)에서 체험할 수 있어요. 컨테이너를 실행할 containerd·runc, 네트워크 도구와 관리자 권한이 필요해요. [설치 준비물](docs/install.md)
+The release below runs on Linux amd64. The installation guide walks through Ubuntu 24.04 on WSL 2. Running containers requires containerd, runc, networking tools and administrator access on the host. [Installation prerequisites](docs/install.md)
 
-**v0.1.0-alpha.13 다운로드** · [설치기](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/install.py) · [Linux amd64 압축 파일](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/shearwater-v0.1.0-alpha.13-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/SHA256SUMS)
+**Download v0.1.0-alpha.13** · [Installer](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/install.py) · [Linux amd64 archive](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/shearwater-v0.1.0-alpha.13-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/SHA256SUMS)
 
-Ubuntu Bash에서 아래 명령을 실행하세요. 빈 임시 폴더에 설치기를 받아 체크섬을 검사해요. 설치기는 압축 파일과 그 안의 `sw`도 검증한 뒤 버전별 폴더에 설치해요.
+Run this in Ubuntu Bash. It downloads the installer to an empty temporary directory and verifies its checksum. The installer checks the archive and the `sw` executable and installs this version in its own directory.
 
 ```bash
 (
@@ -47,39 +49,39 @@ Ubuntu Bash에서 아래 명령을 실행하세요. 빈 임시 폴더에 설치�
 )
 ```
 
-버전 출력에서 `0.1.0-alpha.13`을 확인하세요. 첫 앱은 `sw setup`으로 인증을 준비한 뒤 예제 nginx의 첫 HTTP 응답까지 따라가면 돼요. [인증 준비](docs/onboarding.md) · [첫 웹 앱 띄우기](docs/first-try.md)
+The output should start with `sw 0.1.0-alpha.13`. Next, use `sw setup` to prepare credentials and follow the first-app guide to get an HTTP response from the example nginx app. [Set up credentials](docs/onboarding.md) · [Run your first web app](docs/first-try.md)
 
-소스에서 빌드하려면 저장소 루트에서 `. hack/env.sh` 다음 `bash hack/build.sh`를 실행하세요. [개발 환경과 빌드 안내](docs/quickstart.md)
+To build from source, run `. hack/env.sh` and then `bash hack/build.sh` from the repository root. [Build guide](docs/quickstart.md)
 
-## 앱 하나를 AI에게 맡기기
+## Delegate an app
 
-1. **앱과 권한을 정해요.** 운영자가 `sw task create`로 앱 하나, 허용할 동작, 만료 시간을 정해요. AI에는 그 작업의 `work.json`을 연결해요. 외부 AI의 MCP나 내장 Qwen 대화를 쓸 수 있어요.
-2. **정확한 계획을 승인해요.** 운영자 터미널의 `sw task review`에서 대상, 변경 전후 이미지, 검사 조건을 읽어요. `sw task approve`에 그 계획의 해시를 지정해야 AI가 적용할 수 있어요.
-3. **결과를 확인하고 이어가요.** 서버는 앱 변경과 적용 기록을 SQLite에 함께 저장해요. 모델이 바뀌거나 서버가 재시작돼도 `continue`는 같은 변경을 한 번만 적용해요. 새 Pod 각각과 내부 Service가 HTTP 200 및 지정한 본문 조건을 통과했는지 `sw task evidence`로 확인할 수 있어요.
+1. **Choose the app and permissions.** Use `sw task create` to select one app, the actions the agent may take, and an expiry time. Connect the resulting `work.json` to an external agent through MCP or use Shearwater’s built-in Qwen chat.
+2. **Approve the exact change.** Run `sw task review` in your operator terminal to inspect the target, current image, proposed image and verification conditions. Pass the plan’s hash to `sw task approve` to authorize it.
+3. **Resume and verify.** Shearwater saves the app change and its execution record together in SQLite. If you switch models or restart the server, `continue` can resume without applying the change twice. Use `sw task evidence` to see whether each new Pod and the internal Service returned HTTP 200 and the expected content.
 
-복구할 때는 이전에 HTTP 검사까지 통과한 이미지로 새 계획을 만들고 다시 승인해요. [위임·승인·복구 명령 예제](docs/agent-operations.md)
+To recover, create and approve a new plan that uses an image which previously passed HTTP verification. [Delegation, approval and recovery examples](docs/agent-operations.md)
 
-## 측정 결과
+## Benchmarks
 
-같은 Ubuntu 24.04 VM(2 vCPU · 2,560 MiB)에서 같은 nginx 웹 앱을 시험했어요. alpha.12는 앞선 여섯 회의 기준값이에요. alpha.13은 공개 태그에서 새로 빌드한 배포 파일로 다시 쟀어요.
+Both versions ran the same nginx app on the same Ubuntu 24.04 VM with 2 vCPUs and 2,560 MiB of memory. The alpha.12 baseline comes from an earlier test series. For alpha.13, the tests used the release binary built from the public tag.
 
-| 측정 항목 | 공개 alpha.12 | 공개 alpha.13 |
+| Measurement | alpha.12 | alpha.13 |
 | --- | ---: | ---: |
-| 사본 10개 업데이트 중앙값 (6회) | 22.80초 | **2.83초** |
-| 업데이트 중 오류 / 전체 요청 | 0 / 13,762 | **0 / 1,750** |
-| 120 Pod 직접 연결 오류 / 전체 요청 (30초 × 2회) | 27,474 / 72,000 | **0 / 72,000** |
-| 120 Pod 직접 연결 오류 / 전체 요청 (별도 90초) | 미측정 | **0 / 108,000** |
+| Median time to update 10 replicas (6 runs) | 22.80 s | **2.83 s** |
+| Errors / requests during those updates | 0 / 13,762 | **0 / 1,750** |
+| Direct requests to 120 Pods, errors / requests (two 30 s runs) | 27,474 / 72,000 | **0 / 72,000** |
+| Direct requests to 120 Pods, errors / requests (separate 90 s run) | Unmeasured | **0 / 108,000** |
 
-업데이트 중에는 초당 100개의 새 연결을 보내고, 사본 열 개와 내부 Service가 모두 새 본문을 반환하면 시간을 멈췄어요. alpha.13의 교체 시간이 이 장비에서 87.6% 줄어 구간 내 요청 수도 줄었어요. 밀도 시험에서는 120개 Pod 각각에 초당 10건을 재시도 없이 직접 보냈어요. 120개는 이 시험에서 가장 높은 단계예요. [회차별 결과와 조건](docs/connection-verification.md) · [측정값 CSV](docs/benchmarks/alpha13.csv) · [실행 파일과 체크섬](https://github.com/ChoYugyeong/shearwater/releases/tag/v0.1.0-alpha.13)
+During updates, the test opened 100 new connections per second until all 10 replicas and the Service returned the new version’s content. Updates finished 87.6% sooner on this machine, so fewer requests fell inside the update window. In the density test, each Pod received 10 direct requests per second with no retries. The highest count tested was 120 Pods. [Method and per-run results](docs/connection-verification.md) · [Measurements as CSV](docs/benchmarks/alpha13.csv) · [Release binary and checksums](https://github.com/ChoYugyeong/shearwater/releases/tag/v0.1.0-alpha.13)
 
-### 실제 리소스 사용량
+### Idle resource use
 
-이전 WSL 2 시험(2026-11-11)에서는 BusyBox Pod 10개를 띄우고 60초 동안 유휴 상태를 관찰했어요. `sw server`의 최대 RSS는 34.76 MB, 디스크 쓰기는 0 B였어요. containerd와 앱이 쓰는 자원은 별도예요. [측정 범위와 재현 방법](docs/stage1-verification.md)
+In a separate WSL 2 test on November 11, 2026, the `sw server` process reached 34.76 MB peak resident memory and wrote 0 B to disk over 60 idle seconds with 10 BusyBox Pods present. These figures cover the Shearwater process alone. The container runtime and apps have their own resource costs. [Measurement scope and reproduction steps](docs/stage1-verification.md)
 
-## 어떤 환경에 맞나요?
+## Where it fits
 
-관리자 한 명이 신뢰하는 작은 HTTP 앱을 맡기는 **실험적 알파**예요. 단일 노드·IPv4·TCP ClusterIP를 지원해요. 내부 HTTP 검사로는 공개 도메인·TLS·로그인까지 확인할 수 없고, 이미지 복구에는 DB 데이터 복원이 포함되지 않아요. `securityContext`는 저장만 하며 다중 사용자 격리와 RBAC는 지원 범위 밖이에요. [호환표](docs/compatibility.md)
+Shearwater is an **experimental alpha** for one operator running trusted HTTP apps on a single node. It supports IPv4 and TCP ClusterIP Services. Its HTTP checks cover internal endpoints. Public DNS, TLS and login flows need separate checks, and rolling back an image does not restore database contents. Shearwater stores `securityContext` fields without enforcing them. Multi-tenant isolation and Kubernetes RBAC are outside its supported scope. [Compatibility matrix](docs/compatibility.md)
 
-단일 서버에서 앱 몇 개를 빌드하고 실행하려면 Docker Compose도 좋은 선택이에요. 여러 노드, Ingress, PVC, Helm이 필요하면 Kubernetes나 K3s를 살펴보세요. [도구별 용도 비교](docs/choosing-shearwater.md)
+Docker Compose is also a good fit for building and running a few apps on one server. Consider Kubernetes or K3s if you need multiple nodes, Ingress, persistent volume claims or Helm. [Compare use cases](docs/choosing-shearwater.md)
 
-[문제 진단하기](docs/troubleshooting.md) · [체험 결과 남기기](docs/first-try-feedback.md) · [기여하기](CONTRIBUTING.md) · [보안 제보](SECURITY.md) · [Apache 2.0 라이선스](LICENSE) · [출처 고지](NOTICE)
+[Troubleshooting](docs/troubleshooting.md) · [First-use feedback](docs/first-try-feedback.md) · [Contributing](CONTRIBUTING.md) · [Report a security issue](SECURITY.md) · [Apache 2.0 license](LICENSE) · [Notices](NOTICE)
