@@ -57,6 +57,7 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw setup       check/start a local server and prepare a normal user's credentials
   sw workflow    review/approve/resume the saved app workflow without copying connection flags
   sw task        delegate one app, approve server plans, inspect evidence, or resume with a new token
+  sw edge        publish Services on the host's ports 80/443 by host name with automatic HTTPS
 
 Run "sw COMMAND -h" for the flags of a command.
 `
@@ -105,6 +106,8 @@ func main() {
 		err = runWorkflow(args, os.Stdout)
 	case "task":
 		err = runTask(args, os.Stdout)
+	case "edge":
+		err = runEdge(args, os.Stdout)
 	case "down":
 		err = runDown(args)
 	case "status":
@@ -282,6 +285,7 @@ func runServer(args []string) error {
 	agentDone := make(chan struct{})
 	controllerDone := make(chan struct{})
 	proxyDone := make(chan struct{})
+	edgeDone := make(chan struct{})
 	if withAgent {
 		rt := runtime.NewContainerd(*socket)
 		defer rt.Close()
@@ -315,6 +319,12 @@ func runServer(args []string) error {
 				return err
 			}
 		}
+		// Open the public ports before any worker starts: a busy port or a
+		// wrong setting must stop the server while nothing needs joining.
+		public, err := prepareEdge(st, o)
+		if err != nil {
+			return err
+		}
 		draining := &drain.State{}
 		forwarding := &proxy.KernelManager{Manager: proxy.Manager{Store: st},
 			DataPath: &runtime.KernelServices{PodCIDR: apis.PodCIDR, ServiceCIDR: apis.ServiceCIDR}, Drain: draining}
@@ -333,10 +343,12 @@ func runServer(args []string) error {
 			defer close(proxyDone)
 			forwarding.Run(ctx)
 		}()
+		go runPreparedEdge(ctx, public, edgeDone)
 	} else {
 		close(agentDone)
 		close(controllerDone)
 		close(proxyDone)
+		close(edgeDone)
 	}
 	if *instance != "" {
 		if err := writeState(o, *instance); err != nil {
@@ -346,6 +358,7 @@ func runServer(args []string) error {
 			<-agentDone
 			<-controllerDone
 			<-proxyDone
+			<-edgeDone
 			return err
 		}
 	}
@@ -359,6 +372,7 @@ func runServer(args []string) error {
 		<-agentDone
 		<-controllerDone
 		<-proxyDone
+		<-edgeDone
 		return err
 	case <-ctx.Done():
 	}
@@ -370,6 +384,7 @@ func runServer(args []string) error {
 	<-agentDone
 	<-controllerDone
 	<-proxyDone
+	<-edgeDone
 	if shutdownErr != nil && !errors.Is(shutdownErr, context.DeadlineExceeded) {
 		return shutdownErr
 	}
