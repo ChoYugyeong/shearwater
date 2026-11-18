@@ -144,6 +144,9 @@ func (n *Net) TeardownHost(ctx context.Context) error {
 	if err := n.removeRules(ctx); err != nil {
 		return err
 	}
+	if err := n.podTimeouts(ctx, true); err != nil {
+		return err
+	}
 	services := &KernelServices{PodCIDR: n.PodCIDR, ServiceCIDR: n.ServiceCIDR}
 	if err := services.Teardown(ctx); err != nil {
 		return err

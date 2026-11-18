@@ -20,11 +20,25 @@ import (
 	"shearwater/internal/store"
 )
 
+const (
+	firstReadinessRetry        = 100 * time.Millisecond
+	maxInitialReadinessRetries = 3 // additional samples during container startup
+)
+
 type probeSample struct {
 	Next             time.Time
 	Success, Failure int32
 	Healthy          bool
+	startRetriesLeft uint8
 	Message          string
+}
+
+// A streak only matters up to its threshold, even on a long-lived container.
+func nextProbeCount(count, threshold int32) int32 {
+	if count >= threshold {
+		return threshold
+	}
+	return count + 1
 }
 
 // Only startup completion and a requested stop survive a server restart.
@@ -104,7 +118,7 @@ func (a *Agent) probeEvent(p *apis.Pod, c *apis.Container, kind, reason, message
 	})
 }
 
-func (a *Agent) checkProbes(ctx context.Context, pod *apis.Pod, c *apis.Container, cs apis.ContainerStatus, ip string) (apis.ContainerStatus, time.Duration) {
+func (a *Agent) checkProbes(ctx context.Context, pod *apis.Pod, c *apis.Container, cs apis.ContainerStatus, ip string, runningPublished bool) (apis.ContainerStatus, time.Duration) {
 	raws := map[string]json.RawMessage{"startup": c.StartupProbe, "readiness": c.ReadinessProbe, "liveness": c.LivenessProbe}
 	anyProbe := false
 	for _, v := range raws {
@@ -153,13 +167,16 @@ func (a *Agent) checkProbes(ctx context.Context, pod *apis.Pod, c *apis.Containe
 		if q == nil || (kind == "startup" && v.Started) {
 			continue
 		}
-		if kind != "startup" && !*cs.Started {
-			continue
-		}
 		s := v.Samples[kind]
 		if s == nil {
 			s = &probeSample{}
+			if kind == "readiness" && !runningPublished {
+				s.startRetriesLeft = maxInitialReadinessRetries
+			}
 			v.Samples[kind] = s
+		}
+		if kind != "startup" && !*cs.Started {
+			continue
 		}
 		due := s.Next
 		if cs.State.Running.StartedAt != nil {
@@ -169,6 +186,13 @@ func (a *Agent) checkProbes(ctx context.Context, pod *apis.Pod, c *apis.Containe
 			}
 		}
 		if !now.Before(due) {
+			// Without a startup probe the task can still be initializing as
+			// Start returns. Publishing Running queues this Pod again. Take
+			// the first readiness sample on that observation, so a refusal
+			// in the start path doesn't impose a whole probe period.
+			if kind == "readiness" && !runningPublished && ps["startup"] == nil {
+				continue
+			}
 			actionCtx, cancel := context.WithTimeout(ctx, time.Duration(q.TimeoutSeconds)*time.Second)
 			run := a.ProbeRun
 			if run == nil {
@@ -179,16 +203,25 @@ func (a *Agent) checkProbes(ctx context.Context, pod *apis.Pod, c *apis.Containe
 			if ctx.Err() != nil {
 				return cs, time.Second
 			}
-			s.Next = now.Add(time.Duration(q.PeriodSeconds) * time.Second)
+			interval := time.Duration(q.PeriodSeconds) * time.Second
 			if err == nil {
-				s.Success++
+				// Further successes toward the threshold use the full period.
+				s.startRetriesLeft = 0
+				s.Success = nextProbeCount(s.Success, q.SuccessThreshold)
 				s.Failure = 0
 				if s.Success >= q.SuccessThreshold {
 					s.Healthy = true
 				}
 				s.Message = ""
 			} else {
-				s.Failure++
+				// A new listener can open just after a failed check. Use
+				// 100, 200 and 400 ms waits before returning to the period.
+				if s.startRetriesLeft > 0 {
+					used := maxInitialReadinessRetries - s.startRetriesLeft
+					interval = min(interval, firstReadinessRetry<<used)
+					s.startRetriesLeft--
+				}
+				s.Failure = nextProbeCount(s.Failure, q.FailureThreshold)
 				s.Success = 0
 				msg := err.Error()
 				if len(msg) > 512 {
@@ -204,6 +237,7 @@ func (a *Agent) checkProbes(ctx context.Context, pod *apis.Pod, c *apis.Containe
 					s.Healthy = false
 				}
 			}
+			s.Next = now.Add(interval)
 			if kind == "startup" && s.Healthy {
 				v.Started = true
 				if err := a.saveProbe(pod, c, v); err != nil {

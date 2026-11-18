@@ -3,8 +3,8 @@
 Windows localhost에서만 시간이 초과되고 WSL 안의 앱은 정상이라면
 [Windows→WSL 연결 진단과 선택적 TCP 중계](windows-localhost.md)를 먼저 봐.
 
-이 문서는 **`0.1.0-alpha.5`**의 진단 명령을 설명해.
-alpha.2 실행 파일에는 이 네 명령이 없어. [설치 안내](install.md)로 alpha.5를 받거나
+아래 네 진단 명령은 **alpha.3부터** 제공해.
+이 안내를 따라 하려면 [설치 안내](install.md)로 alpha.13을 받거나
 [개발 빌드 방법](../README.md)으로 만든 `dist/sw`를 사용해.
 진단용 실행 파일을 받거나 빌드했다고 실행 중인 서버가 자동 교체되지는 않아.
 네 명령은 기존 로컬 서버의 HTTPS API를 **조회만** 해. Pod를 재시작하거나 설정·DB를 수정하지 않아.
@@ -16,7 +16,7 @@ alpha.2 실행 파일에는 이 네 명령이 없어. [설치 안내](install.md
 `sw` 변수를 그 `dist/sw`의 절대 경로로 바꿔. `web`은 예시이므로 실제 이름으로 바꿔.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.5/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.13/sw"
 sudo "$sw" status
 sudo "$sw" get pods -A
 sudo "$sw" get pods -n default -l app=web

@@ -1,5 +1,16 @@
 # 릴리스와 버전 확인
 
+## v0.1.0-alpha.13
+
+- **새 Pod의 준비 검사.** `startupProbe`가 없으면 새 컨테이너의 `Running` 상태를 기록한 뒤 첫 `readinessProbe`를 실행해. 시작 직후 검사에 실패하면 100ms, 200ms, 400ms 간격으로 최대 세 번 다시 시도해. 첫 성공 뒤에는 설정한 주기로 검사하며, Service는 지정한 연속 성공 횟수를 채운 Pod로 트래픽을 보내.
+- **호스트에서 Pod로 직접 연 TCP 연결.** Linux의 기본 conntrack `TIME_WAIT`가 120초이면, Shearwater 브리지 게이트웨이에서 Pod IP로 직접 연 IPv4 TCP 연결에 한해 이 상태의 추적 시간을 30초로 설정해. 호스트에서 따로 지정한 시간과 Service를 경유하는 연결에는 기존 정책이 적용돼. [준비 검사와 연결 추적의 적용 조건](connection-continuity.md)
+
+두 변경은 서버에 적용돼. 업데이트 뒤 `sw version`에서 `0.1.0-alpha.13`을, 서버 `/version`의
+`gitVersion`과 Node의 `kubeletVersion`에서 `v1.36.0+shearwater.0.1.0-alpha.13`을 확인해. [설치와 기존 서버 업데이트](install.md)
+
+10개 사본의 교체 시간과 120 Pod 부하 수치는 공개 alpha.12와 **개발 후보**를 비교한 결과야.
+최종 배포 파일의 소스 커밋·SHA-256과 그 파일로 다시 측정한 수치는 발행 시 릴리스 본문에 기록해. [후보 측정 조건과 결과](connection-verification.md) · [alpha.13 릴리스 본문](https://github.com/ChoYugyeong/shearwater/releases/tag/v0.1.0-alpha.13)
+
 ## v0.1.0-alpha.12
 
 `sw task`로 한 앱의 UID·접속 경로·허용 동작·만료를 서버에 고정한 제한 토큰을 발급해.
@@ -244,7 +255,7 @@ Git 태그에만 붙는 앞의 `v`는 그 값에 넣지 않아. Git이 없는 �
 bash hack/t.sh ./...
 python3 -m unittest discover -s hack -p 'test_*.py'
 bash hack/build.sh
-python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.9
+python3 hack/check_version.py dist/sw --tag v0.1.0-alpha.13
 python3 hack/notices.py
 ```
 

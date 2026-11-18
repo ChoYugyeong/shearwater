@@ -1,6 +1,6 @@
 # 롤링 업데이트와 서버 재시작 때 TCP 연결 유지하기
 
-이 문서는 **v0.1.0-alpha.5부터 제공하는 연결 유지 동작**을 설명해. alpha.4 이하의 실행 파일은 프로세스 내부 TCP 프록시를 사용해. 개발 단계 실측과 릴리스 파일의 검증은 [검증 기록](connection-verification.md)과 [릴리스 기록](releases.md)을 구분해 봐.
+**alpha.5부터** Linux 커널이 Service TCP 연결을 전달해. alpha.4 이하에서는 sw 프로세스가 TCP 프록시를 맡았어. **alpha.13**에서는 새 Pod의 첫 준비 검사와 호스트가 Pod에 직접 연 TCP 연결의 추적 시간이 달라져. 11월 18일 수치는 공개 alpha.12와 개발 후보의 비교야. 공개 alpha.13 실행 파일의 재시험 결과는 발행 시 해당 릴리스 본문에 기록해. [후보 측정 기록](connection-verification.md) · [alpha.13 릴리스 본문](https://github.com/ChoYugyeong/shearwater/releases/tag/v0.1.0-alpha.13)
 
 ## 왜 주소는 같은데 요청이 실패했을까
 
@@ -40,6 +40,27 @@ ReplicaSet이 Pod 수를 줄일 때 다음 순서로 처리해. Deployment의 �
 종료 대기 중인 Pod도 실제 Pod 수와 `maxSurge` 한도에 포함해. 새 Pod를 무한히 늘리지 않아. 대신 연결을 기다리는 만큼 전체 롤아웃 시간이 늘어날 수 있어. 중간에 다시 확장해 이 Pod가 필요해지면 종료 대기를 취소하고 대상으로 복귀시켜. 이후 다시 줄일 때는 새로운 요청 번호를 써서 이전 확인을 재사용하지 않아.
 
 서버가 종료 대기 중 재시작되면 annotation은 DB에 남아. 전달 규칙과 연결 수를 다시 확인한 후 기다려. 이전 프로세스가 받았던 확인은 재사용하지 않으며, 중단 시간 때문에 확인 없이 바로 앱을 죽이지 않아.
+
+## 새 Pod가 트래픽을 받기까지
+
+alpha.13에서 새 컨테이너에 `readinessProbe`만 있고 별도 `startupProbe`가 없으면, 노드는 먼저 `Running` 상태를 저장하고 다음 상태 확인에서 첫 준비 검사를 실행해. `Running`은 프로세스가 시작됐다는 뜻이야. 웹 서버가 포트를 열고 HTTP에 응답할 때까지는 시간이 조금 더 걸릴 수 있어.
+
+설정한 초기 대기 시간(`initialDelaySeconds`)을 지켜. `startupProbe`가 있으면 그 검사가 성공한 회차부터 준비 검사를 할 수 있어. 새 컨테이너의 준비 검사가 처음에 실패하면 100ms, 200ms, 400ms 간격으로 최대 세 번 더 시도해. 첫 성공 이후 또는 세 번을 다 쓴 뒤에는 `periodSeconds` 주기를 따라. 트래픽을 받으려면 지정한 연속 성공 횟수(`successThreshold`)를 채워야 해. [검사 구현](../internal/node/probes.go) · [Kubernetes 준비 검사 설명](https://kubernetes.io/docs/concepts/workloads/pods/probes/)
+
+## 많은 Pod에 짧은 연결을 반복할 때
+
+Linux는 통신 중인 양 끝의 주소와 포트를 연결 표(conntrack)에 기억해. HTTP 응답이 끝난 뒤에도 늦게 오는 패킷을 처리할 수 있도록 잠시 기록을 남겨. 이 기록이 빨리 쌓이면 Pod에 여유 메모리가 있고 웹 서버도 살아 있는데 새 연결이 시간 초과로 끝날 수 있어. `nf_conntrack_count`가 `nf_conntrack_max`에 도달하고 커널 로그에 `nf_conntrack: table full, dropping packet`이 함께 나타나는지 확인해.
+
+alpha.13은 호스트가 **Shearwater 브리지의 게이트웨이 주소에서 Pod IP로 직접 여는 IPv4 TCP 연결**을 구분해. Linux의 기본 conntrack TIME_WAIT가 120초이면 이 경로로 새로 연 연결이 TIME_WAIT에 들어갈 때 30초의 추적 시간을 적용해. TIME_WAIT는 마지막 확인 패킷 뒤 잠시 기다리는 상태야. 살아 있는 TCP 연결과 운영체제 소켓의 TIME_WAIT는 각자의 설정을 따라. Service IP를 통한 주소 변환, 외부로 나가는 패킷, Pod끼리의 통신과 루프백에는 이 규칙이 적용되지 않아.
+
+관리자가 호스트의 TIME_WAIT 기본값을 따로 지정하면 그 값을 존중해. 커널이나 방화벽 백엔드가 이 선택적 기능을 제공하지 않으면 서버 로그에서 적용 여부를 확인해. 아래 명령으로 같은 시점의 사용량과 한도, 패킷 폐기를 읽을 수 있어. [연결 기록 정책 구현](../internal/runtime/podtimeout_linux.go) · [Linux 커널 conntrack 설정](https://docs.kernel.org/networking/nf_conntrack-sysctl.html)
+
+```sh
+sysctl net.netfilter.nf_conntrack_count net.netfilter.nf_conntrack_max
+sysctl net.netfilter.nf_conntrack_tcp_timeout_time_wait
+journalctl -k -b --grep 'nf_conntrack.*table full'
+conntrack -S
+```
 
 ## 보장 범위와 종료 경계
 

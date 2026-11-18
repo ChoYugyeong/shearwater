@@ -331,7 +331,8 @@ func (a *Agent) reconcile(ctx context.Context, pod *apis.Pod, actual []runtime.C
 		}
 		cs, again := a.syncContainer(ctx, pod, c, attempts, prev, podErr, mounts, alreadyStarted)
 		if cs.State.Running != nil {
-			cs, again = a.checkProbes(ctx, pod, c, cs, st.PodIP)
+			runningPublished := prev != nil && prev.State.Running != nil && prev.ContainerID == cs.ContainerID
+			cs, again = a.checkProbes(ctx, pod, c, cs, st.PodIP, runningPublished)
 		}
 		if ctx.Err() != nil {
 			return failureRetry, ctx.Err()

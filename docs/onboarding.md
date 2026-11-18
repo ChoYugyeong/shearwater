@@ -1,6 +1,6 @@
 # 설치부터 AI 연결까지: 먼저 한 앱만 연결하기
 
-이 문서는 **v0.1.0-alpha.12**에서 `sw setup`, 기존 Service 자동 탐색,
+이 문서는 **v0.1.0-alpha.13**에서 `sw setup`, 기존 Service 자동 탐색,
 MCP 설정 내보내기를 사용하는 순서야. `setup`은 alpha.11부터 있어.
 새 버전은 별도 폴더에 설치해. 실행 중인 서버 교체는 [백업·업데이트 순서](install.md)를
 따로 따라야 하며, 아래 설치기는 기존 운영 서버를 덮어쓰지 않아.
@@ -17,7 +17,7 @@ Shearwater는 컨테이너를 실행하고, 원하는 앱 상태를 유지하고
 | Claude/Qwen/DeepSeek → sw MCP 또는 chat | 자연어 요청을 앱 운영 도구로 전달 | 일반 사용자 |
 
 모델이 관리자 비밀번호를 받거나 root로 실행될 필요는 없어. 아래 `sw setup`으로 만드는
-인증은 **운영자용 전체 로컬 관리자 권한**이야. alpha.12에서는 운영자가 이 인증을 보관하고
+인증은 **운영자용 전체 로컬 관리자 권한**이야. alpha.12부터 운영자가 이 인증을 보관하고
 [앱별 위임 안내](agent-operations.md)의 `sw task create`로 제한 토큰을 따로 만들 수 있어.
 AI에게는 그 제한 연결만 전달해. 기존 `sw connect`에 관리자 인증을 전달하는 방식은
 앱 고정·계획 승인을 제공하지만 서버가 강제하는 앱별 권한 제한은 아니야.
@@ -25,18 +25,19 @@ AI에게는 그 제한 연결만 전달해. 기존 `sw connect`에 관리자 인
 ## 1. 실행 파일 받기
 
 릴리스에 동봉한 `install.py`와 체크섬을 받아 설치기 자체를 먼저 검사해.
-Python 3 표준 라이브러리만 쓰며 추가 Python 패키지는 필요 없어. Ubuntu Bash에서:
+Ubuntu Bash에서 Python 3.11 이상의 표준 라이브러리로 실행해.
 
 ```bash
 download_dir=$(mktemp -d)
 cd "$download_dir"
-release=https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.12
+version=v0.1.0-alpha.13
+release="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
 curl --fail --location --proto '=https' --tlsv1.2 "$release/install.py" -o install.py
 curl --fail --location --proto '=https' --tlsv1.2 "$release/SHA256SUMS" -o SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 # install.py: OK를 확인하고, 설치기 내용을 검토한 뒤 진행해.
-python3 install.py --version v0.1.0-alpha.12
-python3 install.py --version v0.1.0-alpha.12 --apply
+python3 install.py --version "$version"
+python3 install.py --version "$version" --apply
 ```
 
 첫 Python 명령은 설치 위치를 보여 주기만 해. 둘째 Python 명령은 정확한 버전의 압축과 SHA256SUMS를 받아
@@ -50,13 +51,13 @@ Linux x86_64용이야. 설치한 폴더에는 `INSTALL-ko.md`와 이 안내인 `
 이후 명령에 쓸 실행 파일을 지정해. 별도 설치 위치를 골랐다면 그 위치로 바꿔:
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.12/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.13/sw"
 "$sw" version
 "$sw" setup -h
 ```
 
 이후 `$sw`는 그 **Linux 절대 경로**야. 새 터미널에서는 이 변수를 다시 지정해.
-버전이 `0.1.0-alpha.12`인지 확인해. 직접 빌드하려면 [소스 빌드 안내](quickstart.md)를 사용해.
+버전이 `0.1.0-alpha.13`인지 확인해. 직접 빌드하려면 [소스 빌드 안내](quickstart.md)를 사용해.
 
 ## 2. 서버 준비와 인증을 한 번에
 

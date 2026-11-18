@@ -1,137 +1,85 @@
 # Shearwater
 
-목표는 **서버 한 대의 작은 서비스를 AI에게 맡겨 배포·업데이트·진단·복구하는 가벼운 운영 도구**야.
-컨테이너 실행과 재시작 복구를 유지하면서, 사람이 앱 ID와 명령을 단계마다 옮겨 적는 일을 줄여.
-작은 서비스에서 Compose도 유용한 선택이며, 모든 사용자에게 이전을 권하는 제품은 아니야.
+*Human-approved updates for single-node containers.*
 
-**alpha.10**에는 [한 번 연결하고 작업을 이어가는 AI 운영 흐름](docs/agent-workflow.md)이 있어.
-`sw connect`가 앱과 연결 정보를 보관하고, 같은 MCP·내장 대화에서 계획 → 로컬 승인 →
-실행 → 실제 내부 HTTP 검사까지 이어가. 이미지 파일 입력과 승인 대기 중단은 프로그램이 맡아.
-[다른 도구와 비교해서 선택하기](docs/choosing-shearwater.md)와 [AI 운영 체험](docs/agent-workflow-trial.md)에서
-적합한 사용자, 현재 한계, 직접 확인할 순서를 볼 수 있어.
+**“웹 앱을 새 이미지로 바꾸고, 새 버전이 실제로 응답하는지 확인해 줘.”**
 
-**alpha.11**은 기존 앱의 Service 이름·라벨·포트를 확인해서 연결하고,
-`sw setup`으로 인증을 준비하고 MCP 설정을 내보내는 [간단한 시작 절차](docs/onboarding.md)를
-제공해. 설치 도우미와 처음 연결하는 순서, 실제 세 AI의 검증 결과를 함께 동봉했어.
+Shearwater는 Linux 서버 한 대에서 작은 웹 앱을 운영하는 오픈소스 도구예요. AI가 변경을 제안하면 사람이 대상과 내용을 보고 그 계획 하나만 승인해요. 대화나 서버가 중간에 끊겨도 같은 작업을 이어가고, 새 앱 사본(Pod)과 내부 접속 주소(Service)에 HTTP 요청을 보내 결과를 확인해요.
 
-**alpha.12**에는 [앱 하나의 운영을 AI에게 위임하는 기능](docs/agent-operations.md)을
-추가했어. `sw task`로 앱별 권한·만료 시간을 서버에 고정하고, 정확히 승인한 계획의 적용
-기록을 보관해. 새 컨테이너와 내부 Service를 직접 검사한 근거로 완료를 판단하고,
-대화나 모델이 바뀌어도 같은 작업을 이어가. 서버와 클라이언트 모두 alpha.12가 필요해.
-[실제 세 모델 비교와 검증 범위](docs/agent-operations-verification.md)를 함께 봐.
+[처음 시작하기](#처음-시작하기) · [앱 하나를 AI에게 맡기기](#앱-하나를-ai에게-맡기기) · [측정 결과](#측정-결과)
 
-| 목적 | 먼저 검토할 선택 |
-| --- | --- |
-| 작은 앱 몇 개를 빌드하고 바로 운영 | Docker Compose와 기존 운영 환경 |
-| DNS·Ingress·PVC·RBAC·Helm·다중 노드 | Kubernetes 또는 K3s |
-| 한 서버의 앱 운영을 AI에게 맡기고 계획·승인·결과를 추적하는 실험 | Shearwater |
+<p align="center">
+  <img src="docs/media/approved-update.gif" width="576" alt="실제 업데이트 기록 재생. 승인 대기, 승인 후 미적용, 새 배포 요청 거절, 원래 계획의 HTTP 검증 통과 순서예요.">
+</p>
 
-alpha.8에는 [AI가 쓰기 쉬운 운영 인터페이스](docs/agent-interface.md)를 추가했어.
-짧은 상태 관찰, 이미지·복제본 변경 계획, 적용한 원래 대상의 결과 검증, Qwen 대화를 같은
-실행 함수에 연결했어. `sw version`이 **0.1.0-alpha.12**인지 확인하고 사용해.
-앱을 하나 골랐다면 [집중 모드](docs/focused-tools.md)로 대상과 작업을 고정하고,
-조회 도구 1개 또는 변경 계획 도구까지 2개만 AI에게 보여 줄 수 있어.
+**기록 재생** · alpha.12 개발 중 Qwen과 nginx로 진행한 시험의 MCP 요청·응답을 발췌했어요. 이 시험에서는 운영자 역할의 검사 프로그램이 계획을 확인하고 승인했어요. [시험 조건과 결과](docs/agent-operations-verification.md)
 
-alpha.9에는 [작업별 운영 스킬과 승인된 계획 이어가기](docs/agent-skills.md)도 있어.
-사람이 승인한 계획 하나를 AI가 실행하고, `--task=diagnose`로 고정한 앱의 오류 근거를 읽어.
+<details>
+<summary>네 장면을 글로 읽기</summary>
 
-Shearwater는 **한 대의 Linux 환경에서 작은 앱을 띄우고, 문제를 확인하고, 변경 내용을 검토한 뒤 배포하는** 실험적 컨테이너 운영 도구야. `sw why`로 관측된 실패 이유를 읽고, MCP로 AI에 조회를 연결하고, 정확한 변경 계획을 로컬에서 승인해 실행할 수 있어. 개인 개발자와 오케스트레이터 동작을 공부하는 사람이 직접 시험해 볼 수 있게 코드와 재현 절차를 공개했어.
+1. AI가 `update`를 요청하자 `awaiting_approval`이 돌아왔어요. `approved`와 `applied`는 모두 `false`였어요.
+2. 같은 계획을 승인한 뒤 `verify`로 읽은 상태는 `approved_pending`이었어요. `approved`는 `true`, `applied`는 아직 `false`였어요.
+3. 그 사이 AI가 새 `deploy`를 요청했어요. 실행을 기다리는 계획이 있어서 서버가 `409 OperationRejected`로 거절했고, 상태는 `Failure`였어요.
+4. `continue`로 원래 계획을 이어간 결과는 `healthy`였어요. 검사한 새 Pod 수(`verifiedPods`)는 1이었고, 내부 Service까지 검사한 결과(`http.state`)는 `passed`였어요.
 
-**처음 써 본다면 [첫 체험 안내](docs/first-try.md)**에서 앱 응답 → 의도적인 실패 진단 → 선택적인 AI 연결과 승인 배포를 확인해. 새 OS를 준비하는 시간까지 포함한 설치 소요 시간이나 다른 도구보다 쉽다는 주장은 아직 검증하지 않았어. [체험 기록 양식](docs/first-try-feedback.md)에 막힌 지점을 남겨 줘.
-
-실행 파일은 `sw` 하나지만 containerd·runc와 네트워크 도구는 별도로 필요해. `kubectl`로 Pod, Deployment, Service를 다루고, containerd가 실행을 맡고, SQLite가 상태를 보관해. 필요한 API·컨트롤러·네트워크 부분을 직접 구현하며, `sw`에는 Kubernetes Go 패키지(`k8s.io/*`)가 포함되지 않아. containerd 네이티브 클라이언트를 사용하고 CRI·CNI 플러그인은 사용하지 않아. 참고·적응한 구현의 출처는 NOTICE에 적었어.
-
-**현재 단계는 실험적 알파**야. 실제로 검증한 실행 환경은 **WSL 2의 Ubuntu 24.04, Linux amd64, 단일 노드, IPv4, TCP ClusterIP**야. 관리자 한 명이 신뢰하는 앱을 실험하는 용도이며, Kubernetes 인증 제품이나 운영 서비스용 보안 격리 도구가 아니야. **securityContext는 여전히 저장만 해.** alpha.4는 설정된 프로브를 실행하며 readiness가 없으면 실행 중인 컨테이너를 Ready로 봐. [지원 범위](docs/compatibility.md)를 먼저 확인해.
-
-Shearwater is an experimental single-node container orchestrator for trying small apps, diagnosing failures, and reviewing changes before deployment, with optional MCP access for AI tools. It provides a small Kubernetes-compatible API, native containerd integration, and SQLite storage. The tested runtime target is WSL 2 / Ubuntu 24.04 / amd64. Runtime dependencies are installed separately. The [first-try guide](docs/first-try.md) and [compatibility table](docs/compatibility.md) are currently in Korean.
+</details>
 
 ## 처음 시작하기
 
-[첫 체험 안내](docs/first-try.md)가 시작점이야. 그 안에서 Go 없이 실행 파일을 설치하고
-첫 HTTP 응답까지 확인하는 순서로 이어져.
-현재 릴리스는 **v0.1.0-alpha.12**이며, `sw version`도 `0.1.0-alpha.12`을 표시해.
-[릴리스 변경 사항과 버전 검증 방법](docs/releases.md)도 확인할 수 있어.
+WSL 2의 Ubuntu 24.04(amd64)에서 체험할 수 있어요. 컨테이너를 실행할 containerd·runc, 네트워크 도구와 관리자 권한이 필요해요. [설치 준비물](docs/install.md)
 
-alpha.12는 앱별 제한 토큰과 서버에 저장한 작업으로 배포·업데이트·진단·복구를 이어가.
-Qwen 내장 대화와 외부 MCP를 제공해. 최초 위임 API 요청 때 SQLite에 내부 작업 표 하나를
-추가하고 기존 앱 리소스는 유지해. AI가 계획해도 적용에는 별도 운영자의 정확한 승인이 필요해.
+**v0.1.0-alpha.13 다운로드** · [설치기](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/install.py) · [Linux amd64 압축 파일](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/shearwater-v0.1.0-alpha.13-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/SHA256SUMS)
 
-alpha.6부터 Windows localhost 접속을 위한 선택적 TCP 중계와 로그인·WSL 재시작
-자동 복구 도구를 동봉해. [Windows 접속 문제 구분](docs/windows-localhost.md)과
-[자동 시작 설치·중지 방법](docs/automatic-start.md)을 먼저 봐. 기존 sw나 앱을
-다시 배포하는 기능이 아니며, WSL VM을 끄는 동안 연결은 끊겨.
-
-alpha.3부터 `sw get/logs/events/why`로 목록·앱 로그·이벤트·실패 이유를 조회할 수 있어.
-[초보자용 문제 해결 안내](docs/troubleshooting.md)에 각 명령의 예제와 오류 해석을 정리했어.
-
-alpha.5의 [롤링 업데이트·서버 재시작 연결 유지](docs/connection-continuity.md)에는 커널 전달 방식, 30초 연결 종료 대기, 실제 부하 시험 재현 방법을 설명했어. [실측 결과와 검증 범위](docs/connection-verification.md)도 함께 봐. alpha.4에서 처음 교체할 때 기존 소켓은 이전되지 않아. 이후 같은 호스트에서 서버를 재시작하면 커널 전달이 유지돼.
-
-**alpha.4**에는 [자동 시작](docs/automatic-start.md),
-[백업·복원](docs/backup-restore.md), [앱 상태 검사](docs/health-probes.md),
-[MCP 조회와 계획·승인·배포](docs/agent-mcp.md)가 추가됐어.
-alpha.3에서 저장만 하던 기존 프로브도 실행되므로 [업데이트 전 확인](docs/health-probes.md#alpha3에서-올리기-전에)을 먼저 읽어.
-[개발 단계 실측과 재현 방법](docs/next-verification.md)에 장애·복구·배포 검증 범위를 정리했어.
-
-소스에서 직접 빌드하려면 **[개발자용 빌드와 실행 안내](docs/quickstart.md)**를 사용해. Go 1.27.3과 kubectl 1.36.6, containerd·runc·iptables, cgroup v2와 IPv4 전달이 준비된 WSL에서는 다음 순서로 실행해. 기존 Shearwater 인스턴스가 없는 환경을 사용해.
+Ubuntu Bash에서 아래 명령을 실행하세요. 빈 임시 폴더에 설치기를 받아 체크섬을 검사해요. 설치기는 압축 파일과 그 안의 `sw`도 검증한 뒤 버전별 폴더에 설치해요.
 
 ```bash
-. hack/env.sh
-bash hack/build.sh
-sudo "$PWD/dist/sw" up
-sudo "$(command -v kubectl)" --kubeconfig /etc/shearwater/kubeconfig get nodes
-sudo "$(command -v kubectl)" --kubeconfig /etc/shearwater/kubeconfig apply -f examples/web.yaml
-sudo "$(command -v kubectl)" --kubeconfig /etc/shearwater/kubeconfig rollout status deploy/web --timeout=120s
+(
+  set -eu
+  version=v0.1.0-alpha.13
+  release="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
+  download_dir=$(mktemp -d)
+  cd "$download_dir"
+  curl -fsSLO "$release/install.py"
+  curl -fsSLO "$release/SHA256SUMS"
+  sha256sum --check --strict --ignore-missing SHA256SUMS
+  python3 install.py --version "$version" --apply
+  "$HOME/.local/share/shearwater/$version/sw" version
+)
 ```
 
-예제는 저장소 안의 `examples/web.yaml`만으로 실행돼. 사용자 PC의 별도 앱이나 파일은 필요 없어. Service IP를 조회해 WSL에서 `curl`로 접속하고 `kubectl logs deploy/web`으로 기록을 보는 단계는 quickstart에 이어져 있어. Service DNS와 `kubectl port-forward`는 구현되지 않았어.
+버전 출력에서 `0.1.0-alpha.13`을 확인하세요. 첫 앱은 `sw setup`으로 인증을 준비한 뒤 예제 nginx의 첫 HTTP 응답까지 따라가면 돼요. [인증 준비](docs/onboarding.md) · [첫 웹 앱 띄우기](docs/first-try.md)
 
-| 하고 싶은 일 | 명령 |
-|---|---|
-| 서버와 노드가 정상인지 보기 | `sw status` |
-| Deployment가 만든 Pod와 Service 보기 | `sw tree` |
-| 문제가 있는 가지에 집중하기 | `sw tree --problems` |
-| containerd·네트워크·로그 확인하기 | `sw doctor` |
-| 객체 목록·상세 보기 | `sw get pods -A` / `sw get pod/NAME --full` |
-| 현재·직전 앱 로그 읽기 | `sw logs pod/NAME` / `sw logs pod/NAME --previous` |
-| 현재 객체의 이벤트 읽기 | `sw events --for=pod/NAME` |
-| Pod의 실패 이유와 다음 확인 보기 | `sw why pod/NAME` |
-| 서버를 잠시 멈추기 | `sw down` |
-| Pod와 전용 네트워크도 내리기 | `sw down --all` |
+소스에서 빌드하려면 저장소 루트에서 `. hack/env.sh` 다음 `bash hack/build.sh`를 실행하세요. [개발 환경과 빌드 안내](docs/quickstart.md)
 
-기본 경로의 인증 정보는 root 소유야. 표의 `sw`를 설치하거나 빌드한 실행 파일의 경로로 바꾸고 `sudo "$sw" status`처럼 실행해. 설치 안내로 시작했다면 `up/down/doctor`에 `--node-name=shearwater`를 같이 붙여. [운영 안내서](docs/operations.md)에 명령별 예제와 복구 순서가 있고, [Service 안내서](docs/service-networking.md)에 연결 구조가 있어. SQLite는 `/mnt/c`가 아닌 WSL의 Linux 파일시스템에 둬. WSL 배포판을 여러 개 만들더라도 네트워크가 공유될 수 있으므로 기본 설정의 Shearwater를 동시에 띄우지 마.
+## 앱 하나를 AI에게 맡기기
 
-## 개발·검증·기여
+1. **앱과 권한을 정해요.** 운영자가 `sw task create`로 앱 하나, 허용할 동작, 만료 시간을 정해요. AI에는 그 작업의 `work.json`을 연결해요. 외부 AI의 MCP나 내장 Qwen 대화를 쓸 수 있어요.
+2. **정확한 계획을 승인해요.** 운영자 터미널의 `sw task review`에서 대상, 변경 전후 이미지, 검사 조건을 읽어요. `sw task approve`에 그 계획의 해시를 지정해야 AI가 적용할 수 있어요.
+3. **결과를 확인하고 이어가요.** 서버는 앱 변경과 적용 기록을 SQLite에 함께 저장해요. 모델이 바뀌거나 서버가 재시작돼도 `continue`는 같은 변경을 한 번만 적용해요. 새 Pod 각각과 내부 Service가 HTTP 200 및 지정한 본문 조건을 통과했는지 `sw task evidence`로 확인할 수 있어요.
 
-```bash
-. hack/env.sh
-bash hack/t.sh ./...       # 소스 수정 없이 포맷·정적 검사·Go 테스트
-bash hack/build.sh         # dist/sw와 SHA256, 포함 모듈 정보 출력
-python3 hack/mcp-check.py "$PWD/dist/sw"  # 별도 API에서 MCP·계획·승인·배포 확인, root 불필요
-python3 hack/chat-check.py "$PWD/dist/sw" # 실제 터미널 승인 흐름, 모델은 모의 응답
-python3 hack/chat-windows-test.py         # Windows 전달 도우미의 경계 검사, 모델 설치 불필요
-```
+복구할 때는 이전에 HTTP 검사까지 통과한 이미지로 새 계획을 만들고 다시 승인해요. [위임·승인·복구 명령 예제](docs/agent-operations.md)
 
-[기여 방법](CONTRIBUTING.md) · [보안 범위와 제보](SECURITY.md) · [공개 알파 검사 절차](docs/alpha-release.md) · [실제 재부팅·부하 기록](docs/reboot-soak.md)
+## 측정 결과
 
-GitHub Actions 설정은 root가 필요 없는 소스 검사를 수행해. 실제 컨테이너·네트워크·재부팅 검사는 별도 환경에서 수행하며 CI 배지가 대신 보증하지 않아. 테스트 결과에는 실행한 환경·시간·실패 수와 생략한 항목을 함께 남겨.
+2026-11-18, 같은 Ubuntu 24.04 Hyper-V VM(2 vCPU, 2,560 MiB)에서 공개 alpha.12와 **공개 전 로컬 수정본**을 번갈아 시험했어요. nginx 사본 10개의 업데이트를 여섯 쌍 비교했어요. 공개 alpha.13 바이너리의 재시험 결과는 해당 버전의 릴리스 기록에서 확인할 수 있어요. [alpha.13 릴리스 기록](https://github.com/ChoYugyeong/shearwater/releases/tag/v0.1.0-alpha.13)
 
-`go list -m all`에는 상위 containerd 모듈의 CRI 서버용 Kubernetes 의존성이 나타날 수 있어. 그것이 `sw`에 링크됐다는 뜻은 아니야. `go list -deps ./cmd/sw`와 `go version -m dist/sw`로 실제 import·빌드 범위를 확인해. 이번 Linux 바이너리의 외부 모듈은 46개이고 `k8s.io/*`는 0개야.
+| 측정 항목 | 공개 alpha.12 | 로컬 수정본 |
+| --- | ---: | ---: |
+| 사본 10개 업데이트 · 중앙값 | 22.80초 | **2.82초** |
+| 업데이트 중 요청 · 6회 합계 | 0 / 13,762 | 0 / 1,694 |
+| 120 Pod 직접 연결 · 30초 × 2회 | 27,474 / 72,000 | **0 / 72,000** |
+| 120 Pod 직접 연결 · 별도 90초 | 미측정 | **0 / 108,000** |
 
-## 라이선스
+분수는 **오류 수 / 전체 요청 수**예요. 업데이트 중에는 초당 100건을 보내고 모든 사본과 Service가 새 본문을 돌려주면 멈췄어요. 빨리 끝난 쪽의 요청 수가 적은 이유예요. 120 Pod 시험은 Pod마다 초당 10건을 재시도 없이 직접 보냈어요. 120개는 이 VM에서 시험한 가장 높은 단계예요. [측정 조건과 판정 기준](docs/connection-verification.md) · [준비 검사와 연결 처리](docs/connection-continuity.md)
 
-Shearwater 원본 코드는 [Apache License 2.0](LICENSE)이야. 저작권은 The Shearwater Authors로 표기해. 참고·수정한 코드와 라이브러리의 출처는 [NOTICE](NOTICE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)에 따로 기록해. containerd·runc·kubectl·컨테이너 이미지는 별도 배포물이며 각각의 라이선스를 따라.
+### 실제 리소스 사용량
 
-## 실제 리소스 사용량
+이전 WSL 2 시험(2026-11-11)에서는 BusyBox Pod 10개를 띄우고 60초 동안 유휴 상태를 관찰했어요. `sw server`의 최대 RSS는 34.76 MB, 디스크 쓰기는 0 B였어요. containerd와 앱이 쓰는 자원은 별도예요. [측정 범위와 재현 방법](docs/stage1-verification.md)
 
-WSL Ubuntu-24.04, Linux 6.6.87.2, Go 1.27.3에서 2026-11-11에 측정했어. BusyBox Pod 10개가 Ready가 된 뒤 API 요청 없이 60.003초 동안 `sw server`를 관찰했어. MB는 1,000,000바이트 기준이야.
+## 어떤 환경에 맞나요?
 
-| 항목 | 실측 | 설계 목표 |
-|---|---:|---:|
-| 유휴 디스크 쓰기 | **0 B**, DB·WAL·서버 로그 변경 알림 0건 | 쓰기 없음 |
-| 유휴 CPU | **0.1167%** (논리 코어 하나 기준) | 0에 가깝게 |
-| 최대 RSS | **34.76 MB** (34,762,752 B) | 50 MB 이하 |
-| 바이너리 (기호 제거 전) | **35.66 MB** (35,664,141 B) | 40 MB 이하 |
-| `sw up` 시작부터 HTTPS `/readyz` | **55.2 ms** | 1초 이하 |
-| Shearwater가 Pod마다 추가한 태스크 | **0개** (Pod 10개, 앱 태스크 10개) | 0개 |
+관리자 한 명이 신뢰하는 작은 HTTP 앱을 맡기는 **실험적 알파**예요. 단일 노드·IPv4·TCP ClusterIP를 지원해요. 내부 HTTP 검사로는 공개 도메인·TLS·로그인까지 확인할 수 없고, 이미지 복구에는 DB 데이터 복원이 포함되지 않아요. `securityContext`는 저장만 하며 다중 사용자 격리와 RBAC는 지원 범위 밖이에요. [호환표](docs/compatibility.md)
 
-시작 시간은 이미 실행 중인 containerd 위에서 빈 설정·데이터 경로로 측정했어. 이미지 받는 시간과 WSL 부팅 시간은 포함하지 않았어. RSS와 CPU는 `sw server`만 측정했으므로 containerd, shim, 앱 컨테이너의 사용량은 별도야. 유휴 시작과 끝의 저장소 리비전은 모두 77이었어. 전체 측정값 원본은 저장소 밖 검증 기록에 보관했고, 재현 방법과 검사 범위는 [1단계 검증](docs/stage1-verification.md)에 있어.
+단일 서버에서 앱 몇 개를 빌드하고 실행하려면 Docker Compose도 좋은 선택이에요. 여러 노드, Ingress, PVC, Helm이 필요하면 Kubernetes나 K3s를 살펴보세요. [도구별 용도 비교](docs/choosing-shearwater.md)
+
+[문제 진단하기](docs/troubleshooting.md) · [체험 결과 남기기](docs/first-try-feedback.md) · [기여하기](CONTRIBUTING.md) · [보안 제보](SECURITY.md) · [Apache 2.0 라이선스](LICENSE) · [출처 고지](NOTICE)

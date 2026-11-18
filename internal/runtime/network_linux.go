@@ -32,8 +32,9 @@ type Net struct {
 	PodCIDR     netip.Prefix
 	ServiceCIDR netip.Prefix
 
-	mu  sync.Mutex
-	mtu uint32
+	mu             sync.Mutex
+	mtu            uint32
+	timeoutWarning string
 }
 
 func NewNet(runDir string, podCIDR, serviceCIDR netip.Prefix) *Net {
@@ -135,7 +136,10 @@ func (n *Net) EnsureHost() error {
 			return fmt.Errorf("bring up %s: %w", n.Bridge, err)
 		}
 	}
-	return n.ensureRules(ctx)
+	if err := n.ensureRules(ctx); err != nil {
+		return err
+	}
+	return n.podTimeouts(ctx, false)
 }
 
 func (n *Net) Setup(podUID string, ip netip.Addr) (created bool, err error) {
