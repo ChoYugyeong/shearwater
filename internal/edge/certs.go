@@ -42,6 +42,7 @@ type Certs struct {
 type CertState struct {
 	Ready     bool      `json:"ready"`
 	NotAfter  time.Time `json:"notAfter,omitzero"`
+	RenewAt   time.Time `json:"renewAt,omitzero"`
 	LastError string    `json:"lastError,omitempty"`
 	RetryAt   time.Time `json:"retryAt,omitzero"`
 	failures  int
@@ -149,6 +150,11 @@ func leafOf(cert *tls.Certificate) *x509.Certificate {
 	return cert.Leaf
 }
 
+// renewAt is when the last third of a certificate's lifetime begins.
+func renewAt(leaf *x509.Certificate) time.Time {
+	return leaf.NotAfter.Add(-leaf.NotAfter.Sub(leaf.NotBefore) / 3)
+}
+
 // due reports whether the certificate is missing, unusable for the host, or
 // in the last third of its lifetime.
 func (c *Certs) due(host string, cert *tls.Certificate) bool {
@@ -159,7 +165,7 @@ func (c *Certs) due(host string, cert *tls.Certificate) bool {
 	if leaf == nil || leaf.VerifyHostname(host) != nil {
 		return true
 	}
-	return !c.now().Before(leaf.NotAfter.Add(-leaf.NotAfter.Sub(leaf.NotBefore) / 3))
+	return !c.now().Before(renewAt(leaf))
 }
 
 // Ensure brings certificates in line with the published hosts. It returns
@@ -202,6 +208,9 @@ func (c *Certs) Ensure(ctx context.Context, hosts []string) time.Duration {
 			}
 		}
 		if !c.due(host, cert) {
+			// Come back when this certificate enters its renewal window; a
+			// short-lived certificate must not wait for the 12-hour check.
+			next = min(next, renewAt(leafOf(cert)).Sub(c.now()))
 			continue
 		}
 		if wait := st.RetryAt.Sub(c.now()); wait > 0 {
@@ -219,6 +228,7 @@ func (c *Certs) Ensure(ctx context.Context, hosts []string) time.Duration {
 				}
 				if err == nil {
 					c.install(host, &pair, st)
+					next = min(next, renewAt(leafOf(&pair)).Sub(c.now()))
 					continue
 				}
 			}
@@ -230,14 +240,17 @@ func (c *Certs) Ensure(ctx context.Context, hosts []string) time.Duration {
 		c.mu.Unlock()
 		next = min(next, backoff)
 	}
-	return next
+	// An authority that issues certificates already inside their renewal
+	// window must not turn this into a busy loop.
+	return max(next, 5*time.Second)
 }
 
 func (c *Certs) install(host string, cert *tls.Certificate, st *CertState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.certs[host] = cert
-	st.Ready, st.NotAfter, st.LastError, st.RetryAt, st.failures = true, leafOf(cert).NotAfter, "", time.Time{}, 0
+	st.Ready, st.NotAfter, st.RenewAt = true, leafOf(cert).NotAfter, renewAt(leafOf(cert))
+	st.LastError, st.RetryAt, st.failures = "", time.Time{}, 0
 }
 
 var _ Issuer = (*acme.Client)(nil)

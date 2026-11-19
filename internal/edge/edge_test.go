@@ -319,3 +319,46 @@ func TestAccountKeyIsCreatedOnceAndPrivate(t *testing.T) {
 		t.Fatal("the account key changed between starts", err)
 	}
 }
+
+func TestEnsureComesBackWhenACertificateEntersItsRenewalWindow(t *testing.T) {
+	a := acmetest.New()
+	defer a.Close()
+	a.Lifetime = 90 * time.Second
+	var c *Certs
+	a.Fetch = func(_, path string) (string, error) {
+		body, ok := c.Challenge(path)
+		if !ok {
+			return "", errors.New("404")
+		}
+		return body, nil
+	}
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	now := time.Now()
+	c = &Certs{Dir: t.TempDir(), Issuer: &acme.Client{Directory: a.Directory(), Key: key, PollEvery: time.Millisecond}, Now: func() time.Time { return now }}
+	// The first pass issues; it must ask to be called again when the last
+	// third of the short lifetime begins, not in twelve hours.
+	near := func(got, want time.Duration) bool { return got > want-time.Second && got < want+time.Second }
+	wait := c.Ensure(context.Background(), []string{"app.example.com"})
+	st := c.States()["app.example.com"]
+	if st.RenewAt.IsZero() || !st.RenewAt.Before(st.NotAfter) || !st.RenewAt.After(now) {
+		t.Fatal("status does not say when renewal starts", st)
+	}
+	if !near(wait, st.RenewAt.Sub(now)) || wait > 2*time.Minute {
+		t.Fatalf("after issuing, next check in %v, want %v", wait, st.RenewAt.Sub(now))
+	}
+	now = now.Add(10 * time.Second)
+	if wait = c.Ensure(context.Background(), []string{"app.example.com"}); !near(wait, st.RenewAt.Sub(now)) || len(a.Issued) != 1 {
+		t.Fatalf("with a valid certificate, next check in %v and %d orders", wait, len(a.Issued))
+	}
+	now = now.Add(wait)
+	c.Ensure(context.Background(), []string{"app.example.com"})
+	if len(a.Issued) != 2 {
+		t.Fatal("the certificate was not renewed at the time Ensure asked for", a.Issued)
+	}
+	// A certificate that is already due when issued must not cause a busy loop.
+	a.Lifetime = time.Second
+	now = now.Add(time.Hour)
+	if wait = c.Ensure(context.Background(), []string{"app.example.com"}); wait < 5*time.Second {
+		t.Fatalf("next check in %v would spin", wait)
+	}
+}
