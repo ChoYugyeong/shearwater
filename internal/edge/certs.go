@@ -36,6 +36,24 @@ type Certs struct {
 	certs  map[string]*tls.Certificate
 	tokens map[string]string // challenge path -> key authorization
 	state  map[string]*CertState
+	// pending holds a renewed certificate whose validity has not started on
+	// this machine's clock yet; the current one is served until it has.
+	pending map[string]*pendingCert
+}
+
+type pendingCert struct {
+	cert *tls.Certificate
+	at   time.Time
+}
+
+// activation is when a renewed certificate replaces the previous one: half of
+// the previous certificate's remaining validity after the new one starts, and
+// at most an hour. Until then the previous certificate, which every client
+// already accepts, keeps being served. An authority may date a certificate
+// ahead of our clock, clients' clocks differ from ours, and a clock that is
+// stepped back must not make the certificate in service "not yet valid".
+func activation(renewed, previous *x509.Certificate) time.Time {
+	return renewed.NotBefore.Add(min(time.Hour, previous.NotAfter.Sub(renewed.NotBefore)/2))
 }
 
 // CertState is what `sw edge status` shows for one host.
@@ -58,6 +76,7 @@ func (c *Certs) now() time.Time {
 func (c *Certs) init() {
 	if c.certs == nil {
 		c.certs, c.tokens, c.state = map[string]*tls.Certificate{}, map[string]string{}, map[string]*CertState{}
+		c.pending = map[string]*pendingCert{}
 	}
 }
 
@@ -99,7 +118,12 @@ func writePrivate(path string, data []byte) error {
 func (c *Certs) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if cert := c.certs[requestHost(hello.ServerName)]; cert != nil {
+	host := requestHost(hello.ServerName)
+	if p := c.pending[host]; p != nil && !c.now().Before(p.at) {
+		c.certs[host] = p.cert
+		delete(c.pending, host)
+	}
+	if cert := c.certs[host]; cert != nil {
 		return cert, nil
 	}
 	return nil, fmt.Errorf("no certificate for %q", hello.ServerName)
@@ -183,6 +207,7 @@ func (c *Certs) Ensure(ctx context.Context, hosts []string) time.Duration {
 		if !wanted[h] {
 			delete(c.certs, h)
 			delete(c.state, h)
+			delete(c.pending, h)
 		}
 	}
 	c.mu.Unlock()
@@ -198,6 +223,9 @@ func (c *Certs) Ensure(ctx context.Context, hosts []string) time.Duration {
 			c.state[host] = st
 		}
 		cert := c.certs[host]
+		if p := c.pending[host]; p != nil {
+			cert = p.cert // already renewed; it only waits for its start time
+		}
 		c.mu.Unlock()
 		if cert == nil {
 			if loaded, err := tls.LoadX509KeyPair(filepath.Join(c.Dir, host+".crt"), filepath.Join(c.Dir, host+".key")); err == nil {
@@ -248,7 +276,19 @@ func (c *Certs) Ensure(ctx context.Context, hosts []string) time.Duration {
 func (c *Certs) install(host string, cert *tls.Certificate, st *CertState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.certs[host] = cert
+	// Serve the previous certificate until the renewed one's activation time,
+	// when there is a previous one that is still good for this host.
+	serveNow := true
+	if old := c.certs[host]; old != nil && leafOf(old) != nil && leafOf(old).VerifyHostname(host) == nil {
+		if start := activation(leafOf(cert), leafOf(old)); c.now().Before(start) && leafOf(old).NotAfter.After(start) {
+			c.pending[host] = &pendingCert{cert, start}
+			serveNow = false
+		}
+	}
+	if serveNow {
+		c.certs[host] = cert
+		delete(c.pending, host)
+	}
 	st.Ready, st.NotAfter, st.RenewAt = true, leafOf(cert).NotAfter, renewAt(leafOf(cert))
 	st.LastError, st.RetryAt, st.failures = "", time.Time{}, 0
 }
