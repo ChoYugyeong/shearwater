@@ -208,6 +208,10 @@ func TestExistingComposeServiceUpdatesThroughAnApprovedPlan(t *testing.T) {
 	if v.State != "healthy" || v.VerifiedPods != 1 {
 		t.Fatal("the existing service was not verified", v)
 	}
+	// Models repeat facts verbatim; a Compose app has no Pods or Service.
+	if facts := strings.Join(v.Facts, "\n"); !strings.Contains(facts, "passed for every new container directly and the published host port") || strings.Contains(facts, "Pod") || strings.Contains(facts, "Service") {
+		t.Fatal("verify facts must describe what Compose checked", v.Facts)
+	}
 	good := x.stored().LastGood
 	if good == nil || good.Image != "nginx@sha256:"+strings.Repeat("9", 64) {
 		t.Fatal("a tagged image must resolve to its repository digest for recovery", good)
@@ -336,6 +340,9 @@ func TestUnpublishedServiceChecksEveryContainerOnly(t *testing.T) {
 	}
 	if !strings.Contains(fmt.Sprint(v.HTTP), "every new container directly") || strings.Contains(fmt.Sprint(v.HTTP), "published") {
 		t.Fatal("HTTP scope must say what was checked", v.HTTP)
+	}
+	if facts := strings.Join(v.Facts, "\n"); !strings.Contains(facts, "passed for every new container directly") || strings.Contains(facts, "published") {
+		t.Fatal("verify facts must not claim a host port check that did not run", v.Facts)
 	}
 }
 

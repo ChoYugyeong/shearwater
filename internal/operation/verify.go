@@ -91,9 +91,12 @@ func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Res
 	}
 	// Never let an empty replica set pass vacuously.
 	passed = passed && len(proof.Pods) > 0
+	// Each backend names what its proof covered (Pods and a Service for the
+	// engine, containers and a host port for Compose). Facts reuse it, so a
+	// model never reports components the app does not have.
 	scope := before.obs.Scope
 	if scope == "" {
-		scope = "new-release Pods directly and bound internal Service"
+		scope = "every ready replica directly"
 	}
 	result := before.result
 	err = m.Store.Write(false, func(tx *store.Tx) error {
@@ -129,7 +132,7 @@ func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Res
 				// output and in the next step, not only in model instructions.
 				result.Next = "the CURRENT deployed image passed; stagedImage is NOT planned or deployed. If update was requested, call update to SAVE its plan, then stop for approval"
 			}
-			result.Facts = append(result.Facts, "every selected new-release Pod and the internal Service passed the configured HTTP checks")
+			result.Facts = append(result.Facts, "the configured HTTP checks passed for "+scope)
 			if !proof.ImagePinned {
 				result.Unknown = append(result.Unknown, "image tag is mutable; image content is not pinned by the approved reference")
 			}

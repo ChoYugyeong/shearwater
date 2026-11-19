@@ -360,7 +360,8 @@ func TestOldPodHTTP200CannotProveNewReleaseAndChecksAreRequired(t *testing.T) {
 	f := newFixture(t)
 	f.deploy()
 	f.ready("old")
-	if r := f.call(false, Request{Action: "verify"}); r.State != "healthy" || r.VerifiedPods != 1 || !ValidHash(r.ProofID) || r.Evidence != nil {
+	if r := f.call(false, Request{Action: "verify"}); r.State != "healthy" || r.VerifiedPods != 1 || !ValidHash(r.ProofID) || r.Evidence != nil ||
+		!strings.Contains(strings.Join(r.Facts, "\n"), "passed for new-release Pods directly and bound internal Service") {
 		t.Fatal(r)
 	}
 	p := f.call(false, Request{Action: "update", Image: imageTwo})
