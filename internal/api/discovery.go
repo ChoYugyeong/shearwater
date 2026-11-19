@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -166,6 +167,39 @@ func (s *Server) buildOpenAPI() {
 		root[key] = map[string]string{"serverRelativeURL": "/openapi/v3/" + key + "?hash=" + hex.EncodeToString(sum[:8])}
 	}
 	s.oaRoot, _ = json.Marshal(map[string]any{"paths": root})
+}
+
+// openAPIV2 serves an empty Swagger 2.0 document. kubectl never asks the server
+// to validate a `kind: List` file; it validates such a file on the client
+// against OpenAPI v2 and stops with "the server could not find the requested
+// resource" when that document is missing. With no definitions, kubectl skips
+// its client-side checks for the items, and this server still validates every
+// object it receives. Everything else kubectl needs comes from /openapi/v3.
+func (s *Server) serveOpenAPIV2(w http.ResponseWriter, r *http.Request) {
+	if strings.Contains(r.Header.Get("Accept"), "protobuf") {
+		// kubectl asks for the "...spec.v2@v1.0+protobuf" name, but Go's MIME
+		// parser rejects '@' in a response; kube-openapi answers with this form.
+		w.Header().Set("Content-Type", "application/com.github.proto-openapi.spec.v2.v1.0+protobuf")
+		w.WriteHeader(http.StatusOK)
+		w.Write(openAPIV2Protobuf())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"swagger": "2.0", "info": map[string]string{"title": "Shearwater", "version": GitVersion}, "paths": map[string]any{}})
+}
+
+// openAPIV2Protobuf encodes the same document as a gnostic openapi_v2.Document.
+// Field numbers come from gnostic-models v0.7.0 openapiv2/OpenAPIv2.proto:
+// Document swagger=1, info=2, paths=8; Info title=1, version=2.
+func openAPIV2Protobuf() []byte {
+	field := func(b []byte, num int, value []byte) []byte {
+		b = append(b, byte(num<<3|2))
+		b = binary.AppendUvarint(b, uint64(len(value)))
+		return append(b, value...)
+	}
+	info := field(field(nil, 1, []byte("Shearwater")), 2, []byte(GitVersion))
+	doc := field(nil, 1, []byte("2.0"))
+	doc = field(doc, 2, info)
+	return field(doc, 8, nil) // an empty paths object
 }
 
 func (s *Server) serveOpenAPI(w http.ResponseWriter, r *http.Request) {

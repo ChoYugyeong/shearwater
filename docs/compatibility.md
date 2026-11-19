@@ -19,6 +19,7 @@ Shearwater는 Kubernetes API의 일부를 구현한 단일 노드 오케스트�
 | 인증 | 자체 CA 기반 TLS, 로컬 관리자 토큰 | RBAC·사용자/서비스 계정 분리 없음 |
 | 패치 | JSON Patch, JSON Merge Patch, Strategic Merge Patch | Server-Side Apply 거절(415) |
 | kubectl 출력 | JSON, Table, wide, watch와 셀렉터 전이 | API의 일부만 구현. 모든 kubectl 하위 명령을 지원하는 것은 아님 |
+| OpenAPI | 지원하는 종류의 `fieldValidation` 정보를 담은 v3 문서. `kind: List` 파일을 kubectl이 클라이언트에서 검증할 때 읽는 v2는 정의가 없는 빈 문서 | 그래서 List 항목의 필드 검사는 서버가 해. 각 객체를 `fieldValidation=Strict`로 받아 검증해 |
 | Protocol Buffers | 확인한 kubectl 요청의 일부 디코딩 | Protobuf 응답·전체 스키마 미지원. 미지원 요청은 거절 |
 
 `dnsPolicy: ClusterFirst`를 저장해도 DNS 서버는 생기지 않아. Service를 만든 뒤 시작하는 Pod에는 `WEB_SERVICE_HOST` 같은 환경변수가 제공돼. 이미 시작한 컨테이너의 환경변수를 Service 변경 때 다시 쓰지는 않아. `sessionAffinity`도 저장만 하므로 연결마다 같은 Pod를 고르는 정책으로 쓰지 마.

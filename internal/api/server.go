@@ -97,6 +97,8 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		s.serveAPIVersions(w)
 	case p == "/apis":
 		s.serveGroupList(w)
+	case p == "/openapi/v2":
+		s.serveOpenAPIV2(w, r)
 	case p == "/openapi/v3" || strings.HasPrefix(p, "/openapi/v3/"):
 		s.serveOpenAPI(w, r)
 	case strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/apis/"):

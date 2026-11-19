@@ -138,7 +138,15 @@ func TestDiscoveryAndOpenAPI(t *testing.T) {
 	if !strings.Contains(string(b), `"name":"fieldValidation"`) || !strings.Contains(string(b), `"kind":"Deployment"`) {
 		t.Fatalf("the patch operation must name the kind and the fieldValidation parameter: %s", b)
 	}
-	c.want(c.do("GET", "/openapi/v2", ""), 404)
+	// kubectl validates a `kind: List` file on the client against OpenAPI v2.
+	v2 := c.want(c.do("GET", "/openapi/v2", "", "Accept", "application/com.github.proto-openapi.spec.v2@v1.0+protobuf"), 200)
+	if v2.header.Get("Content-Type") != "application/com.github.proto-openapi.spec.v2.v1.0+protobuf" || !strings.HasPrefix(v2.raw, "\x0a\x032.0\x12") ||
+		!strings.Contains(v2.raw, "Shearwater") || !strings.HasSuffix(v2.raw, "\x42\x00") {
+		t.Fatalf("OpenAPI v2 protobuf document: %q", v2.raw)
+	}
+	if j := c.want(c.do("GET", "/openapi/v2", ""), 200); j.at("swagger") != "2.0" {
+		t.Fatalf("OpenAPI v2 JSON document: %s", j.raw)
+	}
 }
 
 func TestPodLifecycle(t *testing.T) {
