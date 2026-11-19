@@ -15,6 +15,7 @@ import (
 	"shearwater/internal/apis"
 	"shearwater/internal/edge"
 	"shearwater/internal/objects"
+	"shearwater/internal/pki"
 	"shearwater/internal/store"
 )
 
@@ -132,5 +133,78 @@ func TestEdgeStatusExplainsCertificateStates(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Fatalf("status does not show %q:\n%s", want, out.String())
 		}
+	}
+}
+
+func TestEdgeStatusMarksAnExpiredCertificate(t *testing.T) {
+	var out bytes.Buffer
+	st := edge.Status{HTTP: "[::]:80", HTTPS: "[::]:443",
+		Routes: []edge.Route{{Host: "old.example.com", Namespace: "default", Service: "old", Backend: "10.96.0.2:80"}},
+		Certs:  map[string]edge.CertState{"old.example.com": {Ready: true, NotAfter: time.Now().Add(-time.Hour), LastError: "acme: rate limited"}}}
+	if err := printEdgeStatus(&out, st, true); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "EXPIRED") || !strings.Contains(out.String(), "rate limited") || strings.Contains(out.String(), "valid until") {
+		t.Fatalf("an expired certificate must not read as valid:\n%s", out.String())
+	}
+}
+
+func TestBackupKeepsThePublicEntrySettingKeyAndCertificates(t *testing.T) {
+	base := t.TempDir()
+	data, config := filepath.Join(base, "data"), filepath.Join(base, "config")
+	os.Mkdir(data, 0700)
+	st, err := store.Open(filepath.Join(data, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, err = pki.Ensure(config); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err = runEdge([]string{"enable", "--config-dir", config, "--agree-tos", "--staging"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = edge.LoadAccountKey(filepath.Join(data, "edge", "account.key")); err != nil {
+		t.Fatal(err)
+	}
+	certs := filepath.Join(data, "edge", "certs")
+	os.MkdirAll(certs, 0700)
+	os.WriteFile(filepath.Join(certs, "app.example.com.crt"), []byte("certificate chain"), 0600)
+	os.WriteFile(filepath.Join(certs, "app.example.com.key"), []byte("private key"), 0600)
+	dest, target := filepath.Join(base, "backup"), filepath.Join(base, "restored")
+	args := []string{"--data-dir=" + data, "--config-dir=" + config, "--run-dir=" + filepath.Join(base, "run"), "--log-dir=" + filepath.Join(base, "log"), "--runtime=none", "--output=" + dest}
+	if err = runBackup(args, &out); err != nil {
+		t.Fatal(err)
+	}
+	if err = runRestore([]string{"--from=" + dest, "--to=" + target}, &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{"config/edge.json", "data/edge/account.key", "data/edge/certs/app.example.com.crt", "data/edge/certs/app.example.com.key"} {
+		source := filepath.Join(base, rel)
+		want, _ := os.ReadFile(source)
+		got, err := os.ReadFile(filepath.Join(target, rel))
+		if err != nil || len(want) == 0 || !bytes.Equal(got, want) {
+			t.Fatalf("%s was not restored intact: %v", rel, err)
+		}
+		if info, _ := os.Stat(filepath.Join(target, rel)); info.Mode().Perm() != 0o600 {
+			t.Fatalf("%s must stay private, got %v", rel, info.Mode())
+		}
+	}
+	if c, err := readEdgeConfig(filepath.Join(target, "config")); err != nil || !c.Enabled || !c.ACME.AgreeTOS {
+		t.Fatal("the restored setting does not enable the entry", c, err)
+	}
+}
+
+func TestLastLogLineNamesTheStartupFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.log")
+	if lastLogLine(path) != "" {
+		t.Fatal("a missing log must give no reason")
+	}
+	long := strings.Repeat("earlier line\n", 600)
+	os.WriteFile(path, []byte(long+"sw: public HTTP: listen tcp :80: bind: address already in use\x1b[0m\n\n"), 0600)
+	got := lastLogLine(path)
+	if !strings.Contains(got, "public HTTP: listen tcp :80: bind: address already in use") || strings.ContainsRune(got, 0x1b) || strings.Contains(got, "earlier") {
+		t.Fatalf("unexpected reason %q", got)
 	}
 }

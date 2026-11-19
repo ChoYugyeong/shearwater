@@ -192,6 +192,11 @@ func printEdgeStatus(out io.Writer, st edge.Status, enabled bool) error {
 		if st.HTTPS != "" {
 			cs := st.Certs[r.Host]
 			switch {
+			case cs.Ready && !cs.NotAfter.After(time.Now()):
+				cert = "EXPIRED " + cs.NotAfter.Format("2006-01-02")
+				if cs.LastError != "" {
+					cert += "; renewal failed: " + cs.LastError
+				}
 			case cs.Ready && cs.LastError != "":
 				cert = "valid until " + cs.NotAfter.Format("2006-01-02") + "; renewal failed: " + cs.LastError
 			case cs.Ready:
