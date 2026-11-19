@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -156,7 +157,9 @@ func localAPIWithToken(configDir, listen, tokenFile string) (*agentClient, error
 
 func localConfigError(dir string, err error) error {
 	code, hint := "INVALID", "check --config-dir and run as the same user as sw up"
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, os.ErrPermission) && os.Geteuid() != 0 {
+		hint = "as a normal user, ask the administrator to run: sudo sw setup --user " + currentUserName() + " --apply (then no flags are needed); or use sudo"
+	} else if errors.Is(err, os.ErrNotExist) {
 		code, hint = "NOT_RUNNING", "run sw up or pass the active instance's --config-dir"
 	}
 	return opsError(code, "never", fmt.Sprintf("cannot read client credentials in %s: %v", dir, err), hint)
@@ -192,4 +195,11 @@ func (c *agentClient) get(ctx context.Context, path string, out any) error {
 		return nil
 	}
 	return json.NewDecoder(io.LimitReader(res.Body, 32<<20)).Decode(out)
+}
+
+func currentUserName() string {
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
+	return "$USER"
 }

@@ -142,6 +142,9 @@ func runObserveCommand(command string, args []string, out io.Writer) error {
 	if command == "capabilities" {
 		return json.NewEncoder(out).Encode(agentCapabilities(false))
 	}
+	if err := savedClient(f, config, listen); err != nil {
+		return err
+	}
 	if err := validateObserveScope(&o); err != nil {
 		return err
 	}

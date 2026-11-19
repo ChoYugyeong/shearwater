@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/pem"
+	"flag"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -72,6 +73,45 @@ func TestClientDelegationRepeatConflictAndDefaults(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(dir, "admin.token"))
 	if string(b) != "fixture-only\n" {
 		t.Fatal("token changed")
+	}
+}
+
+func TestSavedClientIsTheDefaultOnlyWithoutExplicitFlags(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("normal-user ownership boundary")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	parse := func(args ...string) (string, string) {
+		t.Helper()
+		fs := flag.NewFlagSet("status", flag.ContinueOnError)
+		config := fs.String("config-dir", defaultConfigDir, "")
+		listen := fs.String("listen", defaultListen, "")
+		if err := fs.Parse(args); err != nil {
+			t.Fatal(err)
+		}
+		if err := savedClient(fs, config, listen); err != nil {
+			t.Fatal(err)
+		}
+		return *config, *listen
+	}
+	if c, l := parse(); c != defaultConfigDir || l != defaultListen {
+		t.Fatal("without a saved connection the server defaults must stay", c, l)
+	}
+	dir := userClientDir(home)
+	transfer := clientTransferFixture(t, dir)
+	b, _ := json.Marshal(transfer)
+	if err := receiveClient([]string{"--client-dir=" + dir}, bytes.NewReader(b), io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if c, l := parse(); c != dir || l != transfer.Connection.Listen {
+		t.Fatal("a normal user must reach the saved connection without flags", c, l)
+	}
+	if c, l := parse("--listen=127.0.0.1:1"); c != defaultConfigDir || l != "127.0.0.1:1" {
+		t.Fatal("an explicit flag must turn the saved connection off", c, l)
+	}
+	if c, _ := parse("--config-dir=/srv/other"); c != "/srv/other" {
+		t.Fatal("an explicit config-dir must win", c)
 	}
 }
 

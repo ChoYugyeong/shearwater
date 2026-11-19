@@ -201,18 +201,8 @@ func runTask(args []string, out io.Writer) error {
 	if *port < 0 || *port > 65535 {
 		return fmt.Errorf("port must be 0..65535")
 	}
-	explicit := false
-	f.Visit(func(v *flag.Flag) {
-		if v.Name == "config-dir" || v.Name == "listen" {
-			explicit = true
-		}
-	})
-	if !explicit {
-		saved, e := clientDefaults()
-		if e != nil {
-			return e
-		}
-		*config, *listen = saved.Config, saved.Listen
+	if e := savedClient(f, config, listen); e != nil {
+		return e
 	}
 	if !filepath.IsAbs(*config) {
 		return fmt.Errorf("operator config-dir must be absolute")

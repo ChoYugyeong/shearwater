@@ -48,6 +48,9 @@ func runInspect(command string, args []string, out io.Writer) error {
 	if fs.NArg() != 0 {
 		return opsError("INVALID", "never", fmt.Sprintf("unexpected positional arguments %q", fs.Args()), "run "+fs.Name()+" -h for the flags")
 	}
+	if err := savedClient(fs, configDir, listen); err != nil {
+		return err
+	}
 	if ns := options.Namespace; ns != "" && !apis.IsDNS1123Label(ns) {
 		return opsError("INVALID", "never", fmt.Sprintf("invalid namespace %q", ns), "pass a namespace name such as -n default")
 	}

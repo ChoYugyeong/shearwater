@@ -153,6 +153,9 @@ func parseDiagnostic(command string, args []string, out io.Writer) (diagnosticOp
 	if err != nil {
 		return invalid(err.Error())
 	}
+	if err = savedClient(fs, &o.config, &o.listen); err != nil {
+		return o, false, err
+	}
 	if !apis.IsDNS1123Label(o.namespace) {
 		return invalid("invalid namespace")
 	}

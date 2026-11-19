@@ -43,6 +43,28 @@ func userClientDir(home string) string {
 	return filepath.Join(home, ".local", "state", "shearwater", "client")
 }
 
+// savedClient applies the connection `sw setup` saved for this user when a
+// command got neither --config-dir nor --listen, so a normal user can run
+// sw status, get, observe or task after setup without repeating the paths.
+// Without a saved connection the server's own defaults stay in place.
+func savedClient(fs *flag.FlagSet, config, listen *string) error {
+	explicit := false
+	fs.Visit(func(v *flag.Flag) {
+		if v.Name == "config-dir" || v.Name == "listen" {
+			explicit = true
+		}
+	})
+	if explicit {
+		return nil
+	}
+	saved, err := clientDefaults()
+	if err != nil {
+		return err
+	}
+	*config, *listen = saved.Config, saved.Listen
+	return nil
+}
+
 func clientDefaults() (clientConnection, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
