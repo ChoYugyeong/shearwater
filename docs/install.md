@@ -35,7 +35,7 @@ sudo python3 install.py --version vX.Y.Z --host --apply    # 실제 설치와 �
 다시 실행해도 이미 된 단계는 건너뛰어. 인터넷에 접근할 수 없으면 `--archive`와 `--sums`로 미리 받아 둔 릴리스 묶음을 지정해.
 
 - **설치 뒤 첫 앱:** `sudo kubectl --kubeconfig /etc/shearwater/kubeconfig apply -f /opt/shearwater/releases/<버전>/examples/web.yaml`. kubectl은 따로 준비해야 해.
-- **일반 사용자로 조회:** `sw status --config-dir ~/.local/state/shearwater/client`.
+- **일반 사용자로 조회:** `sw status`, `sw get`, `sw observe`, `sw task`는 옵션 없이 `sw setup`이 저장한 연결(`~/.local/state/shearwater/client`)을 써. `--config-dir`이나 `--listen`을 직접 주면 그 값을 따라.
 
 **확인한 범위(2026-11-19):** Hyper-V에서 새로 만든 Ubuntu 24.04.5 클라우드 VM(동적 메모리 512~1536 MiB)에서 확인했어.
 - 설치에는 배포판의 containerd 2.2.1·runc 1.3.4가 들어갔고, 그 위에서 예제 앱이 HTTP 200으로 응답했어.

@@ -85,6 +85,9 @@ sudo "$sw" setup --user="$(id -un)" --node-name=shearwater --apply
 3. 선택한 일반 사용자의 `~/.local/state/shearwater/client`에 CA와 토큰을 준비해.
 4. 실제 일반 사용자 권한으로 인증 요청이 되는지 확인해.
 
+그 뒤 그 사용자는 `sw status`, `sw tree`, `sw get`·`logs`·`events`·`why`, `sw observe`·`verify`, `sw task`를
+옵션 없이 쓸 수 있어. 이 명령들은 `--config-dir`과 `--listen`을 둘 다 생략하면 저장된 연결을 써.
+
 토큰은 화면이나 명령줄 인자에 출력하지 않아. 인증 파일은 사용자만 읽는 0600 권한,
 새 폴더는 0700 권한으로 만들어. 서버 개인 키·DB·앱 파일은 복사하지 않아.
 같은 명령의 재실행은 동일한 인증만 재사용해. 다른 인증이 있으면 덮어쓰지 않고
