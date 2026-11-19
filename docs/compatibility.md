@@ -9,7 +9,7 @@ Shearwater는 Kubernetes API의 일부를 구현한 단일 노드 오케스트�
 | Pod | containerd 실행, IPv4, 로그·직전 로그, 재시작 정책, 유예 삭제 | 단일 노드, CNI/CRI 미사용 |
 | Deployment / ReplicaSet | 복제본 유지, RollingUpdate/Recreate, `/scale`, 이력·되돌리기 | `minReadySeconds`, `progressDeadlineSeconds`는 저장만 함 |
 | Service / EndpointSlice | IPv4 ClusterIP 예약, Ready Pod 선택, 이름 포트, Linux 커널 TCP 전달 | DNS·UDP·NodePort·LoadBalancer 미구현, headless DNS 미제공 |
-| 공개 진입점 | Service 주석의 호스트 이름으로 80·443 요청 전달, ACME HTTP-01 인증서 자동 발급·갱신 | Ingress 자원·경로별 연결·와일드카드 미지원. 격리 QA 엔진과 시험용 인증 기관으로 확인, 실제 Let's Encrypt에서는 미검증. [공개 진입점](public-entry.md) |
+| 공개 진입점 | Service 주석의 호스트 이름으로 80·443 요청 전달, ACME HTTP-01 인증서 자동 발급·갱신 | Ingress 자원·경로별 연결·와일드카드 미지원. 격리 QA 엔진에서 Pebble로 확인, 실제 Let's Encrypt 서버에서는 미검증. [공개 진입점](public-entry.md) |
 | 리소스 | CPU/메모리 limits 적용 | requests는 저장만 하고 배치에 쓰지 않음 |
 | 볼륨 | emptyDir, hostPath와 type 검사·OrCreate 생성 | PVC/CSI 같은 영속 볼륨 체계 미구현 |
 | readiness/liveness/startup probe | HTTP/HTTPS·TCP·exec 검사, Ready/Service 연동, 유예 종료·재시작 | alpha.4. gRPC·host override 미지원. [상태 검사](health-probes.md) |
