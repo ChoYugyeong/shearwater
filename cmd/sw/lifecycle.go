@@ -407,7 +407,11 @@ func runUp(args []string) error {
 		}
 		select {
 		case err := <-done:
-			return opsError("RUNTIME_ERROR", "safe", fmt.Sprintf("server stopped during startup: %v", err), "read "+logPath+" and run sw doctor with the same flags")
+			detail := fmt.Sprintf("server stopped during startup: %v", err)
+			if reason := lastLogLine(logPath); reason != "" {
+				detail += ": " + reason
+			}
+			return opsError("RUNTIME_ERROR", "safe", detail, "read "+logPath+" and run sw doctor with the same flags")
 		case <-ctx.Done():
 			cmd.Process.Signal(syscall.SIGTERM)
 			select {
@@ -708,4 +712,29 @@ func preflight(o opsOptions) error {
 		}
 	}
 	return nil
+}
+
+// lastLogLine returns the final non-empty line of the server log, bounded and
+// printable, so a failed start names its reason without opening the file.
+func lastLogLine(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err == nil && info.Size() > 4096 {
+		f.Seek(-4096, io.SeekEnd)
+	}
+	b, _ := io.ReadAll(io.LimitReader(f, 4096))
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+	line := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, strings.TrimSpace(lines[len(lines)-1]))
+	if len(line) > 300 {
+		line = line[:300] + "..."
+	}
+	return line
 }
