@@ -330,6 +330,23 @@ func runBackup(args []string, out io.Writer) error {
 			return err
 		}
 	}
+	// The public entry is optional. Without its setting a restored server
+	// would start with the entry off, and without the account key and
+	// certificates it would order every certificate again and could run into
+	// the authority's duplicate-certificate limit.
+	for _, item := range [][2]string{
+		{edgeConfigPath(o.ConfigDir), "config/edge.json"},
+		{filepath.Join(o.DataDir, "edge", "account.key"), "data/edge/account.key"},
+		{filepath.Join(o.DataDir, "edge", "certs"), "data/edge/certs"},
+	} {
+		source, rel := item[0], item[1]
+		if _, statErr := os.Lstat(source); errors.Is(statErr, os.ErrNotExist) {
+			continue
+		}
+		if err = backupTree(source, *dest, rel, &m.Entries, limit); err != nil {
+			return err
+		}
+	}
 	if *cold {
 		if _, err = os.Stat(filepath.Join(o.DataDir, "pods")); err == nil {
 			if err = backupTree(filepath.Join(o.DataDir, "pods"), *dest, "data/pods", &m.Entries, limit); err != nil {
