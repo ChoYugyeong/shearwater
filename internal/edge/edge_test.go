@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -360,5 +361,68 @@ func TestEnsureComesBackWhenACertificateEntersItsRenewalWindow(t *testing.T) {
 	now = now.Add(time.Hour)
 	if wait = c.Ensure(context.Background(), []string{"app.example.com"}); wait < 5*time.Second {
 		t.Fatalf("next check in %v would spin", wait)
+	}
+}
+
+func TestRenewedCertificateIsServedOnlyOnceItsValidityHasStarted(t *testing.T) {
+	a := acmetest.New()
+	defer a.Close()
+	a.Lifetime = 90 * time.Second // valid from -60s to +90s; renewal window opens at +40s
+	var c *Certs
+	a.Fetch = func(_, path string) (string, error) {
+		body, ok := c.Challenge(path)
+		if !ok {
+			return "", errors.New("404")
+		}
+		return body, nil
+	}
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	ahead := time.Duration(0)
+	c = &Certs{Dir: t.TempDir(), Issuer: &acme.Client{Directory: a.Directory(), Key: key, PollEvery: time.Millisecond},
+		Now: func() time.Time { return time.Now().Add(ahead) }}
+	hosts := []string{"app.example.com"}
+	served := func() *x509.Certificate {
+		cert, err := c.GetCertificate(&tls.ClientHelloInfo{ServerName: "app.example.com"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return leafOf(cert)
+	}
+	c.Ensure(context.Background(), hosts)
+	first := served()
+	// In the renewal window the authority dates the new certificate 8 seconds
+	// ahead of this machine's clock.
+	ahead = 45 * time.Second
+	a.NotBefore = ahead + 8*time.Second
+	c.Ensure(context.Background(), hosts)
+	if len(a.Issued) != 2 {
+		t.Fatal("the certificate was not renewed", a.Issued)
+	}
+	if got := served(); !got.Equal(first) || c.now().Before(got.NotBefore) {
+		t.Fatal("a certificate that is not valid yet was served while the old one still was")
+	}
+	// The renewed certificate is on disk and is not ordered again while it waits.
+	c.Ensure(context.Background(), hosts)
+	if len(a.Issued) != 2 {
+		t.Fatal("a waiting renewed certificate was ordered again", a.Issued)
+	}
+	// Just after the new certificate's start the old one is still served:
+	// a clock stepped back by a few seconds must not expose the new one early.
+	ahead += 8*time.Second + 2*time.Second
+	if got := served(); !got.Equal(first) {
+		t.Fatal("the renewed certificate went into service right at its start time")
+	}
+	// Well before the old certificate expires the new one has taken over.
+	ahead = time.Until(first.NotAfter) - 5*time.Second
+	got := served()
+	if got.Equal(first) || c.now().Before(got.NotBefore.Add(10*time.Second)) || !c.Ready("app.example.com") {
+		t.Fatal("the renewed certificate was not put into service before the old one expired")
+	}
+	// Without a usable previous certificate there is nothing better to serve.
+	fresh := &Certs{Dir: t.TempDir(), Issuer: c.Issuer, Now: c.Now}
+	c = fresh
+	c.Ensure(context.Background(), hosts)
+	if !c.Ready("app.example.com") {
+		t.Fatal("a first certificate must be served even when it is dated ahead")
 	}
 }

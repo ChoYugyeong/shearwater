@@ -34,6 +34,10 @@ type Authority struct {
 	BadNonceOnce bool
 	// Lifetime of issued certificates; default 90 days.
 	Lifetime time.Duration
+	// NotBefore is the start of validity relative to the time of issue;
+	// default one minute in the past. A positive value dates certificates
+	// ahead, as an authority with a slightly faster clock would.
+	NotBefore time.Duration
 
 	mu       sync.Mutex
 	caKey    *ecdsa.PrivateKey
@@ -266,8 +270,12 @@ func (a *Authority) serve(w http.ResponseWriter, r *http.Request) {
 		if life == 0 {
 			life = 90 * 24 * time.Hour
 		}
+		start := a.NotBefore
+		if start == 0 {
+			start = -time.Minute
+		}
 		tmpl := &x509.Certificate{SerialNumber: big.NewInt(int64(100 + id)), Subject: pkix.Name{CommonName: o.domain}, DNSNames: []string{o.domain},
-			NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(life),
+			NotBefore: time.Now().Add(start), NotAfter: time.Now().Add(life),
 			KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
 		leaf, _ := x509.CreateCertificate(rand.Reader, tmpl, a.caCert, csr.PublicKey, a.caKey)
 		o.cert = append(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leaf}), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: a.caCert.Raw})...)
