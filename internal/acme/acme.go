@@ -173,8 +173,8 @@ func (c *Client) sign(url, nonce string, payload any) ([]byte, error) {
 	return json.Marshal(map[string]string{"protected": protected, "payload": body, "signature": b64(sig)})
 }
 
-// post sends one signed request. A badNonce answer is retried once with the
-// nonce that came with it, as RFC 8555 section 6.5 asks.
+// post sends one signed request. A badNonce answer is retried with the nonce
+// that came with it, as RFC 8555 section 6.5 asks, at most three times.
 func (c *Client) post(ctx context.Context, url string, payload any, out any) (*http.Response, error) {
 	for attempt := 0; ; attempt++ {
 		nonce, err := c.freshNonce(ctx)
@@ -206,7 +206,7 @@ func (c *Client) post(ctx context.Context, url string, payload any, out any) (*h
 			if p.Detail == "" {
 				p.Detail = "request rejected"
 			}
-			if attempt == 0 && strings.HasSuffix(p.Type, ":badNonce") {
+			if attempt < 3 && strings.HasSuffix(p.Type, ":badNonce") {
 				continue
 			}
 			return nil, p
