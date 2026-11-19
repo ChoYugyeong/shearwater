@@ -1,6 +1,6 @@
 # 기존 Docker Compose 앱을 AI에게 맡기기 — `sw compose serve`
 
-> 개발 중인 기능이야. 아직 릴리스에 들어 있지 않아.
+> alpha.14부터 제공해. 위임 경로(`sw task`)만 지원하고, 실제 Docker 시험은 언어 모델 없이 프로토콜만 확인했어.
 
 Shearwater 엔진으로 옮기지 않고, 이미 Compose로 돌리는 서비스 하나를 같은 위임 흐름으로 AI에게 맡길 수 있어.
 

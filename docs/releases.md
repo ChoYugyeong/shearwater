@@ -1,5 +1,37 @@
 # 릴리스와 버전 확인
 
+## v0.1.0-alpha.14
+
+- **기존 Docker Compose 앱도 같은 위임 흐름으로.** `sw compose serve`를 Compose 프로젝트 앞에 띄우면, AI는 엔진과 같은 `sw task` 위임·정확한 계획 승인·실행 기록·컨테이너별 HTTP 증거로 서비스 하나를 업데이트하고 복구해.
+  - 사용자의 compose 파일은 고치지 않아. 이미지와 라벨만 담은 override 파일로 `docker compose up --no-deps`를 실행해.
+  - 이미지를 받지 못해 앱이 그대로인 실패는 계획을 닫아서 바로 복구 계획을 세울 수 있어.
+  - 손으로 다시 `up`한 상태는 `stale`로 보고하고, 이 작업의 목표로 받아들이지 않아.
+  - Compose는 업데이트 때 컨테이너를 새로 만들어서 짧은 끊김이 있을 수 있어. [Compose 안내](compose-backend.md)
+- **실행 기록을 두 단계로.** DB 밖에서 변경하는 백엔드는 시작 기록 → 실행 → 결과 기록 순서로 남겨. 응답이 사라지거나 서버가 죽어도 다음 `continue`가 같은 계획을 이어 가고, 두 번 적용하지 않아. 엔진은 예전처럼 한 트랜잭션에 적용과 기록을 함께 저장해.
+- **공개 진입점.** Service에 `shearwater.io/public-host` 주석을 달면, `sw server`가 호스트의 80·443으로 받아 그 Service에 넘겨. 인증서는 ACME HTTP-01로 받고 갱신해. 기본으로 꺼져 있고 `sw edge enable`로 켜. [공개 진입점 안내](public-entry.md)
+- **Secret.** v1 Secret(`data`, 쓰기 전용 `stringData`, `type`, `immutable`)을 받고, 컨테이너의 `env[].valueFrom.secretKeyRef`와 `envFrom[].secretRef`로 값을 넣어. `kubectl create secret generic`이 보내는 Protobuf 본문도 읽어.
+  - 값은 Kubernetes 기본값처럼 base64로 저장할 뿐 암호화하지 않아.
+  - 표 출력과 개발용 trace에는 값이 나오지 않아. [호환표](compatibility.md)
+- **새 서버 설치를 한 번에.** `sudo python3 install.py --version v0.1.0-alpha.14 --host`는 미리보기를 보여 주고, `--apply`로 실제 설치를 해.
+  - containerd가 없을 때만 배포판의 containerd·runc를 설치해. Docker 같은 기존 containerd는 재사용해.
+  - IPv4 전달을 영구 설정하고, `/opt/shearwater/releases`에 설치한 뒤 systemd 서비스를 시작해. [설치 안내 0절](install.md)
+- **kubectl `kind: List`.** 검증을 켠 채 `kind: List` 파일을 `kubectl apply`할 수 있어. 각 항목은 서버가 `fieldValidation=Strict`로 검증해.
+- **일반 사용자 명령.** `sw setup` 뒤에는 `sw status`·`get`·`observe` 같은 읽기 명령이 옵션 없이 저장된 연결을 써.
+
+**업데이트:** DB 형식은 바뀌지 않아. 서버 실행 파일을 교체한 뒤 다음 세 곳의 버전을 확인해.
+- `sw version`: `0.1.0-alpha.14`
+- 서버 `/version`의 `gitVersion`: `v1.36.0+shearwater.0.1.0-alpha.14`
+- Node의 `kubeletVersion`: `v1.36.0+shearwater.0.1.0-alpha.14`
+
+[설치와 기존 서버 업데이트](install.md)
+
+**확인한 범위:** 아래는 모두 이 PC의 격리된 QA 환경과 로컬 Hyper-V VM에서 확인한 거야. 공인 IP 서버, 실제 Let's Encrypt 발급, 언어 모델이 Compose 흐름을 끝까지 따르는지는 아직 확인하지 않았어.
+- 실제 kubectl로 Secret 7단계.
+- 실제 dockerd·Compose로 17단계.
+- Let's Encrypt 시험용 서버 Pebble로 공개 진입점 14단계.
+- 새 Ubuntu 24.04 VM에서 설치 도우미로 첫 HTTP 200, 재실행 시 무변경, 재부팅 복구.
+- README의 업데이트·밀도 측정값은 alpha.13에서 잰 것이고 alpha.14에서 다시 재지 않았어.
+
 ## v0.1.0-alpha.13
 
 - **새 Pod의 준비 검사.** `startupProbe`가 없으면 새 컨테이너의 `Running` 상태를 기록한 뒤 첫 `readinessProbe`를 실행해. 시작 직후 검사에 실패하면 100ms, 200ms, 400ms 간격으로 최대 세 번 다시 시도해. 첫 성공 뒤에는 설정한 주기로 검사하며, Service는 지정한 연속 성공 횟수를 채운 Pod로 트래픽을 보내.

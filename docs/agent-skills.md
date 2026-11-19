@@ -1,7 +1,7 @@
 # AI에게 Shearwater 운영 절차 알려 주기
 
 이 문서는 **alpha.9부터 제공하는 기능**을 설명해. [설치 안내](install.md)로 받은
-실행 파일에서 `sw version`이 `0.1.0-alpha.13`인지 확인해. `chat --approved-plan`과
+실행 파일에서 `sw version`이 `0.1.0-alpha.14`인지 확인해. `chat --approved-plan`과
 `--task=diagnose`, 작업별 스킬이 Linux 릴리스 묶음에 함께 들어 있어.
 새 클라이언트를 실행한다고 운영 서버가 교체되지는 않아.
 
@@ -61,7 +61,7 @@ AI가 실제로 본 지침과 도구 목록을 확인해야 해. 이 저장소�
 사용해. 관리자 서버를 실행하는 root로 AI 대화를 실행하지 않아.
 
 ```bash
-SW="$HOME/.local/share/shearwater/v0.1.0-alpha.13/sw"
+SW="$HOME/.local/share/shearwater/v0.1.0-alpha.14/sw"
 CONFIG=/absolute/path/to/user/config
 LISTEN=127.0.0.1:6443
 PLAN=EXACT_64_CHARACTER_PLAN_HASH

@@ -30,14 +30,14 @@ This replay shows the Model Context Protocol (MCP) messages from a Qwen test wit
 
 The release below runs on Linux amd64. The installation guide walks through Ubuntu 24.04 on WSL 2. Running containers requires containerd, runc, networking tools and administrator access on the host. [Installation prerequisites](docs/install.md)
 
-**Download v0.1.0-alpha.13** · [Installer](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/install.py) · [Linux amd64 archive](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/shearwater-v0.1.0-alpha.13-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.13/SHA256SUMS)
+**Download v0.1.0-alpha.14** · [Installer](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/install.py) · [Linux amd64 archive](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/shearwater-v0.1.0-alpha.14-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/SHA256SUMS)
 
 Run this in Ubuntu Bash. It downloads the installer to an empty temporary directory and verifies its checksum. The installer checks the archive and the `sw` executable and installs this version in its own directory.
 
 ```bash
 (
   set -eu
-  version=v0.1.0-alpha.13
+  version=v0.1.0-alpha.14
   release="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
   download_dir=$(mktemp -d)
   cd "$download_dir"
@@ -49,7 +49,7 @@ Run this in Ubuntu Bash. It downloads the installer to an empty temporary direct
 )
 ```
 
-The output should start with `sw 0.1.0-alpha.13`. Next, use `sw setup` to prepare credentials and follow the first-app guide to get an HTTP response from the example nginx app. [Set up credentials](docs/onboarding.md) · [Run your first web app](docs/first-try.md)
+The output should start with `sw 0.1.0-alpha.14`. Next, use `sw setup` to prepare credentials and follow the first-app guide to get an HTTP response from the example nginx app. [Set up credentials](docs/onboarding.md) · [Run your first web app](docs/first-try.md)
 
 To build from source, run `. hack/env.sh` and then `bash hack/build.sh` from the repository root. [Build guide](docs/quickstart.md)
 
@@ -61,9 +61,18 @@ To build from source, run `. hack/env.sh` and then `bash hack/build.sh` from the
 
 To recover, create and approve a new plan that uses an image which previously passed HTTP verification. [Delegation, approval and recovery examples](docs/agent-operations.md)
 
+## New in alpha.14
+
+- **Existing Docker Compose apps.** `sw compose serve` puts the same delegation, approval and HTTP evidence in front of one service of a Compose project. Your compose files are not rewritten. [Compose guide](docs/compose-backend.md)
+- **Public HTTPS entry.** Annotate a Service with `shearwater.io/public-host` and `sw edge enable` serves it on ports 80/443 with ACME (HTTP-01) certificates. [Public entry guide](docs/public-entry.md)
+- **Secrets.** Containers can read `env[].valueFrom.secretKeyRef` and `envFrom[].secretRef`. Values are stored base64-encoded, not encrypted.
+- **One-command server setup.** On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.14 --host --apply` installs containerd and runc when none exist, enables IPv4 forwarding and starts the systemd service. [Install guide, section 0](docs/install.md)
+
+These were checked in isolated local test environments and a fresh local Ubuntu VM: real kubectl, real Docker Compose, the Pebble ACME test server. They were not yet checked on a public server with real Let's Encrypt certificates. [Release notes](docs/releases.md)
+
 ## Benchmarks
 
-Both versions ran the same nginx app on the same Ubuntu 24.04 VM with 2 vCPUs and 2,560 MiB of memory. The alpha.12 baseline comes from an earlier test series. For alpha.13, the tests used the release binary built from the public tag.
+Both versions ran the same nginx app on the same Ubuntu 24.04 VM with 2 vCPUs and 2,560 MiB of memory. The alpha.12 baseline comes from an earlier test series. For alpha.13, the tests used the release binary built from the public tag. These figures were not re-measured for alpha.14.
 
 | Measurement | alpha.12 | alpha.13 |
 | --- | ---: | ---: |
@@ -80,7 +89,7 @@ In a separate WSL 2 test on November 11, 2026, the `sw server` process reached 3
 
 ## Where it fits
 
-Shearwater is an **experimental alpha** for one operator running trusted HTTP apps on a single node. It supports IPv4 and TCP ClusterIP Services. Its HTTP checks cover internal endpoints. Public DNS, TLS and login flows need separate checks, and rolling back an image does not restore database contents. Shearwater stores `securityContext` fields without enforcing them. Multi-tenant isolation and Kubernetes RBAC are outside its supported scope. [Compatibility matrix](docs/compatibility.md)
+Shearwater is an **experimental alpha** for one operator running trusted HTTP apps on a single node. It supports IPv4 and TCP ClusterIP Services. Its HTTP checks cover internal endpoints. The optional public entry terminates TLS for annotated Services, but public DNS and login flows need separate checks, and rolling back an image does not restore database contents. Shearwater stores `securityContext` fields without enforcing them. Multi-tenant isolation and Kubernetes RBAC are outside its supported scope. [Compatibility matrix](docs/compatibility.md)
 
 Docker Compose is also a good fit for building and running a few apps on one server. Consider Kubernetes or K3s if you need multiple nodes, Ingress, persistent volume claims or Helm. [Compare use cases](docs/choosing-shearwater.md)
 
