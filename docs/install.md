@@ -10,6 +10,40 @@ Shearwater는 신뢰하는 로컬 관리자가 사용하는 **실험적 알파**
 무엇을 확인할지 먼저 정하고 싶다면 [첫 체험 안내](first-try.md)를 봐.
 아래는 새 설치 절차야. 이미 실행 중인 인스턴스가 있다면 **기존 버전 업데이트** 단락을 먼저 읽어.
 
+## 0. 새 Ubuntu·Debian 서버라면: `install.py --host` 한 번으로
+
+> 개발 중인 기능이야. 다음 릴리스에 들어갈 예정이고, 지금 공개된 alpha.13의 설치 도우미에는 없어.
+
+systemd를 쓰는 전용 Ubuntu·Debian 서버(VPS나 VM)에서는 아래 1~4절을 설치 도우미가 대신 해. 먼저 미리보기로 무엇을 바꿀지 보여 주고, `--apply`를 붙여야 실제로 바꿔.
+
+```bash
+sudo python3 install.py --version vX.Y.Z --host            # 미리보기만, 아무것도 바꾸지 않아
+sudo python3 install.py --version vX.Y.Z --host --apply    # 실제 설치와 시작
+```
+
+`--apply`를 붙이면 아래 일을 순서대로 해.
+
+| 단계 | 하는 일 |
+|---|---|
+| 패키지 | 없는 것만 설치해: `ca-certificates`·`iproute2`·`iptables`. containerd가 아예 없을 때만 배포판 서명 저장소에서 `containerd`·`runc`도 설치해. **이미 containerd가 있으면(Docker 포함) 그대로 써.** Docker의 `containerd.io`와 배포판 패키지는 충돌하기 때문이야 |
+| containerd | `systemctl enable --now containerd` |
+| IPv4 전달 | `/etc/sysctl.d/90-shearwater.conf`에 `net.ipv4.ip_forward = 1`을 쓰고 적용해. 호스트 전체에 걸리는 설정이야 |
+| 릴리스 | 체크섬을 확인한 뒤 `/opt/shearwater/releases/<버전>`에 설치하고 `/usr/local/bin/sw` 링크를 만들어. 다른 프로그램의 `sw`가 이미 있으면 멈춰 |
+| 서비스 | `sw service install`과 `start`를 실행하고, 노드가 Ready가 될 때까지 기다려(최대 120초). 이미 `shearwater.service`가 있으면 바꾸지 않아 |
+| 일반 사용자 | `sudo`로 실행했다면 그 사용자에게 `sw setup --user <사용자> --apply`로 클라이언트 자격 증명을 줘 |
+
+다시 실행해도 이미 된 단계는 건너뛰어. 인터넷에 접근할 수 없으면 `--archive`와 `--sums`로 미리 받아 둔 릴리스 묶음을 지정해.
+
+- **설치 뒤 첫 앱:** `sudo kubectl --kubeconfig /etc/shearwater/kubeconfig apply -f /opt/shearwater/releases/<버전>/examples/web.yaml`. kubectl은 따로 준비해야 해.
+- **일반 사용자로 조회:** `sw status --config-dir ~/.local/state/shearwater/client`.
+
+**확인한 범위(2026-11-19):** Hyper-V에서 새로 만든 Ubuntu 24.04.5 클라우드 VM(동적 메모리 512~1536 MiB)에서 확인했어.
+- 설치에는 배포판의 containerd 2.2.1·runc 1.3.4가 들어갔고, 그 위에서 예제 앱이 HTTP 200으로 응답했어.
+- 다시 실행하면 아무것도 바꾸지 않았어.
+- 재부팅 뒤 containerd와 서비스가 자동으로 시작됐고, 4.6초 만에 서버가 떠서 앱이 다시 응답했어.
+- 설치 도우미 자체에 걸린 시간은 약 5초였어. 전체 538초 중 약 533초는 `apt-get update`가 Ubuntu 미러에 연결하다 실패하고 재시도한 시간이야.
+- 공인 IP를 가진 클라우드 VPS와 Debian에서는 아직 시험하지 않았어.
+
 ## 1. WSL과 준비물 확인
 
 Windows PowerShell에서 `wsl --list --verbose`로 배포판을 확인해.
