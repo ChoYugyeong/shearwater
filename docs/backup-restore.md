@@ -8,7 +8,7 @@ alpha.4의 `sw backup`은 새 비공개 폴더를 만들고 마지막에 `manife
 
 | 방식 | 들어가는 것 | 조건 |
 |---|---|---|
-| 기본 | SQLite의 일관된 snapshot, CA·서버 인증서/키, 관리자 토큰 | 서버 실행 중 가능 |
+| 기본 | SQLite의 일관된 snapshot, CA·서버 인증서/키, 관리자 토큰, 공개 진입점을 쓰면 그 설정·ACME 계정 키·발급받은 인증서 | 서버 실행 중 가능 |
 | `--include-volumes` | 기본 내용 + Pod 디렉터리(emptyDir 포함) + 선언된 hostPath 파일/디렉터리 | 서버와 Shearwater 컨테이너를 모두 멈춘 상태 |
 
 기본 백업은 **앱 데이터 전체의 백업이 아니야**. SQLite는 서버가 알고 있는 리소스·IP·이력이고,
