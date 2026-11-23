@@ -87,6 +87,8 @@ Ubuntu Bash에서 아래 명령을 실행하세요. 빈 임시 폴더에 설치�
 
 이전 WSL 2 시험(2026-11-11)에서는 BusyBox Pod 10개를 띄우고 60초 동안 유휴 상태를 관찰했어요. `sw server`의 최대 RSS는 34.76 MB, 디스크 쓰기는 0 B였어요. containerd와 앱이 쓰는 자원은 별도예요. [측정 범위와 재현 방법](docs/stage1-verification.md)
 
+alpha.9 때 Docker Compose, K3s와 같은 장비에서 같은 앱으로 메모리·배포 준비 시간·업데이트 중 오류를 잰 기록도 있어요. 세 도구는 기능 범위가 달라서 순위로 읽으면 안 돼요. [비교 조건과 결과](docs/benchmarks/runtime-comparison-alpha9.md)
+
 ## 어떤 환경에 맞나요?
 
 관리자 한 명이 신뢰하는 작은 HTTP 앱을 맡기는 **실험적 알파**예요. 단일 노드·IPv4·TCP ClusterIP를 지원해요. 선택 기능인 공개 진입점이 주석을 단 Service의 TLS를 맡지만, 공개 도메인 연결과 로그인은 따로 확인해야 하고, 이미지 복구에는 DB 데이터 복원이 포함되지 않아요. `securityContext`는 저장만 하며 다중 사용자 격리와 RBAC는 지원 범위 밖이에요. [호환표](docs/compatibility.md)

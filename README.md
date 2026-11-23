@@ -87,6 +87,8 @@ During updates, the test opened 100 new connections per second until all 10 repl
 
 In a separate WSL 2 test on November 11, 2026, the `sw server` process reached 34.76 MB peak resident memory and wrote 0 B to disk over 60 idle seconds with 10 BusyBox Pods present. These figures cover the Shearwater process alone. The container runtime and apps have their own resource costs. [Measurement scope and reproduction steps](docs/stage1-verification.md)
 
+An earlier test of alpha.9 measured memory, deployment time and errors during updates against Docker Compose and K3s on the same machine with the same app. The three tools cover different feature sets, so the results are not a ranking. [Conditions and results (Korean)](docs/benchmarks/runtime-comparison-alpha9.md)
+
 ## Where it fits
 
 Shearwater is an **experimental alpha** for one operator running trusted HTTP apps on a single node. It supports IPv4 and TCP ClusterIP Services. Its HTTP checks cover internal endpoints. The optional public entry terminates TLS for annotated Services, but public DNS and login flows need separate checks, and rolling back an image does not restore database contents. Shearwater stores `securityContext` fields without enforcing them. Multi-tenant isolation and Kubernetes RBAC are outside its supported scope. [Compatibility matrix](docs/compatibility.md)
