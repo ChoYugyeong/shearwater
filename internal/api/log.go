@@ -28,7 +28,8 @@ func (s *Server) podLog(w http.ResponseWriter, r *http.Request, res *apis.Resour
 	if err := json.Unmarshal(rec.Data, pod); err != nil {
 		return fmt.Errorf("stored %s is not readable: %v", rec.Key, err)
 	}
-	if s.LogDir == "" {
+	remote := pod.Spec.NodeName != "" && pod.Spec.NodeName != s.NodeName && s.RemoteLogs != nil
+	if s.LogDir == "" && !remote {
 		return errUnsupported(http.StatusNotImplemented, "NotImplemented", "this server runs without a node agent, so there are no container logs").
 			withHint("run `sw server` as root so that it starts containers")
 	}
@@ -85,6 +86,10 @@ func (s *Server) podLog(w http.ResponseWriter, r *http.Request, res *apis.Resour
 	}
 	follow := q.Get("follow") == "true"
 
+	if remote {
+		// The Pod runs on another server: its node agent has the file.
+		return s.RemoteLogs(w, r, pod, container, attempt, tail, limit, follow)
+	}
 	f, err := os.Open(podlog.File(s.LogDir, ri.namespace, ri.name, pod.Metadata.UID, container, attempt))
 	if errors.Is(err, os.ErrNotExist) && q.Get("previous") == "true" {
 		return errBadRequest("previous terminated container %q in pod %q not found", container, ri.name)

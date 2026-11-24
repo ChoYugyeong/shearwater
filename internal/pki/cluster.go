@@ -200,3 +200,32 @@ func PinnedTLS(caPEM []byte, want string) (*tls.Config, error) {
 
 // IsNodeCert reports whether a verified certificate names a node.
 func IsNodeCert(cn string) (string, bool) { return strings.CutPrefix(cn, NodeName) }
+
+// KubeletClientName is the common name of the certificate the control plane
+// presents to a node's log endpoint.
+const KubeletClientName = "shearwater-apiserver-kubelet-client"
+
+// EnsureKubeletClient returns the control plane's client certificate for node
+// log endpoints, creating it when missing.
+func EnsureKubeletClient(dir string) (tls.Certificate, error) {
+	crt, key := filepath.Join(dir, "apiserver-kubelet-client.crt"), filepath.Join(dir, "apiserver-kubelet-client.key")
+	if cert, err := tls.LoadX509KeyPair(crt, key); err == nil {
+		return cert, nil
+	}
+	caCert, caKey, err := loadCA(dir)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	certPEM, keyPEM, _, err := newCert(&x509.Certificate{
+		Subject:     pkix.Name{CommonName: KubeletClientName},
+		KeyUsage:    x509.KeyUsageDigitalSignature,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}, caCert, caKey)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	if err := writeFiles(map[string][]byte{crt: certPEM, key: keyPEM}); err != nil {
+		return tls.Certificate{}, err
+	}
+	return tls.X509KeyPair(certPEM, keyPEM)
+}

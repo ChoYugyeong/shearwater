@@ -77,6 +77,9 @@ type Server struct {
 	Admit admission.Func
 	// Admin serves AdminPrefix for administrators; NodeAPI serves NodePrefix.
 	Admin, NodeAPI http.Handler
+	// RemoteLogs streams the log of a container on another node (nil: only
+	// this server's own node has logs). The request is already checked.
+	RemoteLogs func(w http.ResponseWriter, r *http.Request, pod *apis.Pod, container string, attempt int, tail, limit int64, follow bool) error
 
 	traceMu       sync.Mutex
 	openapi       sync.Once

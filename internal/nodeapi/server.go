@@ -227,7 +227,7 @@ func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 		failErr(w, err)
 		return
 	}
-	cert, err := pki.SignNodeServing(s.ConfigDir, []byte(req.CSR), req.NodeName, []net.IP{ip})
+	cert, err := pki.SignNodeServing(s.ConfigDir, []byte(req.CSR), req.NodeName, []net.IP{ip, net.IPv4(127, 0, 0, 1)})
 	if err != nil {
 		fail(w, http.StatusBadRequest, codeInvalid, "node certificate request: %v", err)
 		return
