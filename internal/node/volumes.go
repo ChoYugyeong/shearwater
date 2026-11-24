@@ -130,9 +130,11 @@ func keepVolumeDirectory(candidates map[string]bool, root, dir string) {
 	}
 }
 
-// collectVolumes enumerates disk before reading the API: a volume first
-// mounted during the subsequent list cannot be mistaken for an old orphan.
-// Read or decode errors abort the entire pass before any directory is removed.
+// collectVolumes removes the data of released local-path volumes that this
+// node holds and whose claim had the Delete policy (the control plane marks
+// them with DeleteDataAnnotation), then their PersistentVolume objects. A
+// directory without a volume object is never removed: after restoring an
+// older backup the objects can be missing while the data is still wanted.
 func (a *Agent) collectVolumes() error {
 	root := filepath.Join(a.DataDir, "volumes")
 	info, err := os.Lstat(root)
@@ -142,25 +144,8 @@ func (a *Agent) collectVolumes() error {
 	if err != nil {
 		return err
 	}
-	if !filepath.IsAbs(root) || !info.IsDir() {
+	if !info.IsDir() {
 		return fmt.Errorf("invalid volume root %q", root)
-	}
-	dirs, err := os.ReadDir(root)
-	if err != nil {
-		return err
-	}
-	candidates := map[string]bool{}
-	for _, d := range dirs {
-		if d.IsDir() && strings.HasPrefix(d.Name(), "pvc-") {
-			candidates[d.Name()] = true
-		}
-	}
-	if len(candidates) == 0 {
-		return nil
-	}
-	realRoot, err := filepath.EvalSymlinks(root)
-	if err != nil {
-		return err
 	}
 	n, err := a.volumeNode()
 	if err != nil {
@@ -175,43 +160,43 @@ func (a *Agent) collectVolumes() error {
 		if err := json.Unmarshal(rec.Data, &pv); err != nil {
 			return err
 		}
-		if !pv.MatchesNode(n) {
+		if pv.Metadata.Annotations[apis.DeleteDataAnnotation] != "true" || !pv.ManagedLocalPath() || !pv.MatchesNode(n) {
 			continue
 		}
-		dir, err := a.pvPath(&pv)
+		// Pin the root across the removal: a rename of the data directory
+		// must never redirect it.
+		handle, err := os.OpenRoot(root)
 		if err != nil {
 			return err
 		}
-		realDir, err := volumeRealPath(dir)
+		err = handle.RemoveAll(pv.Metadata.Name)
+		handle.Close()
 		if err != nil {
-			return err
+			return fmt.Errorf("remove the data of %s: %w", pv.Metadata.Name, err)
 		}
-		// A static PV may name a subdirectory of a managed directory, or
-		// expose the entire root. Protect its data irrespective of PV name.
-		keepVolumeDirectory(candidates, root, dir)
-		keepVolumeDirectory(candidates, realRoot, realDir)
-	}
-	if len(candidates) == 0 {
-		return nil
-	}
-	// Pin the directory we enumerated across recursive removal. A rename of
-	// the data root during resync must never redirect GC into its replacement.
-	handle, err := os.OpenRoot(root)
-	if err != nil {
-		return err
-	}
-	defer handle.Close()
-	current, err := handle.Stat(".")
-	if err != nil {
-		return err
-	}
-	if !os.SameFile(info, current) {
-		return fmt.Errorf("volume root %q changed during collection", root)
-	}
-	for name := range candidates {
-		if err := handle.RemoveAll(name); err != nil {
+		name := pv.Metadata.Name
+		err = a.Store.Transact(func(tx store.Txn) error {
+			cur, err := tx.Get(store.Key{Resource: "persistentvolumes", Name: name})
+			if errors.Is(err, store.ErrNotFound) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			var now apis.PersistentVolume
+			if err := json.Unmarshal(cur.Data, &now); err != nil {
+				return err
+			}
+			if now.Metadata.Annotations[apis.DeleteDataAnnotation] != "true" {
+				return nil
+			}
+			_, err = tx.Delete(cur.Key, cur.Rev, func(int64) ([]byte, error) { return cur.Data, nil })
 			return err
+		})
+		if err != nil {
+			return fmt.Errorf("remove persistentvolume %s: %w", name, err)
 		}
+		a.Logf("removed the data of released volume %s", name)
 	}
 	return nil
 }

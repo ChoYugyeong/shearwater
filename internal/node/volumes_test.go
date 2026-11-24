@@ -141,14 +141,36 @@ func TestClaimMountAndCollection(t *testing.T) {
 	if data, err := os.ReadFile(file); err != nil || string(data) != "saved" {
 		t.Fatalf("lost retained volume: %q %v", data, err)
 	}
-	if _, err := os.Stat(orphan); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("orphan still present: %v", err)
+	// A directory without a volume object stays: after restoring an older
+	// backup the objects can be missing while the data is still wanted.
+	if _, err := os.Stat(orphan); err != nil {
+		t.Fatalf("an orphan directory was removed: %v", err)
 	}
 	if _, err := os.Stat(keep); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(staticDir); err != nil {
 		t.Fatalf("live static hostPath collected: %v", err)
+	}
+
+	// The control plane marks a released Delete volume; then its node
+	// removes the data and the object.
+	if err := a.readVolumeObject(store.Key{Resource: volumes.Plural, Name: filepath.Base(dir)}, &pv); err != nil {
+		t.Fatal(err)
+	}
+	pv.Metadata.Annotations = map[string]string{apis.DeleteDataAnnotation: "true"}
+	write(volumes, &pv, false)
+	if err := a.collectVolumes(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("released Delete volume still on disk: %v", err)
+	}
+	if _, err := e.st.Get(store.Key{Resource: volumes.Plural, Name: filepath.Base(dir)}); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("released volume object not removed after its data: %v", err)
+	}
+	if _, err := os.Stat(orphan); err != nil {
+		t.Fatalf("an orphan directory was removed with the released one: %v", err)
 	}
 }
 

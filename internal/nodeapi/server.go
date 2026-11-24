@@ -659,6 +659,30 @@ func (s *Server) apply(tx *store.Tx, node string, wr txWrite) (store.Record, err
 		if old.Spec.NodeName != node || obj.(*apis.Pod).Spec.NodeName != node {
 			return store.Record{}, forbidden("Pod %s/%s is not bound to node %s", key.Namespace, key.Name, node)
 		}
+	case key.Group == "" && key.Resource == "persistentvolumes":
+		// After removing the data of a released local-path volume it holds.
+		if wr.Op != "delete" {
+			return store.Record{}, forbidden("nodes only delete released persistentvolumes")
+		}
+		cur, err := tx.Get(key)
+		if err != nil {
+			return store.Record{}, err
+		}
+		var pv apis.PersistentVolume
+		if err := json.Unmarshal(cur.Data, &pv); err != nil {
+			return store.Record{}, err
+		}
+		nrec, err := tx.Get(store.Key{Resource: "nodes", Name: node})
+		if err != nil {
+			return store.Record{}, err
+		}
+		var n apis.Node
+		if err := json.Unmarshal(nrec.Data, &n); err != nil {
+			return store.Record{}, err
+		}
+		if pv.Metadata.Annotations[apis.DeleteDataAnnotation] != "true" || !pv.ManagedLocalPath() || !pv.MatchesNode(&n) {
+			return store.Record{}, forbidden("persistentvolume %s is not a released volume of node %s", key.Name, node)
+		}
 	case key.Group == "" && key.Resource == "events":
 		if wr.Op == "delete" {
 			return store.Record{}, forbidden("nodes do not delete events")

@@ -310,7 +310,9 @@ func runServer(args []string) error {
 	if withAgent {
 		wired.NodeName = *nodeName
 	}
-	srv.Admit = admission.Chain(append(wireAccess(wired), wireNetworkServices(wired)...)...)
+	volumeFilter, volumeAdmit := wireVolumes(wired)
+	plugins := append(wireAccess(wired), wireNetworkServices(wired)...)
+	srv.Admit = admission.Chain(append(plugins, volumeAdmit...)...)
 	_, listenPort, _ := net.SplitHostPort(*listen)
 	joinURL := ""
 	if advertiseIP.IsValid() {
@@ -434,7 +436,7 @@ func runServer(args []string) error {
 		go func() { agent.Run(ctx); close(agentDone) }()
 		go func() {
 			defer close(controllerDone)
-			controller.Manager{Store: st, NodeName: *nodeName, Drain: draining, Silence: nodeAPI.Live.Silence}.Run(ctx)
+			controller.Manager{Store: st, NodeName: *nodeName, Drain: draining, Silence: nodeAPI.Live.Silence, VolumeFilter: volumeFilter}.Run(ctx)
 		}()
 		go func() {
 			defer close(proxyDone)
@@ -459,7 +461,7 @@ func runServer(args []string) error {
 			// and replaces Pods on its workers.
 			go func() {
 				defer close(controllerDone)
-				controller.Manager{Store: st, Silence: nodeAPI.Live.Silence}.Run(ctx)
+				controller.Manager{Store: st, Silence: nodeAPI.Live.Silence, VolumeFilter: volumeFilter}.Run(ctx)
 			}()
 		} else {
 			close(controllerDone)

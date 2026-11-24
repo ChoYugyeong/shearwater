@@ -369,3 +369,16 @@ func init() {
 		},
 	})
 }
+
+// DeleteDataAnnotation marks a released local-path volume whose claim had the
+// Delete reclaim policy. Only the node that holds the directory removes it,
+// and then the PersistentVolume object. Data is never removed because a
+// volume object is missing (for example after restoring an older backup).
+const DeleteDataAnnotation = "shearwater.io/delete-data"
+
+// ManagedLocalPath reports whether the volume is a directory the local-path
+// provisioner made: pvc-<uid> under LocalVolumeRoot.
+func (o *PersistentVolume) ManagedLocalPath() bool {
+	return o.Spec.Local != nil && len(o.Metadata.Name) > 4 && o.Metadata.Name[:4] == "pvc-" &&
+		o.Spec.Local.Path == LocalVolumeRoot+"/"+o.Metadata.Name
+}

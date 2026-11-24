@@ -275,8 +275,16 @@ func (s *state) reclaim(tx *store.Tx, rec store.Record, pv *apis.PersistentVolum
 		return nil
 	}
 	if pv.Spec.PersistentVolumeReclaimPolicy == "Delete" {
-		_, _, err := objects.Delete(tx, pvRes, rec, pv, nil, time.Now())
-		return err
+		if !pv.ManagedLocalPath() {
+			// No deleter for a static directory: the object goes, the data stays.
+			_, _, err := objects.Delete(tx, pvRes, rec, pv, nil, time.Now())
+			return err
+		}
+		// The node that holds the directory removes it, then this object.
+		if pv.Metadata.Annotations == nil {
+			pv.Metadata.Annotations = map[string]string{}
+		}
+		pv.Metadata.Annotations[apis.DeleteDataAnnotation] = "true"
 	}
 	pv.Status.Phase = "Released"
 	return s.update(tx, pvRes, pv)
