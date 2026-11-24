@@ -51,8 +51,8 @@ alpha.9 비교의 측정 규칙을 그대로 옮겼어. 숫자를 읽는 방법�
 
 러너는 일회용이지만, 러너에 미리 깔린 Docker와 겹치지 않게 격리해서 재.
 
-- 도구마다 **전용 cgroup**(CPU 4개, 메모리 3GiB, swap 0)을 만들고 엔진, containerd, shim, 앱, 보조 Pod를 전부 그 안에 넣어. 부하 생성기, 수집기, kubectl·docker 같은 CLI는 밖에 있어서 집계에 안 들어가.
-- 모든 도구가 **전용 네트워크 공간**(`swbench`) 안에서 돌아. 바깥과는 veth 하나와 이름 붙인 iptables 체인 두 개(`SWBENCH-FWD`, `SWBENCH-NAT`)로만 이어져. 끝나면 지워.
+- 도구마다 **전용 cgroup**(CPU 4개, 메모리 4GiB, swap 0)을 만들고 엔진, containerd, shim, 앱, 보조 Pod를 전부 그 안에 넣어. 부하 생성기, 수집기, kubectl·docker 같은 CLI는 밖에 있어서 집계에 안 들어가.
+- 도구마다 **전용 네트워크 공간**(`swbench`)을 새로 만들어. K3s·flannel·kube-proxy·minikube가 남긴 인터페이스, 경로, iptables 규칙이 다음 도구에 섞이지 않게 하려고야. 바깥과는 veth 하나와 이름 붙인 iptables 체인 두 개(`SWBENCH-FWD`, `SWBENCH-NAT`)로만 이어져. 끝나면 지워.
 - 한 번에 한 도구만 켜.
 - kubelet이 바꾸는 커널 값(`vm.overcommit_memory=1`, `kernel.panic=10` 등)을 시작할 때 모든 도구에 똑같이 맞추고 끝나면 되돌려. minikube의 kubelet은 특권 컨테이너라서 그대로 두면 측정 도중에 호스트 값을 바꿔 버려.
 
@@ -62,7 +62,8 @@ alpha.9 비교의 측정 규칙을 그대로 옮겼어. 숫자를 읽는 방법�
 | --- | --- | --- |
 | 장비 | Ryzen 5 7500F, WSL 2 | GitHub `ubuntu-24.04` 러너(공유 VM) |
 | 도구 | Compose, K3s, Shearwater alpha.9 | minikube, K3s, Compose, 이 커밋의 Shearwater |
-| 시험 cgroup 메모리 상한 | 2.5GiB | 3GiB. minikube 노드 컨테이너(2,600MiB)와 dockerd가 들어가야 해서 올렸고, 네 도구 모두 같아 |
+| 시험 cgroup 메모리 상한 | 2.5GiB | 4GiB. 3GiB에서는 minikube 노드 컨테이너(2,600MiB)와 dockerd가 상한에 닿아서 올렸고, 네 도구 모두 같아 |
+| Kubernetes CPU 요청량 | 제한과 같은 0.5 CPU | 0.1 CPU. 4코어 러너에서는 0.5씩 요청하면 앱 10개 중 3개가 스케줄되지 못해. 커널 제한(`cpu.max`)은 그대로 0.5 CPU야 |
 | 반복 | 3회 | 기본 3회(입력으로 변경) |
 | 이미지 준비 | 미리 만든 tar를 가져옴 | 각 실행기가 digest로 직접 받음(시간 측정 밖) |
 | 커널 값 | K3s 때문에 두 값을 바꿈 | kubelet 기본값 여섯 개와 `ip_forward`를 모두에게 맞춤 |

@@ -111,7 +111,11 @@ def workload(n, version, image):
                     'containers': [{
                         'name': 'web', 'image': image, 'imagePullPolicy': 'Never',
                         'command': ['/bin/sh', '-c', command],
-                        'resources': {'limits': {'cpu': '500m', 'memory': '64Mi'}},
+                        # The scheduler reserves requests; with requests equal to
+                        # the 0.5 CPU limit, ten apps would not fit on a 4-CPU
+                        # runner. The kernel limit (cpu.max) stays 0.5 CPU.
+                        'resources': {'requests': {'cpu': '100m', 'memory': '64Mi'},
+                                      'limits': {'cpu': '500m', 'memory': '64Mi'}},
                         'readinessProbe': {'exec': {'command': check}, 'periodSeconds': 5,
                                            'timeoutSeconds': 1, 'failureThreshold': 3},
                     }]}},
@@ -398,6 +402,7 @@ class Engine:
         self.cg = Path('/sys/fs/cgroup') / (CGROUP_PREFIX + trial)
         self.pid = None
         self.proc = None
+        self.net_owned = False
         self.env = dict(os.environ, GOMAXPROCS=str(args.cpus), HOME=str(self.root / 'home'),
                         MINIKUBE_HOME=str(self.root / 'home' / '.minikube'),
                         DOCKER_HOST=f'unix://{RUN}/docker.sock', DOCKER_CONFIG=str(self.root / 'home' / '.docker'),
@@ -426,6 +431,11 @@ class Engine:
         (self.cg / 'memory.swap.max').write_text('0')
         (self.cg / 'cpu.max').write_text(f'{self.a.cpus * 100000} 100000')
         (self.root / 'resolv.conf').write_text(upstream_resolv())
+        # A fresh network namespace per trial: K3s, flannel, kube-proxy and
+        # minikube leave interfaces, routes and iptables rules behind that
+        # would otherwise change the next tool's network.
+        network_up()
+        self.net_owned = True
         log = (self.out / 'guardian.log').open('w')
         cg = self.cg
 
@@ -469,6 +479,8 @@ class Engine:
                 self.cg.rmdir()
             except OSError as e:
                 print(f'{self.trial}: cgroup not removed: {e}', file=sys.stderr)
+        if self.net_owned:
+            network_down()
         (self.out / 'stopped.json').write_text(json.dumps({'forced': forced, 'time': time.time()}))
         if not self.a.keep_work and (self.root / MARKER).exists():
             shutil.rmtree(self.root, ignore_errors=True)
@@ -1019,7 +1031,6 @@ def run(args):
     (out / 'kernel-before.json').write_text(json.dumps(before, indent=2))
     meta['kernel_tuning'] = 'off' if args.no_kernel_tuning else 'kubelet defaults applied to every tool'
     (out / 'run.json').write_text(json.dumps({'meta': meta, 'tools': tools, 'apps': apps}, indent=2))
-    network_up()
     failed = []
     try:
         for r in range(1, args.repeats + 1):
@@ -1046,7 +1057,6 @@ def run(args):
                     engine.stop()
                     time.sleep(5)
     finally:
-        network_down()
         kernel_restore(before)
         rows, failures = summarize(out)
         print((out / 'summary.md').read_text())
@@ -1069,7 +1079,7 @@ def main(argv=None):
     r.add_argument('--tool-dir', default='')
     r.add_argument('--image', default=DEFAULT_IMAGE)
     r.add_argument('--cpus', type=int, default=4)
-    r.add_argument('--memory-mib', type=int, default=3072)
+    r.add_argument('--memory-mib', type=int, default=4096)
     r.add_argument('--minikube-memory-mib', type=int, default=2600)
     r.add_argument('--minikube-kubernetes', default='v1.37.0')
     r.add_argument('--idle', type=int, default=15)

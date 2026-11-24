@@ -65,6 +65,7 @@ class WorkloadTest(unittest.TestCase):
             c = d['spec']['template']['spec']['containers'][0]
             self.assertEqual(c['imagePullPolicy'], 'Never')
             self.assertEqual(c['resources']['limits'], {'cpu': '500m', 'memory': '64Mi'})
+            self.assertEqual(c['resources']['requests'], {'cpu': '100m', 'memory': '64Mi'})
         web = compose['services']['web03']
         self.assertEqual((web['pull_policy'], web['cpus'], web['mem_limit']), ('never', 0.5, '64m'))
         self.assertEqual(web['ports'], ['127.0.0.1:18003:8080'])
