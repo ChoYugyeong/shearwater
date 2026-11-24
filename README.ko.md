@@ -87,7 +87,9 @@ Ubuntu Bash에서 아래 명령을 실행하세요. 빈 임시 폴더에 설치�
 
 이전 WSL 2 시험(2026-11-11)에서는 BusyBox Pod 10개를 띄우고 60초 동안 유휴 상태를 관찰했어요. `sw server`의 최대 RSS는 34.76 MB, 디스크 쓰기는 0 B였어요. containerd와 앱이 쓰는 자원은 별도예요. [측정 범위와 재현 방법](docs/stage1-verification.md)
 
-2026-11-17에는 alpha.9를 Docker Compose, K3s와 같은 장비에서 같은 앱으로 돌려 메모리·배포 준비 시간·업데이트 중 오류를 쟀어요. 세 도구는 기능 범위가 달라서 순위로 읽으면 안 돼요. 이후 버전에서는 다시 재지 않았어요. [비교 조건과 결과](docs/benchmarks/runtime-comparison-alpha9.md)
+2026-11-17에는 alpha.9를 Docker Compose, K3s와 같은 장비에서 같은 앱으로 돌려 메모리·배포 준비 시간·업데이트 중 오류를 쟀어요. 세 도구는 기능 범위가 달라서 순위로 읽으면 안 돼요. [비교 조건과 결과](docs/benchmarks/runtime-comparison-alpha9.md)
+
+같은 측정을 이제 GitHub Actions에서 minikube까지 넣어 돌려요(수동 실행과 매주 자동 실행). 2026-11-24에는 4코어 공유 러너에서 네 도구를 하나씩 3회 반복으로 쟀어요. [CI 비교와 결과](docs/benchmarks/runtime-bench-ci.md)
 
 ## 어떤 환경에 맞나요?
 

@@ -87,7 +87,9 @@ During updates, the test opened 100 new connections per second until all 10 repl
 
 In a separate WSL 2 test on November 11, 2026, the `sw server` process reached 34.76 MB peak resident memory and wrote 0 B to disk over 60 idle seconds with 10 BusyBox Pods present. These figures cover the Shearwater process alone. The container runtime and apps have their own resource costs. [Measurement scope and reproduction steps](docs/stage1-verification.md)
 
-On November 17, 2026, a separate test compared alpha.9 with Docker Compose and K3s on the same machine, running the same app. It recorded memory use, time until a deployment was ready, and failed requests during updates. The three tools cover different feature sets, so the results are not a ranking, and the comparison has not been repeated for later releases. [Conditions and results (in Korean)](docs/benchmarks/runtime-comparison-alpha9.md)
+On November 17, 2026, a separate test compared alpha.9 with Docker Compose and K3s on the same machine, running the same app. It recorded memory use, time until a deployment was ready, and failed requests during updates. The three tools cover different feature sets, so the results are not a ranking. [Conditions and results (in Korean)](docs/benchmarks/runtime-comparison-alpha9.md)
+
+The same measurement now runs on GitHub Actions with minikube added (manually and weekly). On November 24, 2026, three repeats on a shared 4-CPU runner measured all four tools, one at a time. [CI comparison and results (in Korean)](docs/benchmarks/runtime-bench-ci.md)
 
 ## Where it fits
 
