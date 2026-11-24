@@ -3,7 +3,7 @@
 [English](en/agent-operations.md) · **한국어**
 
 이 문서는 **alpha.12부터 제공하는** 서버 작업 기능을 설명해. alpha.11에는 `sw task`가 없어.
-[설치 안내](install.md)의 예제를 따라 서버와 클라이언트를 모두 alpha.15로 준비해.
+[설치 안내](install.md)의 예제를 따라 서버와 클라이언트를 모두 alpha.16로 준비해.
 구현은 [internal/operation](../internal/operation), 명령 연결은
 [cmd/sw/operation.go](../cmd/sw/operation.go)에 있어.
 

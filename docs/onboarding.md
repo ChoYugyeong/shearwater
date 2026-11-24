@@ -1,6 +1,6 @@
 # 설치부터 AI 연결까지: 먼저 한 앱만 연결하기
 
-이 문서는 **v0.1.0-alpha.15**에서 `sw setup`, 기존 Service 자동 탐색,
+이 문서는 **v0.1.0-alpha.16**에서 `sw setup`, 기존 Service 자동 탐색,
 MCP 설정 내보내기를 사용하는 순서야. `setup`은 alpha.11부터 있어.
 새 버전은 별도 폴더에 설치해. 실행 중인 서버 교체는 [백업·업데이트 순서](install.md)를
 따로 따라야 하며, 아래 설치기는 기존 운영 서버를 덮어쓰지 않아.
@@ -30,7 +30,7 @@ Ubuntu Bash에서 Python 3.11 이상의 표준 라이브러리로 실행해.
 ```bash
 download_dir=$(mktemp -d)
 cd "$download_dir"
-version=v0.1.0-alpha.15
+version=v0.1.0-alpha.16
 release="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
 curl --fail --location --proto '=https' --tlsv1.2 "$release/install.py" -o install.py
 curl --fail --location --proto '=https' --tlsv1.2 "$release/SHA256SUMS" -o SHA256SUMS
@@ -51,13 +51,13 @@ Linux x86_64용이야. 설치한 폴더에는 `INSTALL-ko.md`와 이 안내인 `
 이후 명령에 쓸 실행 파일을 지정해. 별도 설치 위치를 골랐다면 그 위치로 바꿔:
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.15/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.16/sw"
 "$sw" version
 "$sw" setup -h
 ```
 
 이후 `$sw`는 그 **Linux 절대 경로**야. 새 터미널에서는 이 변수를 다시 지정해.
-버전이 `0.1.0-alpha.15`인지 확인해. 직접 빌드하려면 [소스 빌드 안내](quickstart.md)를 사용해.
+버전이 `0.1.0-alpha.16`인지 확인해. 직접 빌드하려면 [소스 빌드 안내](quickstart.md)를 사용해.
 
 ## 2. 서버 준비와 인증을 한 번에
 

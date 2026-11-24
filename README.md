@@ -45,7 +45,7 @@ You need a Linux amd64 server with Docker and the `docker compose` plugin, and a
 ```bash
 (
   set -eu
-  version=v0.1.0-alpha.15
+  version=v0.1.0-alpha.16
   release="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
   download_dir=$(mktemp -d)
   cd "$download_dir"
@@ -57,7 +57,7 @@ You need a Linux amd64 server with Docker and the `docker compose` plugin, and a
 )
 ```
 
-The output should start with `sw 0.1.0-alpha.15`. The commands below assume `sw` is on your `PATH`.
+The output should start with `sw 0.1.0-alpha.16`. The commands below assume `sw` is on your `PATH`.
 
 **2. Put Shearwater in front of one Compose project.** Keep this running.
 
@@ -94,9 +94,9 @@ Compose recreates the container during an update, so expect a short interruption
 
 Shearwater also ships a small single-node runtime. It speaks a slice of the Kubernetes API (Pod, Deployment, Service, Secret), so `kubectl` works as usual, without importing any `k8s.io` package; CI fails the build if one appears. It adds rolling updates (0 failed requests in the measurements below) and a built-in public HTTPS entry. It needs containerd, runc, networking tools and administrator access. [Installation guide](docs/en/install.md)
 
-On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.15 --host --apply` installs containerd and runc when none exist and starts the systemd service. Then use `sw setup` to prepare credentials and follow the first-app guide. [Set up credentials](docs/onboarding.md) · [Run your first web app](docs/first-try.md)
+On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.16 --host --apply` installs containerd and runc when none exist and starts the systemd service. Then use `sw setup` to prepare credentials and follow the first-app guide. [Set up credentials](docs/onboarding.md) · [Run your first web app](docs/first-try.md)
 
-**Download v0.1.0-alpha.15** · [Installer](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.15/install.py) · [Linux amd64 archive](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.15/shearwater-v0.1.0-alpha.15-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.15/SHA256SUMS)
+**Download v0.1.0-alpha.16** · [Installer](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.16/install.py) · [Linux amd64 archive](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.16/shearwater-v0.1.0-alpha.16-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.16/SHA256SUMS)
 
 To build from source, run `. hack/env.sh` and then `bash hack/build.sh` from the repository root. [Build guide](docs/quickstart.md)
 
@@ -108,7 +108,16 @@ To build from source, run `. hack/env.sh` and then `bash hack/build.sh` from the
 
 To recover, create and approve a new plan that uses an image which previously passed HTTP verification. [Delegation, approval and recovery examples](docs/en/agent-operations.md)
 
-## New in alpha.15
+## New in alpha.16
+
+- **Several servers.** Start the control plane with `sw up --advertise-address IP`, print the join command with `sw node token`, and run it on each worker (`sw join`). Pods are scheduled across nodes (node selectors, node affinity, taints, requests), reach each other over a VXLAN pod network, and are recreated on other nodes when a server stops answering. There is one control plane; it is not highly available yet. [Several servers](docs/multi-node.md)
+- **Access control for several people and agents.** RBAC with Roles, ClusterRoles and bindings, `kubectl auth can-i` and `whoami`, and `sw user add NAME --namespace NS` for a kubeconfig limited to one namespace; ResourceQuota and Pod Security apply to Pods created directly and through Deployments. [Access control](docs/access-control.md)
+- **Cluster DNS and Ingress.** `sw` answers `<service>.<namespace>.svc.cluster.local` on every node. Ingress routes hosts and paths through the public entry, and a host stays with the namespace that claimed it first. [DNS](docs/dns.md) · [Ingress](docs/ingress.md)
+- **Persistent volumes and NetworkPolicy.** PersistentVolumeClaims with a built-in `local-path` StorageClass that keeps a Pod on the node holding its data, and NetworkPolicy enforced on every node.
+
+These were checked on three simulated servers (each with its own network namespace, containerd and cgroup) through nine end-to-end steps, including a worker that stops answering. They were not yet checked on separate machines or cloud networks. VXLAN traffic is not encrypted, so use a private network or a VPN. [Release notes](docs/releases.md)
+
+### Added in alpha.15
 
 - **Failed checks say where and why.** When a release fails its HTTP check (`http_failed`), the agent gets which check failed, on how many replicas and why, for example `HTTP 200, expected text missing`. The expected text itself is never repeated. `diagnose` reports the last failed check with its time.
 - **Evidence says what it showed.** `sw task evidence` now reports the stored proof's outcome (`passed`/`failed`), when it was taken and for which goal, so a just-verified app is no longer read as unchecked.
@@ -122,13 +131,13 @@ The failure explanations are checked on a fresh GitHub-hosted VM with real Docke
 - **Existing Docker Compose apps.** `sw compose serve` puts the same delegation, approval and HTTP evidence in front of one service of a Compose project. Your compose files are not rewritten. [Compose guide](docs/en/compose-backend.md)
 - **Public HTTPS entry.** Annotate a Service with `shearwater.io/public-host` and `sw edge enable` serves it on ports 80/443 with ACME (HTTP-01) certificates. [Public entry guide](docs/public-entry.md)
 - **Secrets.** Containers can read `env[].valueFrom.secretKeyRef` and `envFrom[].secretRef`. Values are stored base64-encoded, not encrypted.
-- **One-command server setup.** On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.15 --host --apply` installs containerd and runc when none exist, enables IPv4 forwarding and starts the systemd service. [Install guide, section 0](docs/install.md)
+- **One-command server setup.** On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.16 --host --apply` installs containerd and runc when none exist, enables IPv4 forwarding and starts the systemd service. [Install guide, section 0](docs/install.md)
 
 The alpha.14 additions were checked in isolated local test environments and a fresh local Ubuntu VM: real kubectl, real Docker Compose, the Pebble ACME test server. They were not yet checked on a public server with real Let's Encrypt certificates. [Release notes](docs/releases.md)
 
 ## Benchmarks
 
-Both versions ran the same nginx app on the same Ubuntu 24.04 VM with 2 vCPUs and 2,560 MiB of memory. The alpha.12 baseline comes from an earlier test series. For alpha.13, the tests used the release binary built from the public tag. These figures were not re-measured for alpha.14 or alpha.15.
+Both versions ran the same nginx app on the same Ubuntu 24.04 VM with 2 vCPUs and 2,560 MiB of memory. The alpha.12 baseline comes from an earlier test series. For alpha.13, the tests used the release binary built from the public tag. These figures were not re-measured for alpha.14, alpha.15 or alpha.16.
 
 | Measurement | alpha.12 | alpha.13 |
 | --- | ---: | ---: |

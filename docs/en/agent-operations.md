@@ -3,7 +3,7 @@
 *Translated from the [Korean original](../agent-operations.md). If they differ, the Korean version is current.*
 
 This document describes the server task feature **available from alpha.12**. `sw task` does not exist in alpha.11.
-Follow the examples in the [installation guide](install.md) to set up both the server and the client at alpha.15.
+Follow the examples in the [installation guide](install.md) to set up both the server and the client at alpha.16.
 The implementation is in [internal/operation](../../internal/operation), and the command wiring is in [cmd/sw/operation.go](../../cmd/sw/operation.go).
 
 ## What Changes

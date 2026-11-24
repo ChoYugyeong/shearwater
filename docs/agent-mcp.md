@@ -19,7 +19,7 @@ MCP SDK나 Kubernetes 모듈을 추가하지 않고 JSON-RPC 처리를 직접 �
 Shearwater 서버가 시작되는 것은 아니야. 설치 안내를 따랐다면 **Ubuntu Bash**에서:
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.15/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.16/sw"
 test -x "$sw" && "$sw" version
 sudo "$sw" status
 printf '%s\n' "$sw"
@@ -84,7 +84,7 @@ Claude Code 자체의 도구 사용 확인과 Shearwater의 배포 승인은 별
 {
   "command": "wsl.exe",
   "args": ["-d", "YOUR_WSL_DISTRO", "-u", "root", "--exec",
-           "/home/YOUR_LINUX_USER/.local/share/shearwater/v0.1.0-alpha.15/sw", "mcp"]
+           "/home/YOUR_LINUX_USER/.local/share/shearwater/v0.1.0-alpha.16/sw", "mcp"]
 }
 ```
 
@@ -196,7 +196,7 @@ Service의 생략된 ClusterIP는 기존 할당을 유지해. before/after를 �
 이름을 바꿀 때는 파일의 이름·라벨·selector와 아래 확인·정리 명령을 함께 바꿔야 해.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.15/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.16/sw"
 export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
 k() {
