@@ -67,6 +67,7 @@ func TestTableColumns(t *testing.T) {
 		{"/api/v1/namespaces", "Name,Status,Age"},
 		{"/api/v1/namespaces/default/events", "Last Seen,Type,Reason,Object,Message,First Seen,Count,Name"},
 		{"/apis/discovery.k8s.io/v1/namespaces/default/endpointslices", "Name,AddressType,Ports,Endpoints,Age"},
+		{"/apis/networking.k8s.io/v1/namespaces/default/networkpolicies", "Name,Pod-Selector,Age"},
 	} {
 		tb := tableOf(t, c.want(c.do("GET", tc.path, "", "Accept", tableAccept), 200))
 		if got := strings.Join(columnNames(tb), ","); got != tc.columns {
@@ -119,6 +120,19 @@ func TestTableDeploymentReady(t *testing.T) {
 	c.want(c.do("POST", deploys, twoDeploy), 201)
 	if cells := tableCells(t, c, deploys); cells[0] != "web" || cells[1] != "0/2" {
 		t.Fatalf("the deployment shows %v, want web 0/2", cells)
+	}
+}
+
+func TestTableNetworkPolicyCells(t *testing.T) {
+	c := newClient(t)
+	netpols := "/apis/networking.k8s.io/v1/namespaces/default/networkpolicies"
+	c.want(c.do("POST", netpols, `{"metadata":{"name":"deny-all"},"spec":{"podSelector":{}}}`), 201)
+	if cells := tableCells(t, c, netpols+"/deny-all"); cells[0] != "deny-all" || cells[1] != "<none>" {
+		t.Fatalf("empty podSelector shows %v, want deny-all <none>", cells)
+	}
+	c.want(c.do("POST", netpols, `{"metadata":{"name":"allow-web"},"spec":{"podSelector":{"matchLabels":{"app":"web"}}}}`), 201)
+	if cells := tableCells(t, c, netpols+"/allow-web"); cells[0] != "allow-web" || cells[1] != "app=web" {
+		t.Fatalf("podSelector shows %v, want allow-web app=web", cells)
 	}
 }
 

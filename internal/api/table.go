@@ -165,6 +165,9 @@ var tableColumns = map[string][]tableColumn{
 		col("Controller", "string", 0, "Controller responsible for this IngressClass"),
 		col("Parameters", "string", 0, "Optional parameters object for this IngressClass"),
 		ageCol},
+	"NetworkPolicy": {nameCol,
+		col("Pod-Selector", "string", 0, "Label selector for the pods this policy applies to"),
+		ageCol},
 }
 
 func nameColP1() tableColumn {
@@ -402,6 +405,8 @@ func cells(obj apis.Object, now time.Time) []any {
 		return ingressCells(o, now)
 	case *apis.IngressClass:
 		return ingressClassCells(o, now)
+	case *apis.NetworkPolicy:
+		return []any{m.Name, formatSelector(&o.Spec.PodSelector), age}
 	}
 	return []any{m.Name, age}
 }
