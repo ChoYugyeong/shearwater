@@ -11,18 +11,22 @@
 [Docker Compose로 시작하기](#docker-compose로-시작하기) · [자체 런타임으로 시작하기](#자체-런타임으로-시작하기) · [측정 결과](#측정-결과)
 
 <p align="center">
-  <img src="docs/media/approved-update.gif" width="576" alt="실제 업데이트 기록 재생. 승인 대기, 승인 후 미적용, 새 배포 요청 거절, 원래 계획의 HTTP 검증 통과 순서예요.">
+  <img src="docs/media/broken-update-caught.gif" width="576" alt="에이전트의 v2 업데이트가 승인을 기다렸다가 승인 뒤 검증을 통과해요. 다음 이미지는 HTTP 200을 돌려주지만 기대한 문구가 없어서 서버가 healthy 대신 http_failed로 보고하고, 복구는 마지막으로 검증된 이미지로 돌아가요.">
 </p>
 
 <details>
-<summary>기록 재생 내용을 글로 읽기</summary>
+<summary>데모 내용을 글로 읽기</summary>
 
-alpha.12 개발 중 Qwen과 nginx로 진행한 시험의 MCP 요청·응답을 발췌했어요. 이 시험에서는 운영자 역할의 검사 프로그램이 계획을 확인하고 승인했어요. [시험 조건과 결과](docs/agent-operations-verification.md)
+새 GitHub 호스팅 VM에서 [빠른 시작 검사](hack/compose-quickstart-check.py)가 아래 단계를 대본으로 짠 MCP 에이전트와 함께 따라간 기록이에요. 화면의 값은 모두 그 실행의 기록에서 가져왔어요. [워크플로](.github/workflows/compose-quickstart.yml)
 
-1. AI가 `update`를 요청하자 `awaiting_approval`이 돌아왔어요. `approved`와 `applied`는 모두 `false`였어요.
-2. 같은 계획을 승인한 뒤 `verify`로 읽은 상태는 `approved_pending`이었어요. `approved`는 `true`, `applied`는 아직 `false`였어요.
-3. 그 사이 AI가 새 `deploy`를 요청했어요. 실행을 기다리는 계획이 있어서 서버가 `409 OperationRejected`로 거절했고, 상태는 `Failure`였어요.
-4. `continue`로 원래 계획을 이어간 결과는 `healthy`였어요. 검사한 새 Pod 수(`verifiedPods`)는 1이었고, 내부 Service까지 검사한 결과(`http.state`)는 `passed`였어요.
+1. 에이전트가 `web`을 v2로 업데이트해 달라고 해요. 서버는 계획을 저장하고 `awaiting_approval`을 돌려줘요. 아직 아무것도 안 바뀌어요.
+2. 운영자가 `sw task approve`로 그 계획의 해시를 승인해요.
+3. 에이전트가 `continue`를 불러요. v2가 적용되고 새 컨테이너가 모두 기대한 문구와 함께 HTTP 200을 돌려줘서 `healthy`예요.
+4. 다음 이미지도 같은 방식으로 승인·적용돼요. HTTP 200은 돌려주지만 기대한 문구 대신 점검 페이지가 나와요.
+5. 서버는 `healthy`가 아니라 `http_failed`로 보고해요. 에이전트는 이 배포를 완료라고 보고할 수 없어요.
+6. `recover`가 마지막으로 통과한 이미지(v2)로 돌아가는 계획을 세워요. 승인 뒤 `healthy`로 검증돼요.
+
+자체 런타임에서 승인 흐름을 재생한 이전 기록은 [에이전트 운영 검증](docs/agent-operations-verification.md)에 있어요.
 
 </details>
 
@@ -34,7 +38,7 @@ alpha.12 개발 중 Qwen과 nginx로 진행한 시험의 MCP 요청·응답을 �
 
 ## Docker Compose로 시작하기
 
-Docker와 `docker compose` 플러그인이 있는 Linux amd64 서버, 그리고 `docker` 그룹에 속한 운영자 계정이 필요해요. root는 필요 없고, Shearwater는 containerd나 compose 파일을 바꾸지 않아요.
+Docker와 `docker compose` 플러그인이 있는 Linux amd64 서버, 그리고 `docker` 그룹에 속한 운영자 계정이 필요해요. root는 필요 없고, Shearwater는 containerd나 compose 파일을 바꾸지 않아요. 이 단계는 바뀔 때마다 새 GitHub 호스팅 VM에서 공개 릴리스로 그대로 돌려 봐요. 설치는 약 2초, 위임 뒤 첫 승인 업데이트가 검증되기까지 약 3.5초 걸렸어요(3회 실행). [빠른 시작 검사](.github/workflows/compose-quickstart.yml)
 
 **1. `sw` 설치.** 빈 임시 폴더에 설치 도우미를 받고 체크섬을 확인한 뒤, 이 버전을 전용 폴더에 설치해요.
 

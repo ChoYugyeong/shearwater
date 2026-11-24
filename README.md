@@ -11,18 +11,22 @@ Put it in front of an **existing Docker Compose project** (no root, your compose
 [Quick start with Docker Compose](#quick-start-existing-docker-compose-app) · [Own runtime](#quick-start-own-runtime) · [Benchmarks](#benchmarks)
 
 <p align="center">
-  <img src="docs/media/approved-update-en.gif" width="576" alt="An agent proposes an update. The approved plan waits to run, a second deployment is rejected, and the original update passes its HTTP check.">
+  <img src="docs/media/broken-update-caught.gif" width="576" alt="An agent's update to v2 waits for approval, is approved and verified. A later image answers HTTP 200 without the expected text, so the server reports http_failed instead of healthy, and recovery returns to the last verified image.">
 </p>
 
 <details>
-<summary>What the replay shows, as text</summary>
+<summary>What the demo shows, as text</summary>
 
-This replays the Model Context Protocol (MCP) messages from a Qwen test with nginx during alpha.12 development. A test program played the operator and approved the plan. [Test setup and results](docs/agent-operations-verification.md)
+Recorded on a fresh GitHub-hosted VM by the [quick start check](hack/compose-quickstart-check.py), which follows the steps below with a scripted MCP agent; every value on the frames comes from that run's transcript. [Workflow](.github/workflows/compose-quickstart.yml)
 
-1. The agent requests `update`. The server returns `awaiting_approval`, with both `approved` and `applied` set to `false`.
-2. After approval, `verify` reports `approved_pending`. The plan is approved and still waiting to run.
-3. The agent requests another `deploy`. The server returns HTTP `409` with reason `OperationRejected` because the first plan is pending.
-4. The agent calls `continue` on the original plan. The operation reports `healthy`. One new Pod was checked (`verifiedPods: 1`) and HTTP verification passed for the Pod and its internal Service (`http.state: passed`).
+1. The agent asks to update `web` to v2. The server saves a plan and returns `awaiting_approval`; nothing has changed.
+2. The operator approves that plan's hash with `sw task approve`.
+3. The agent calls `continue`. v2 is applied and every new container returns HTTP 200 with the expected text: `healthy`.
+4. The next image is approved and applied the same way. It answers HTTP 200, but with a maintenance page instead of the expected text.
+5. The server reports `http_failed`, not `healthy`, so the agent cannot report the deploy as done.
+6. `recover` plans a return to the last image that passed (v2). After approval it verifies as `healthy`.
+
+An earlier replay of the approval flow against the own runtime is in the [agent operations verification](docs/agent-operations-verification.md).
 
 </details>
 
@@ -34,7 +38,7 @@ This replays the Model Context Protocol (MCP) messages from a Qwen test with ngi
 
 ## Quick start: existing Docker Compose app
 
-You need a Linux amd64 server with Docker and the `docker compose` plugin, and an operator account in the `docker` group. Root is not required, and Shearwater does not change containerd or your compose files.
+You need a Linux amd64 server with Docker and the `docker compose` plugin, and an operator account in the `docker` group. Root is not required, and Shearwater does not change containerd or your compose files. These steps run on a fresh GitHub-hosted VM whenever they change, using the published release: installing took about 2 s, and the first approved update was verified about 3.5 s after delegation (three runs). [Quick start check](.github/workflows/compose-quickstart.yml)
 
 **1. Install `sw`.** The commands download the installer to an empty temporary directory, verify its checksum, and install this version in its own directory.
 
