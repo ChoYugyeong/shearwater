@@ -32,6 +32,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import ssl
 import subprocess
@@ -57,6 +58,24 @@ PAGES = {
 started = time.monotonic()
 strict = False
 timings, transcript, steps = {}, [], []
+
+# The first release whose http_failed and diagnose say which check failed and
+# why, and whose evidence reports the retained proof's result.
+FIRST_EXPLAINING = (0, 1, 0, 15)
+
+
+def explains_failures(release):
+    """True unless release names a published version older than alpha.15.
+
+    A version that does not parse also gets every check: a wrong guess should
+    fail loudly, not quietly skip the checks."""
+    m = re.fullmatch(r'v(\d+)\.(\d+)\.(\d+)(?:-alpha\.(\d+))?', release or '')
+    if not m:
+        return True
+    major, minor, patch, alpha = m.groups()
+    # A final release sorts after every alpha of the same version.
+    key = (int(major), int(minor), int(patch), int(alpha) if alpha is not None else float('inf'))
+    return key >= FIRST_EXPLAINING
 
 
 def log(msg):
@@ -206,10 +225,12 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--work', default='', help='scratch directory (default: a new temporary one)')
     a = ap.parse_args()
-    # Checks for behavior newer than the published release run only against a
-    # local build; the release path checks what users get today.
+    # The failure explanation and retained-evidence checks run against a local
+    # build and against every release that has them (alpha.15 and later), so
+    # the release path checks the same guarantees users now get. Only an older
+    # release, still installable with --release, skips them.
     global strict
-    strict = bool(a.sw)
+    strict = bool(a.sw) or explains_failures(a.release)
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     work = Path(a.work or tempfile.mkdtemp(prefix='swqs-')).resolve()
@@ -342,10 +363,10 @@ def main():
             'passed': True, 'sw': version, 'docker': run(['docker', 'version', '--format', '{{.Server.Version}}']).stdout.strip(),
             'compose': run(['docker', 'compose', 'version', '--short']).stdout.strip(),
             'host': os.uname().nodename, 'kernel': os.uname().release, 'timings_s': timings, 'images': digests,
-            'diagnose_facts': d.get('facts'),
+            'diagnose_facts': d.get('facts'), 'failure_explanation_checks': strict,
         }
     except BaseException as e:
-        summary = {'passed': False, 'error': str(e)[-2000:], 'timings_s': timings}
+        summary = {'passed': False, 'error': str(e)[-2000:], 'timings_s': timings, 'failure_explanation_checks': strict}
         raise
     finally:
         if agent:
@@ -363,7 +384,8 @@ def main():
         lines = ['# Compose quick start check', '', f"Result: **{'passed' if summary.get('passed') else 'FAILED'}**", '']
         for k, v in timings.items():
             lines.append(f'- {k}: {v} s')
-        lines += ['', f'{sum(s["ok"] for s in steps)}/{len(steps)} checks passed.']
+        lines += ['', f'{sum(s["ok"] for s in steps)}/{len(steps)} checks passed.',
+                  'Failure explanation and evidence checks: ' + ('included' if strict else 'skipped (release older than alpha.15)') + '.']
         if not summary.get('passed'):
             lines += ['', '```', summary.get('error', ''), '```']
         (out / 'summary.md').write_text('\n'.join(lines) + '\n')

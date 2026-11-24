@@ -6,7 +6,8 @@ name: Compose quick start
 # healthy, and that recovery returns to the last verified image.
 #
 # "release" uses the README installer and the published release, the way a new
-# user would. "source" builds sw from this commit.
+# user would. "source" builds sw from this commit. Both check that http_failed
+# says which check failed and why, and what evidence reports (alpha.15 and later).
 on:
   push:
     paths:
