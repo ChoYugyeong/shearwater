@@ -304,6 +304,8 @@ def main():
         approve('broken', b['plan'])
         bc = agent.call('broken', action='continue')
         status, body = page()
+        transcript.append({'scene': 'broken', 'who': 'page', 'request': 'GET http://127.0.0.1:18080/',
+                           'response': {'status': status, 'body': body.strip()[:80]}})
         expect(status == 200 and body.startswith(PAGES['broken']), 'broken release really answers HTTP 200', body=body[:80])
         expect(bc.get('state') == 'http_failed' and bc.get('state') != 'healthy',
                'server refuses to call a 200 without the expected text healthy', result=bc)
