@@ -83,7 +83,13 @@ func (n *Net) CheckHostRanges(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// The overlay device carries this node's network address, so the kernel
+	// keeps a local /32 route for it inside the Pod range.
+	overlay := s.overlayIndex()
 	for _, r := range routes {
+		if overlay != 0 && r.index == overlay {
+			continue
+		}
 		if r.prefix.Overlaps(n.PodCIDR) && !(br.index != 0 && r.index == br.index && r.prefix.Bits() >= n.PodCIDR.Bits()) {
 			return fmt.Errorf("Pod range %s overlaps host route %s", n.PodCIDR, r.prefix)
 		}
@@ -95,7 +101,6 @@ func (n *Net) CheckHostRanges(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	overlay := s.overlayIndex() // carries this node's network address
 	for _, a := range addresses {
 		if (n.PodCIDR.Contains(a.prefix.Addr()) && a.index != br.index && (overlay == 0 || a.index != overlay)) ||
 			(n.ServiceCIDR.Contains(a.prefix.Addr()) && a.index != svc.index) {
@@ -120,6 +125,10 @@ func CheckIPv4Forwarding() error {
 // namespace mounts have been stopped. It removes our links, chains and exact
 // jump rules. It never flushes a shared table or changes a system-wide sysctl.
 func (n *Net) TeardownHost(ctx context.Context) error {
+	// NetworkPolicy chains hang off SHEARWATER-FORWARD; they go first.
+	if err := (&KernelNetpol{PodCIDR: n.PodCIDR}).Teardown(ctx); err != nil {
+		return err
+	}
 	s, err := nlOpenContext(ctx)
 	if err != nil {
 		return err
@@ -175,6 +184,9 @@ func iptablesOutput(ctx context.Context, args ...string) (string, error) {
 type chainSpec struct {
 	table, name string
 	rules       [][]string
+	// optional rows another Shearwater part may have put in this chain (the
+	// NetworkPolicy jump); they are neither required nor foreign.
+	optional []string
 }
 
 type chainState struct {
@@ -203,8 +215,8 @@ func (n *Net) chainSpecs() []chainSpec {
 	}
 	nat = append(nat, []string{"!", "-o", br, "-j", "MASQUERADE"})
 	return []chainSpec{
-		{"filter", forwardChain, forward},
-		{"nat", postroutingName, nat},
+		{"filter", forwardChain, forward, []string{"-A " + forwardChain + " -j " + netpolChain}},
+		{"nat", postroutingName, nat, nil},
 	}
 }
 
@@ -225,6 +237,9 @@ func (c chainSpec) read(ctx context.Context) (chainState, error) {
 	}
 	s := chainState{exists: true}
 	for _, row := range rows[1:] {
+		if slices.Contains(c.optional, row) {
+			continue
+		}
 		i := slices.IndexFunc(c.rules, func(rule []string) bool {
 			return row == "-A "+c.name+" "+strings.Join(rule, " ")
 		})

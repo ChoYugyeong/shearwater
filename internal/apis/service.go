@@ -12,9 +12,14 @@ const (
 	ServiceGenerationAnnotation = "shearwater.io/service-generation"
 )
 
-// UsablePodIP excludes the network address, bridge gateway and broadcast
-// address. The node allocates the IPv4 addresses between those reservations.
+// UsablePodIP accepts an address a node agent can have given a Pod: inside
+// the cluster range and, within its node's /24, not the network address, the
+// bridge gateway or the broadcast address. With several nodes the Pods of a
+// Service live in different /24s (docs/design-multinode-tenancy.md 3.3).
 func UsablePodIP(ip netip.Addr) bool {
-	return ip.Is4() && PodCIDR.Contains(ip) &&
-		ip.Compare(PodCIDR.Masked().Addr().Next()) > 0 && PodCIDR.Contains(ip.Next())
+	if !ip.Is4() || !ClusterCIDR.Contains(ip) {
+		return false
+	}
+	node := netip.PrefixFrom(ip, 24).Masked()
+	return ip.Compare(node.Addr().Next()) > 0 && node.Contains(ip.Next())
 }

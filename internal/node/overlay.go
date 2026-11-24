@@ -32,8 +32,9 @@ type Overlay struct {
 	PodCIDR  netip.Prefix
 	Logf     func(format string, args ...any)
 
-	device runtime.Overlay
-	mac    net.HardwareAddr
+	device   runtime.Overlay
+	mac      net.HardwareAddr
+	reported int // peers last logged
 }
 
 const overlayRecheck = 30 * time.Second
@@ -110,8 +111,9 @@ func (o *Overlay) pass(last *[]runtime.Peer, published *bool) error {
 	if err := o.device.SetPeers(peers); err != nil {
 		return err
 	}
-	if len(peers) != len(*last) {
+	if len(peers) != o.reported {
 		o.logf("reaching %d other node(s) through %s", len(peers), runtime.OverlayName)
+		o.reported = len(peers)
 	}
 	*last = peers
 	return nil
