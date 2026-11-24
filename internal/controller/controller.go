@@ -27,6 +27,10 @@ type Manager struct {
 	// VolumeFilter is the scheduler's volume check (nil: none). It returns
 	// "" when node can take the Pod's volumes, otherwise the reason.
 	VolumeFilter func(p *apis.Pod, n *apis.Node) string
+	// AdmitPod runs the API's admission checks (quota, Pod Security) on a Pod
+	// a ReplicaSet is about to create (nil: none), as Kubernetes does for
+	// Pods its controllers create through the API.
+	AdmitPod func(tx *store.Tx, p *apis.Pod) error
 }
 
 // Run rechecks the current state when the store changes and periodically.
@@ -86,12 +90,15 @@ type view struct {
 	rolloutSlots                 map[string]*rolloutSlots // ReplicaSet UID -> shared Deployment capacity
 	nodes                        []*apis.Node
 	nodeItems                    map[string]*item
+	quotas                       map[string]bool // namespaces with a ResourceQuota
+	quotaCreated                 map[string]bool // namespaces that got a new Pod in this pass
 }
 
 func load(tx *store.Tx) (view, error) {
 	var v view
 	v.byUID = make(map[string]*item)
 	v.nodeItems = make(map[string]*item)
+	v.quotas, v.quotaCreated = make(map[string]bool), make(map[string]bool)
 	v.rolloutSlots = make(map[string]*rolloutSlots)
 	records, err := tx.Objects()
 	if err != nil {
@@ -105,6 +112,9 @@ func load(tx *store.Tx) (view, error) {
 		obj := res.New()
 		if err := json.Unmarshal(rec.Data, obj); err != nil {
 			return v, fmt.Errorf("decode %s: %w", rec.Key, err)
+		}
+		if rec.Key.Group == "" && rec.Key.Resource == "resourcequotas" && !rec.Deleting {
+			v.quotas[rec.Key.Namespace] = true
 		}
 		i := &item{res: res, rec: rec, obj: obj}
 		v.all = append(v.all, i)

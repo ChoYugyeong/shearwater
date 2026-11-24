@@ -313,6 +313,13 @@ func runServer(args []string) error {
 	volumeFilter, volumeAdmit := wireVolumes(wired)
 	plugins := append(wireAccess(wired), wireNetworkServices(wired)...)
 	srv.Admit = admission.Chain(append(plugins, volumeAdmit...)...)
+	podRes := apis.Lookup("", "v1", "pods")
+	controllerID := auth.Identity{Name: "system:serviceaccount:kube-system:replicaset-controller", Kind: auth.KindUser,
+		Groups: []string{"system:serviceaccounts", auth.GroupAuthenticated}}
+	admitPod := func(tx *store.Tx, p *apis.Pod) error {
+		return srv.Admit(admission.Request{Identity: controllerID, Operation: admission.Create, Resource: podRes,
+			Namespace: p.Metadata.Namespace, Name: p.Metadata.Name, Object: p, Tx: tx})
+	}
 	_, listenPort, _ := net.SplitHostPort(*listen)
 	joinURL := ""
 	if advertiseIP.IsValid() {
@@ -436,7 +443,7 @@ func runServer(args []string) error {
 		go func() { agent.Run(ctx); close(agentDone) }()
 		go func() {
 			defer close(controllerDone)
-			controller.Manager{Store: st, NodeName: *nodeName, Drain: draining, Silence: nodeAPI.Live.Silence, VolumeFilter: volumeFilter}.Run(ctx)
+			controller.Manager{Store: st, NodeName: *nodeName, Drain: draining, Silence: nodeAPI.Live.Silence, VolumeFilter: volumeFilter, AdmitPod: admitPod}.Run(ctx)
 		}()
 		go func() {
 			defer close(proxyDone)
@@ -461,7 +468,7 @@ func runServer(args []string) error {
 			// and replaces Pods on its workers.
 			go func() {
 				defer close(controllerDone)
-				controller.Manager{Store: st, Silence: nodeAPI.Live.Silence, VolumeFilter: volumeFilter}.Run(ctx)
+				controller.Manager{Store: st, Silence: nodeAPI.Live.Silence, VolumeFilter: volumeFilter, AdmitPod: admitPod}.Run(ctx)
 			}()
 		} else {
 			close(controllerDone)
