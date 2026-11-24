@@ -402,7 +402,10 @@ class Engine:
                         MINIKUBE_HOME=str(self.root / 'home' / '.minikube'),
                         DOCKER_HOST=f'unix://{RUN}/docker.sock', DOCKER_CONFIG=str(self.root / 'home' / '.docker'),
                         KUBECONFIG=str(self.kubeconfig()), COMPOSE_PARALLEL_LIMIT='10',
-                        MINIKUBE_IN_STYLE='false', MINIKUBE_WANTUPDATENOTIFICATION='false')
+                        MINIKUBE_IN_STYLE='false', MINIKUBE_WANTUPDATENOTIFICATION='false',
+                        # sudo can pass the invoking user's runtime dir, which
+                        # does not exist in the private /run; dockerd fails on it.
+                        XDG_RUNTIME_DIR='/run/user/0')
         self.env['PATH'] = os.pathsep.join(filter(None, [args.tool_dir, self.env.get('PATH', '')]))
 
     def kubeconfig(self):
@@ -588,7 +591,42 @@ class Engine:
                 if len(urls) == n and self.http_check(urls, version):
                     return urls
             time.sleep(.5)
+        self.diagnose(f'not-ready-{version}-{n}.txt', n, version)
         raise RuntimeError(f'{n} apps did not become {version} ready')
+
+    def diagnose(self, name, n, version):
+        """Keep what the engine reported when apps never became ready."""
+        parts = []
+
+        def add(title, args, timeout=30):
+            try:
+                p = self.cmd(args, timeout=timeout, check=False)
+                parts.append(f'## {title} (exit {p.returncode})\n{p.stdout}{p.stderr}')
+            except Exception as e:  # diagnostics must not hide the real failure
+                parts.append(f'## {title}\nfailed: {e!r}')
+
+        kubectl = [find_tool('kubectl', self.a.tool_dir), f'--kubeconfig={self.kubeconfig()}']
+        if self.tool == 'compose':
+            add('docker ps', [find_tool('docker', self.a.tool_dir), f'--host=unix://{RUN}/docker.sock', 'ps', '-a'])
+        else:
+            add('objects', kubectl + ['get', 'deploy,rs,pods,svc,endpointslices', '-A', '-o', 'wide'])
+            add('pods', kubectl + ['describe', 'pods', '-l', 'bench=runtime'])
+            add('services', kubectl + ['get', 'svc', '-l', 'bench=runtime', '-o', 'yaml'])
+        try:
+            urls = self.endpoints(n)
+        except Exception as e:
+            urls = []
+            parts.append(f'## endpoints\nfailed: {e!r}')
+        for url in urls:
+            code = ('import urllib.request,sys\n'
+                    'o=urllib.request.build_opener(urllib.request.ProxyHandler({}))\n'
+                    'b=o.open(sys.argv[1],timeout=2).read()\nprint(len(b), b[:16])\n')
+            add(f'GET {url}', [sys.executable, '-c', code, url])
+        add('addresses', ['ip', '-brief', 'address'])
+        add('routes', ['ip', 'route'])
+        add('iptables nat', ['iptables-save', '-t', 'nat'])
+        add('iptables filter', ['iptables-save', '-t', 'filter'])
+        (self.out / name).write_text(f'expected {n} apps at {version}\n\n' + '\n\n'.join(parts))
 
     def check_limits(self, n):
         """Read the kernel limits of each app's cgroup, not the submitted spec.
@@ -660,8 +698,10 @@ class Engine:
             self.cmd([find_tool('ctr', self.a.tool_dir), f'--address={RUN}/containerd.sock', '--namespace=shearwater',
                       'images', 'pull', '--platform=linux/amd64', image], timeout=600)
         else:
-            self.cmd([find_tool('k3s', self.a.tool_dir), 'crictl', '--runtime-endpoint',
-                      'unix:///run/k3s/containerd/containerd.sock', 'pull', image], timeout=600)
+            # `k3s crictl` looks for its config under the default data dir;
+            # ctr in the CRI namespace needs only the socket.
+            self.cmd([find_tool('k3s', self.a.tool_dir), 'ctr', '--address=/run/k3s/containerd/containerd.sock',
+                      '--namespace=k8s.io', 'images', 'pull', '--platform=linux/amd64', image], timeout=600)
         if self.tool in ('k3s', 'minikube'):
             self.wait_system()
         (self.out / 'prepared.json').write_text(json.dumps({'time': time.time(), 'image': image}))
