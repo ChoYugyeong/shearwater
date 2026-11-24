@@ -55,6 +55,7 @@ PAGES = {
 }
 
 started = time.monotonic()
+strict = False
 timings, transcript, steps = {}, [], []
 
 
@@ -205,6 +206,10 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--work', default='', help='scratch directory (default: a new temporary one)')
     a = ap.parse_args()
+    # Checks for behavior newer than the published release run only against a
+    # local build; the release path checks what users get today.
+    global strict
+    strict = bool(a.sw)
     out = Path(a.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     work = Path(a.work or tempfile.mkdtemp(prefix='swqs-')).resolve()
@@ -294,6 +299,10 @@ def main():
         expect(page()[1].startswith(PAGES['v2']), 'v2 is live')
         code, ev = operator(sw, 'update', 'evidence', f'--id={operation}')
         expect(code == 0, 'operator reads HTTP evidence', result=ev)
+        if strict:
+            http = ev.get('http') if isinstance(ev.get('http'), dict) else {}
+            expect(http.get('state') == 'passed' and http.get('retained') is True,
+                   'evidence says the retained proof passed', result=ev)
         expect(run(['docker', 'compose', '-f', compose_file, '-p', PROJECT, 'ps', '-q', 'other']).stdout.strip() == other_id,
                'the other service was not touched')
         mark('first_verified_update')
@@ -312,6 +321,13 @@ def main():
         bv = agent.call('broken', action='verify')
         expect(bv.get('state') != 'healthy', 'verify still does not report healthy', result=bv)
         d = agent.call('broken', action='diagnose')
+        if strict:
+            why = [f for f in bc.get('facts', []) if f.startswith('check GET')]
+            expect(why and all('expected text missing' in f for f in why),
+                   'http_failed says which check failed and why', facts=bc.get('facts'))
+            expect(not any('Welcome' in f for f in why), 'the failure never repeats the expected text', facts=why)
+            expect(any(f.startswith('last HTTP check (') for f in d.get('facts', [])),
+                   'diagnose reports the retained failed check', facts=d.get('facts'))
         mark('broken_update_caught')
 
         # Scenario 3: recover to the last verified image.
