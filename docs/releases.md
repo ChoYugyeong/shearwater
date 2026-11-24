@@ -4,22 +4,22 @@
 
 - **여러 서버.** 컨트롤 플레인 한 대에 워커를 붙여 써. [여러 서버](multi-node.md)
   - `sw up --advertise-address IP`로 시작하면 다른 서버와 원격 kubectl이 그 주소로 붙어(설정 폴더에 기억). `sw node token`이 붙일 명령을 출력하고, 워커에서 `sw join URL --token … --ca-hash …`을 실행해. 워커는 CA 해시를 확인한 뒤에만 붙어.
-  - 워커에는 DB가 없어. 컨트롤 플레인의 노드 API로 상태를 읽고 쓰고, 노드는 자기 Node·자기 Pod 상태·그 이벤트만 쓸 수 있어. Secret은 자기 Pod가 쓰는 것만 읽어.
+  - 워커에는 DB가 없어. 컨트롤 플레인의 노드 API로 상태를 읽고 쓰고, 노드가 쓸 수 있는 건 자기 Node, 자기에게 배정된 Pod(상태와 삭제 마무리), 그 이벤트, 자기 노드의 해제된 `local-path` PV 삭제뿐이야. Secret은 자기 Pod가 쓰는 것만 읽어.
   - 스케줄러가 여러 노드에서 고른다. cordon, taint/toleration, nodeSelector, 필수·선호 nodeAffinity, 요청 자원·Pod 110개, 볼륨 노드 제약을 보고, 같은 소유자의 Pod를 나눠. 맞는 노드가 없으면 `0/3 nodes are available: …`.
-  - 워커가 40초 응답하지 않으면 `NotReady`와 `node.kubernetes.io/unreachable` taint, 그 노드 Pod는 엔드포인트에서 빠지고 toleration 시간(기본 300초) 뒤 다른 노드에 다시 만들어져. 하트비트는 메모리에만 기록해(유휴 디스크 쓰기 없음).
+  - 워커가 40초 응답하지 않으면 `NotReady`와 `node.kubernetes.io/unreachable` taint, 그 노드 Pod는 엔드포인트에서 빠지고 toleration 시간(기본 300초) 뒤 삭제되어 컨트롤러가 다른 노드에 다시 만들어(컨트롤러 없는 Pod는 다시 만들지 않아). 하트비트는 메모리에만 기록해(유휴 디스크 쓰기 없음).
   - 노드 사이 Pod 네트워크는 VXLAN(`sw-vxlan0`, UDP 8472, 평문). 노드마다 `10.244.0.0/16`의 `/24`. 다른 노드 Pod의 `kubectl logs`는 컨트롤 플레인이 중계해(TCP 10250, 상호 TLS).
 - **접근 제어.** Role·ClusterRole·RoleBinding·ClusterRoleBinding과 권한 상승 방지, `kubectl auth can-i`·`can-i --list`·`whoami`, `sw user add|list|remove|token`과 테넌트 네임스페이스(Pod Security baseline), ResourceQuota(Deployment가 만드는 Pod 포함), Pod Security baseline·restricted. [접근 제어](access-control.md)
 - **클러스터 DNS.** 노드마다 게이트웨이에서 `sw`가 답해: Service(ClusterIP, headless), 이름 포트 SRV, Pod 이름, PTR, 그 밖의 이름은 호스트 resolver로. Pod `resolv.conf`는 `dnsPolicy`/`dnsConfig`대로. [클러스터 DNS](dns.md)
 - **Ingress.** `networking.k8s.io/v1` Ingress·IngressClass(`shearwater`), 호스트·경로 규칙, TLS Secret 또는 ACME. 다른 네임스페이스가 이미 쓰는 호스트는 409로 거절. [Ingress](ingress.md)
-- **영속 볼륨.** PV·PVC·StorageClass, 기본 `local-path`(WaitForFirstConsumer)는 첫 Pod가 배치된 노드에 디렉터리를 만들고 이후 Pod도 그 노드로 보내. Delete 정책은 PVC를 지운 뒤에만 그 노드가 데이터를 지워. PV가 없는 디렉터리는 지우지 않아(오래된 백업을 복원해도 데이터가 남아).
+- **영속 볼륨.** PV·PVC·StorageClass, 기본 `local-path`(WaitForFirstConsumer)는 첫 Pod가 배치된 노드에 디렉터리를 만들고 이후 Pod도 그 노드로 보내. `local-path` 볼륨의 Delete 정책은 PVC를 지운 뒤에만 그 노드가 데이터를 지워. PV가 없는 디렉터리는 지우지 않아(오래된 백업을 복원해도 데이터가 남아).
 - **NetworkPolicy.** Ingress·Egress, pod·namespace 셀렉터, ipBlock·except, TCP/UDP 포트를 노드마다 iptables(FORWARD)로 적용.
 
-**업데이트:** DB 형식은 바뀌지 않아. 서버 실행 파일을 교체한 뒤 다음 세 곳의 버전을 확인해.
+**업데이트:** 기존 DB 표와 형식은 그대로야(처음 시작할 때 자격 증명 표 하나를 더해). 서버 실행 파일을 교체한 뒤 다음 세 곳의 버전을 확인해.
 - `sw version`: `0.1.0-alpha.16`
 - 서버 `/version`의 `gitVersion`: `v1.36.0+shearwater.0.1.0-alpha.16`
 - Node의 `kubeletVersion`: `v1.36.0+shearwater.0.1.0-alpha.16`
 
-바뀌는 동작: 관리자 토큰이 아닌 요청은 RBAC를 거치고, 새로 시작하는 Pod는 클러스터 DNS를 써. [설치와 기존 서버 업데이트](install.md)
+바뀌는 동작: 관리자 토큰이 아닌 Kubernetes API 요청은 RBAC를 거치고(관리자 kubeconfig와 `sw task` 위임 토큰은 그대로 동작해), 새로 시작하는 Pod는 클러스터 DNS를 써. `sw user add`가 쓰는 kubeconfig에는 컨트롤 플레인이 알리는 주소가 들어가. [설치와 기존 서버 업데이트](install.md)
 
 **확인한 범위:**
 - 단위·API 시험 전체(`hack/t.sh`)와 CI.

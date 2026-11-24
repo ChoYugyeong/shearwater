@@ -92,7 +92,7 @@ Compose recreates the container during an update, so expect a short interruption
 
 ## Quick start: own runtime
 
-Shearwater also ships a small single-node runtime. It speaks a slice of the Kubernetes API (Pod, Deployment, Service, Secret), so `kubectl` works as usual, without importing any `k8s.io` package; CI fails the build if one appears. It adds rolling updates (0 failed requests in the measurements below) and a built-in public HTTPS entry. It needs containerd, runc, networking tools and administrator access. [Installation guide](docs/en/install.md)
+Shearwater also ships a small runtime for one server or several (one control plane with workers). It speaks a slice of the Kubernetes API (Pods, Deployments, Services, Secrets, RBAC, Ingress, volumes, NetworkPolicy), so `kubectl` works as usual, without importing any `k8s.io` package; CI fails the build if one appears. It adds rolling updates (0 failed requests in the measurements below) and a built-in public HTTPS entry. It needs containerd, runc, networking tools and administrator access. [Installation guide](docs/en/install.md)
 
 On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.16 --host --apply` installs containerd and runc when none exist and starts the systemd service. Then use `sw setup` to prepare credentials and follow the first-app guide. [Set up credentials](docs/onboarding.md) · [Run your first web app](docs/first-try.md)
 
@@ -110,9 +110,9 @@ To recover, create and approve a new plan that uses an image which previously pa
 
 ## New in alpha.16
 
-- **Several servers.** Start the control plane with `sw up --advertise-address IP`, print the join command with `sw node token`, and run it on each worker (`sw join`). Pods are scheduled across nodes (node selectors, node affinity, taints, requests), reach each other over a VXLAN pod network, and are recreated on other nodes when a server stops answering. There is one control plane; it is not highly available yet. [Several servers](docs/multi-node.md)
-- **Access control for several people and agents.** RBAC with Roles, ClusterRoles and bindings, `kubectl auth can-i` and `whoami`, and `sw user add NAME --namespace NS` for a kubeconfig limited to one namespace; ResourceQuota and Pod Security apply to Pods created directly and through Deployments. [Access control](docs/access-control.md)
-- **Cluster DNS and Ingress.** `sw` answers `<service>.<namespace>.svc.cluster.local` on every node. Ingress routes hosts and paths through the public entry, and a host stays with the namespace that claimed it first. [DNS](docs/dns.md) · [Ingress](docs/ingress.md)
+- **Several servers.** Start the control plane with `sw up --advertise-address IP`, print the join command with `sw node token`, and run it on each worker (`sw join`). Pods are scheduled across nodes (node selectors, node affinity, taints, requests), reach each other over a VXLAN pod network, and are recreated on other nodes by their controllers when a server stops answering. There is one control plane; it is not highly available yet. [Several servers](docs/en/multi-node.md)
+- **Access control for several people and agents.** RBAC with Roles, ClusterRoles and bindings, `kubectl auth can-i` and `whoami`, and `sw user add NAME --namespace NS` for a kubeconfig limited to one namespace; ResourceQuota and Pod Security apply to Pods created directly and through Deployments. [Access control](docs/en/access-control.md)
+- **Cluster DNS and Ingress.** `sw` answers `<service>.<namespace>.svc.cluster.local` on every node. Ingress routes hosts and paths through the public entry, and a host stays with the namespace that claimed it first. [DNS](docs/en/dns.md) · [Ingress](docs/en/ingress.md)
 - **Persistent volumes and NetworkPolicy.** PersistentVolumeClaims with a built-in `local-path` StorageClass that keeps a Pod on the node holding its data, and NetworkPolicy enforced on every node.
 
 These were checked on three simulated servers (each with its own network namespace, containerd and cgroup) through nine end-to-end steps, including a worker that stops answering. They were not yet checked on separate machines or cloud networks. VXLAN traffic is not encrypted, so use a private network or a VPN. [Release notes](docs/releases.md)
@@ -158,8 +158,8 @@ The same measurement now runs on GitHub Actions with minikube added (manually an
 
 ## Where it fits
 
-Shearwater is an **experimental alpha** for one operator running trusted HTTP apps on a single node. It supports IPv4 and TCP ClusterIP Services. Its HTTP checks cover internal endpoints. The optional public entry terminates TLS for annotated Services, but public DNS and login flows need separate checks, and rolling back an image does not restore database contents. Shearwater stores `securityContext` fields without enforcing them. Multi-tenant isolation and Kubernetes RBAC are outside its supported scope. [Compatibility matrix](docs/compatibility.md)
+Shearwater is an **experimental alpha** for running trusted HTTP apps on one server or a few. It supports IPv4 and TCP ClusterIP Services, with one control plane and no high availability. Its HTTP checks cover internal endpoints. The optional public entry terminates TLS for annotated Services, but public DNS and login flows need separate checks, and rolling back an image does not restore database contents. Pod Security admission can check `securityContext` fields, but containers run with the runtime's default security settings. RBAC, quotas and NetworkPolicy separate tenants; they have not been hardened against hostile tenants. [Compatibility matrix](docs/compatibility.md)
 
-If you already run a few apps with Docker Compose, keep Compose and put Shearwater in front of it. Consider Kubernetes or K3s if you need multiple nodes, Ingress, persistent volume claims or Helm. [Compare use cases](docs/choosing-shearwater.md)
+If you already run a few apps with Docker Compose, keep Compose and put Shearwater in front of it. Consider Kubernetes or K3s if you need a highly available control plane, network storage, Helm or the full Kubernetes API. [Compare use cases](docs/choosing-shearwater.md)
 
 [Troubleshooting](docs/troubleshooting.md) · [First-use feedback](docs/first-try-feedback.md) · [Contributing](CONTRIBUTING.md) · [Report a security issue](SECURITY.md) · [Apache 2.0 license](LICENSE) · [Notices](NOTICE)

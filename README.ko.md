@@ -92,7 +92,7 @@ Compose는 업데이트할 때 컨테이너를 새로 만들어서 짧게 끊길
 
 ## 자체 런타임으로 시작하기
 
-Shearwater에는 작은 단일 노드 런타임도 있어요. Kubernetes API 일부(Pod, Deployment, Service, Secret)를 직접 구현해서 `kubectl`을 그대로 쓸 수 있고, `k8s.io` 패키지는 하나도 가져오지 않아요. 들어오면 CI가 빌드를 실패시켜요. 롤링 업데이트(아래 측정에서 실패 요청 0건)와 내장 공개 HTTPS 진입점이 더해져요. containerd, runc, 네트워크 도구, 관리자 권한이 필요해요. [설치 준비](docs/install.md)
+Shearwater에는 서버 한 대나 여러 대(컨트롤 플레인 한 대와 워커)에서 도는 작은 런타임도 있어요. Kubernetes API 일부(Pod, Deployment, Service, Secret, RBAC, Ingress, 볼륨, NetworkPolicy)를 직접 구현해서 `kubectl`을 그대로 쓸 수 있고, `k8s.io` 패키지는 하나도 가져오지 않아요. 들어오면 CI가 빌드를 실패시켜요. 롤링 업데이트(아래 측정에서 실패 요청 0건)와 내장 공개 HTTPS 진입점이 더해져요. containerd, runc, 네트워크 도구, 관리자 권한이 필요해요. [설치 준비](docs/install.md)
 
 새 Ubuntu·Debian 서버라면 `sudo python3 install.py --version v0.1.0-alpha.16 --host --apply`가 containerd·runc가 없을 때 설치하고 systemd 서비스를 시작해요. 그다음 `sw setup`으로 인증 정보를 준비하고 첫 앱 안내를 따라가세요. [인증 정보 준비](docs/onboarding.md) · [첫 웹 앱 실행](docs/first-try.md)
 
@@ -110,7 +110,7 @@ Shearwater에는 작은 단일 노드 런타임도 있어요. Kubernetes API 일
 
 ## alpha.16에서 새로 생긴 것
 
-- **여러 서버로 써요.** 컨트롤 플레인을 `sw up --advertise-address IP`로 시작하고, `sw node token`이 출력하는 명령을 각 워커에서 실행해요(`sw join`). Pod는 여러 노드에 나뉘어 배치되고(nodeSelector, node affinity, taint, 요청 자원), VXLAN Pod 네트워크로 서로 닿고, 서버가 응답하지 않으면 다른 노드에서 다시 만들어져요. 컨트롤 플레인은 한 대예요(고가용성은 아직 없어요). [여러 서버](docs/multi-node.md)
+- **여러 서버로 써요.** 컨트롤 플레인을 `sw up --advertise-address IP`로 시작하고, `sw node token`이 출력하는 명령을 각 워커에서 실행해요(`sw join`). Pod는 여러 노드에 나뉘어 배치되고(nodeSelector, node affinity, taint, 요청 자원), VXLAN Pod 네트워크로 서로 닿고, 서버가 응답하지 않으면 컨트롤러가 다른 노드에 다시 만들어요. 컨트롤 플레인은 한 대예요(고가용성은 아직 없어요). [여러 서버](docs/multi-node.md)
 - **여러 사람과 에이전트가 나눠 써요.** RBAC(Role, ClusterRole, 바인딩, `kubectl auth can-i`·`whoami`), 네임스페이스 하나만 다루는 kubeconfig를 만드는 `sw user add NAME --namespace NS`, ResourceQuota와 Pod Security를 지원해요. 쿼터와 Pod Security는 Deployment가 만드는 Pod에도 적용돼요. [접근 제어](docs/access-control.md)
 - **클러스터 DNS와 Ingress.** 모든 노드에서 `sw`가 `<service>.<namespace>.svc.cluster.local`에 답해요. Ingress는 공개 진입점에서 호스트와 경로로 연결하고, 호스트는 먼저 차지한 네임스페이스의 것으로 남아요. [DNS](docs/dns.md) · [Ingress](docs/ingress.md)
 - **영속 볼륨과 NetworkPolicy.** 기본 `local-path` StorageClass로 PVC를 쓰면 Pod가 데이터가 있는 노드에 배치돼요. NetworkPolicy는 모든 노드에서 적용돼요.
@@ -158,8 +158,8 @@ Shearwater에는 작은 단일 노드 런타임도 있어요. Kubernetes API 일
 
 ## 어떤 환경에 맞나요?
 
-관리자 한 명이 신뢰하는 작은 HTTP 앱을 맡기는 **실험적 알파**예요. 단일 노드·IPv4·TCP ClusterIP를 지원해요. 선택 기능인 공개 진입점이 주석을 단 Service의 TLS를 맡지만, 공개 도메인 연결과 로그인은 따로 확인해야 하고, 이미지 복구에는 DB 데이터 복원이 포함되지 않아요. `securityContext`는 저장만 하며 다중 사용자 격리와 RBAC는 지원 범위 밖이에요. [호환표](docs/compatibility.md)
+신뢰하는 작은 HTTP 앱을 서버 한 대나 몇 대에서 맡기는 **실험적 알파**예요. IPv4·TCP ClusterIP를 지원하고, 컨트롤 플레인은 한 대(고가용성 없음)예요. 선택 기능인 공개 진입점이 주석을 단 Service의 TLS를 맡지만, 공개 도메인 연결과 로그인은 따로 확인해야 하고, 이미지 복구에는 DB 데이터 복원이 포함되지 않아요. `securityContext`는 Pod Security로 검사할 수 있지만 컨테이너는 런타임 기본 보안 설정으로 돌아요. RBAC·쿼터·NetworkPolicy로 사용자를 나누지만, 악의적인 사용자를 막도록 단단히 검증하지는 않았어요. [호환표](docs/compatibility.md)
 
-이미 Docker Compose로 앱 몇 개를 돌리고 있다면 Compose는 그대로 두고 그 앞에 Shearwater를 붙이세요. 여러 노드, Ingress, PVC, Helm이 필요하면 Kubernetes나 K3s를 살펴보세요. [도구별 용도 비교](docs/choosing-shearwater.md)
+이미 Docker Compose로 앱 몇 개를 돌리고 있다면 Compose는 그대로 두고 그 앞에 Shearwater를 붙이세요. 고가용성 컨트롤 플레인, 네트워크 스토리지, Helm, 전체 Kubernetes API가 필요하면 Kubernetes나 K3s를 살펴보세요. [도구별 용도 비교](docs/choosing-shearwater.md)
 
 [문제 진단하기](docs/troubleshooting.md) · [체험 결과 남기기](docs/first-try-feedback.md) · [기여하기](CONTRIBUTING.md) · [보안 제보](SECURITY.md) · [Apache 2.0 라이선스](LICENSE) · [출처 고지](NOTICE)

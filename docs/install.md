@@ -7,7 +7,7 @@
 
 이 안내는 **WSL 2 / Ubuntu 24.04 / x86_64(amd64)**에서 처음 실행하는 사람을 위한 거야. 내려받은 바이너리를 사용하므로 **Go 설치나 소스 빌드는 필요 없어**. ARM64, Windows 네이티브 실행 파일, 다른 Linux 배포판은 이번 바이너리의 검증 대상이 아니야.
 
-Shearwater는 신뢰하는 로컬 관리자가 사용하는 **실험적 알파**야. 단일 노드·IPv4·TCP ClusterIP를 지원해. DNS·RBAC·NetworkPolicy는 없고, securityContext는 저장만 해. 설정된 프로브는 실행하고 startup/readiness 결과를 Ready에 반영해. 프로브 없는 앱의 실제 응답은 아래 curl로 확인해.
+Shearwater는 신뢰하는 로컬 관리자가 사용하는 **실험적 알파**야. 서버 한 대, 또는 컨트롤 플레인 한 대와 워커를 지원하고 IPv4·TCP ClusterIP를 써. 클러스터 DNS·RBAC·NetworkPolicy가 있고, securityContext는 Pod Security로 검사할 수 있지만 컨테이너는 런타임 기본 보안 설정으로 돌아. 설정된 프로브는 실행하고 startup/readiness 결과를 Ready에 반영해. 프로브 없는 앱의 실제 응답은 아래 curl로 확인해.
 
 무엇을 확인할지 먼저 정하고 싶다면 [첫 체험 안내](first-try.md)를 봐.
 아래는 새 설치 절차야. 이미 실행 중인 인스턴스가 있다면 **기존 버전 업데이트** 단락을 먼저 읽어.
@@ -169,10 +169,10 @@ alpha.12부터 처음 `sw task` API를 사용할 때 SQLite에 내부 작업 표
 기존 관리자 인증·`sw connect` 파일이 자동으로 제한 토큰으로 변환되지는 않아.
 
 alpha.14에서 올릴 때도 DB 형식은 바뀌지 않아. 서버 실행 파일만 교체하면 돼.
-
-alpha.15에서 올릴 때도 DB 형식은 바뀌지 않아. 서버 실행 파일만 교체하면 돼. 새 서버는 처음 시작할 때 SQLite에 자격 증명 표(`credentials`)를 더하고, 기본 ClusterRole, `local-path` StorageClass, `shearwater` IngressClass를 만들어. 바뀌는 동작은 두 가지야. 관리자 토큰이 아닌 요청은 RBAC를 거쳐(관리자 kubeconfig는 그대로 써). 새로 시작하는 Pod는 클러스터 DNS를 써(`dnsPolicy: Default`면 예전처럼 호스트 파일을 복사해). 이미 돌던 Pod는 다시 만들어질 때 바뀌어. 서버를 더 붙이려면 [여러 서버](multi-node.md)를 봐.
 - `http_failed`와 `diagnose`가 어느 검사가 왜 실패했는지 알려 줘. `sw task evidence`의 `http`는 저장된 증거의 결과를 보여 줘.
 - 공개 진입점을 켜 둔 서버는 인증서 갱신 동작이 바뀌어: 갱신 시기가 되면 바로 깨어나고, 새 인증서가 안전하게 유효해질 때까지 이전 인증서를 계속 써. 백업에 공개 진입점 설정·ACME 계정 키·인증서가 들어가.
+
+alpha.15에서 올릴 때도 기존 DB 표와 형식은 그대로야. 서버 실행 파일만 교체하면 돼. 새 서버는 처음 시작할 때 SQLite에 자격 증명 표(`credentials`)를 더하고, 기본 ClusterRole, `local-path` StorageClass, `shearwater` IngressClass를 만들어. 바뀌는 동작은 두 가지야. 관리자 토큰이 아닌 Kubernetes API 요청은 RBAC를 거쳐(관리자 kubeconfig와 `sw task` 위임 토큰은 그대로 동작해). 새로 시작하는 Pod는 클러스터 DNS를 써(`dnsPolicy: Default`면 예전처럼 호스트 파일을 복사해). 이미 돌던 Pod는 다시 만들어질 때 바뀌어. 서버를 더 붙이려면 [여러 서버](multi-node.md)를 봐.
 
 alpha.13에서 올릴 때도 DB 형식은 바뀌지 않아.
 - 새 Secret 자원은 기존 객체 표에 저장돼.

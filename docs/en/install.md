@@ -5,7 +5,7 @@ To start with the installer, follow the [installation, authentication, and AI co
 
 This guide is for first-time users running **WSL 2 / Ubuntu 24.04 / x86_64(amd64)**. It uses a prebuilt binary, so **you do not need to install Go or build from source**. This binary has not been validated for ARM64, native Windows execution, or other Linux distributions.
 
-Shearwater is an **experimental alpha** for trusted local administrators. It supports a single node, IPv4, and TCP ClusterIP Services. It does not provide DNS, RBAC, or NetworkPolicy. It stores securityContext settings without enforcing them. Shearwater runs configured probes and uses startup and readiness probe results to determine Ready status. For apps without probes, use the curl command below to check the actual response.
+Shearwater is an **experimental alpha** for trusted local administrators. It supports one server or a control plane with workers, IPv4, and TCP ClusterIP Services. It provides cluster DNS, RBAC and NetworkPolicy. Pod Security admission can check securityContext settings, but containers run with the runtime's default security settings. Shearwater runs configured probes and uses startup and readiness probe results to determine Ready status. For apps without probes, use the curl command below to check the actual response.
 
 To decide what to test first, see the [first-run guide](../first-try.md). The steps below are for a new installation. If you already have a running instance, read **Upgrade an existing installation to alpha.16** first.
 
@@ -148,10 +148,10 @@ Keep the existing binary for recovery. To roll back from alpha.5 to alpha.4 or e
 Starting in alpha.12, the first use of the `sw task` API adds the internal `agent_operations` table to SQLite. Existing app declarations and containers are not recreated. If you revert to an earlier binary, do not overwrite the current database with an old backup. To grant an AI client per-app permissions, update both the server and the client. Then follow the [delegated operations guide](agent-operations.md) to create a new restricted connection. Existing administrator credentials and `sw connect` files do not automatically convert to restricted tokens.
 
 Upgrading from alpha.14 also preserves the database format; replacing the server binary is enough.
-
-Upgrading from alpha.15 also preserves the database format; replacing the server binary is enough. On its first start the new server adds a credentials table to SQLite and creates the default ClusterRoles, the `local-path` StorageClass and the `shearwater` IngressClass. Two behaviours change: requests made with anything but the administrator token go through RBAC (the administrator kubeconfig works as before), and Pods started from now on use the cluster DNS (`dnsPolicy: Default` keeps copying the host's file). Running Pods change when they are recreated. To add servers, see [several servers](../multi-node.md) (in Korean).
 - `http_failed` and `diagnose` say which check failed and why. The `http` field of `sw task evidence` shows the stored proof's outcome.
 - On a server with the public entry enabled, certificate renewal changes: renewal starts as soon as a certificate enters its renewal window, and the previous certificate keeps serving until the renewed one is safely valid. Backups include the entry settings, the ACME account key and the certificates.
+
+Upgrading from alpha.15 also keeps the existing database tables and format; replacing the server binary is enough. On its first start the new server adds a credentials table to SQLite and creates the default ClusterRoles, the `local-path` StorageClass and the `shearwater` IngressClass. Two behaviours change: Kubernetes API requests made with anything but the administrator token go through RBAC (the administrator kubeconfig and `sw task` delegated tokens work as before), and Pods started from now on use the cluster DNS (`dnsPolicy: Default` keeps copying the host's file). Running Pods change when they are recreated. To add servers, see [several servers](multi-node.md).
 
 Upgrading from alpha.13 also preserves the database format.
 
