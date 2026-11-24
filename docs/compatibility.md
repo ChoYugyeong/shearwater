@@ -16,7 +16,7 @@ Shearwater는 Kubernetes API의 일부를 구현한 단일 노드 오케스트�
 | readiness/liveness/startup probe | HTTP/HTTPS·TCP·exec 검사, Ready/Service 연동, 유예 종료·재시작 | alpha.4. gRPC·host override 미지원. [상태 검사](health-probes.md) |
 | securityContext | 필드를 저장하고 경고 | 실행은 런타임 기본 보안 설정. 정책이 적용되지 않음 |
 | nodeSelector, affinity, tolerations, priority | 필드를 저장하고 경고 | 노드 한 개, 해당 배치 정책 평가 없음 |
-| 인증 | 자체 CA 기반 TLS, 로컬 관리자 토큰 | RBAC·사용자/서비스 계정 분리 없음 |
+| 인증·인가 | 자체 CA 기반 TLS, 관리자·사용자 토큰, 네임스페이스별 RBAC, `kubectl auth can-i`·`whoami` | 사용자 토큰 발급은 관리자 전용. 서비스 계정 토큰 발급과 ClusterRole 자동 집계는 지원하지 않아. [접근 제어](access-control.md) |
 | 패치 | JSON Patch, JSON Merge Patch, Strategic Merge Patch | Server-Side Apply 거절(415) |
 | kubectl 출력 | JSON, Table, wide, watch와 셀렉터 전이 | API의 일부만 구현. 모든 kubectl 하위 명령을 지원하는 것은 아님 |
 | OpenAPI | 지원하는 종류의 `fieldValidation` 정보를 담은 v3 문서. `kind: List` 파일을 kubectl이 클라이언트에서 검증할 때 읽는 v2는 정의가 없는 빈 문서 | 그래서 List 항목의 필드 검사는 서버가 해. 각 객체를 `fieldValidation=Strict`로 받아 검증해 |
