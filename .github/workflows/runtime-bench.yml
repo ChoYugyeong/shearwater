@@ -18,11 +18,6 @@ on:
       repeats:
         description: Repeats per tool (the order rotates)
         default: '3'
-  # TEMPORARY: workflow_dispatch only works once this file is on the default
-  # branch. Remove this trigger before merging bench-ci into main.
-  push:
-    branches: [bench-ci]
-    paths: [.github/workflows/runtime-bench.yml, hack/bench_runtime.py, hack/benchload/**]
   schedule:
     # Mondays 03:17 UTC.
     - cron: '17 3 * * 1'
@@ -98,7 +93,7 @@ jobs:
         env:
           BENCH_TOOLS: ${{ inputs.tools || 'compose,k3s,minikube,shearwater' }}
           BENCH_APPS: ${{ inputs.apps || '1,10' }}
-          BENCH_REPEATS: ${{ inputs.repeats || (github.event_name == 'push' && '1') || '3' }}
+          BENCH_REPEATS: ${{ inputs.repeats || '3' }}
         run: |
           sudo --preserve-env=GITHUB_SHA,GITHUB_RUN_ID,RUNNER_NAME \
             python3 hack/bench_runtime.py run --yes --keep-going \
