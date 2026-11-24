@@ -6,6 +6,14 @@
 이 문서는 세 작업자(Claude, Codex, Gemini)가 동시에 일하기 위한 **계약**이야. 설계가 바뀌면 이
 문서를 먼저 고치고 다른 작업자에게 알린다.
 
+**상태(2026-11-25):** 1·2단계 모두 `multi-node-tenancy` 브랜치에 합쳐짐(push 안 함). 사용 안내는
+[여러 서버](multi-node.md), [접근 제어](access-control.md), [클러스터 DNS](dns.md), [Ingress](ingress.md).
+QA 배포판의 서버 세 대 흉내에서 9단계 e2e 통과(`maintenance/20261124-multinode-tenancy/qa/`). 설계에서
+바뀐 점: 볼륨 데이터는 "PV가 없는 디렉터리 정리" 대신 컨트롤 플레인이 표시한 PV만 그 노드가 지움(복원 안전),
+ReplicaSet이 만드는 Pod도 admission(쿼터·Pod Security)을 거침, 컨트롤 플레인 호스트의 ClusterIP 연결은
+다른 노드로 갈 때 마스커레이드. 남은 것: 실제 서로 다른 서버·클라우드에서의 확인, 컨트롤 플레인 고가용성,
+eviction API, 워커 프록시의 연결 종료 대기 보고.
+
 ## 0. 원칙과 범위
 
 - 핵심 원칙은 그대로: **경량화와 사용자 편의성**. 바이너리 하나, 노드마다 상주 프로세스 `sw` 하나.
