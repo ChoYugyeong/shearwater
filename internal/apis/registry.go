@@ -12,8 +12,11 @@ type Resource struct {
 	Namespaced     bool
 
 	Create, Update, Delete bool // through the API; get and list always work
-	StatusSub              bool // has /status
-	ScaleSub               bool // has /scale
+	// CreateOnly: answered, not stored (access reviews); only "create" is
+	// advertised and get, list and watch do not apply.
+	CreateOnly bool
+	StatusSub  bool // has /status
+	ScaleSub   bool // has /scale
 
 	// AnnotationsMoveGeneration: metadata.generation goes up when the
 	// annotations change, not only when the spec does. Kubernetes does this for

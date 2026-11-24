@@ -70,7 +70,7 @@ func init() {
 		{Group: AuthorizationGroup, Plural: "selfsubjectrulesreviews", Singular: "selfsubjectrulesreview", Kind: "SelfSubjectRulesReview", New: func() Object { return &SelfSubjectRulesReview{} }},
 		{Group: AuthenticationGroup, Plural: "selfsubjectreviews", Singular: "selfsubjectreview", Kind: "SelfSubjectReview", New: func() Object { return &SelfSubjectReview{} }},
 	} {
-		r.Version, r.Create = "v1", true
+		r.Version, r.Create, r.CreateOnly = "v1", true, true
 		Register(r)
 	}
 }
