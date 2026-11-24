@@ -29,7 +29,7 @@ type backend struct {
 // snapshot converts API objects into one TCP listener per Service port. The
 // lists may come from different revisions. An EndpointSlice is usable only
 // when its owner UID and Service generation agree with the Service we read.
-func snapshot(st *store.Store) (map[netip.AddrPort]route, error) {
+func snapshot(st store.NetworkReader) (map[netip.AddrPort]route, error) {
 	services, _, err := st.List("", "services", "")
 	if err != nil {
 		return nil, err

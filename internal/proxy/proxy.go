@@ -19,7 +19,7 @@ import (
 const refreshEvery = 30 * time.Second
 
 type Manager struct {
-	Store *store.Store
+	Store store.NetworkReader
 	// Addresses reconciles the kernel's local addresses and returns the IPs
 	// attached successfully, even if one of the other addresses failed.
 	Addresses func(context.Context, map[netip.Addr]bool) (map[netip.Addr]bool, error)

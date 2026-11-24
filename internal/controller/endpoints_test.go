@@ -280,6 +280,7 @@ func TestEndpointSliceSettledPassDoesNotAdvanceRevision(t *testing.T) {
 
 func TestEndpointSliceWithdrawsPodWhenGCStartsDeletion(t *testing.T) {
 	m := testManager(t)
+	withNode(t, m)
 	create(t, m, testServiceResource, endpointService("web", apis.ServicePort{Port: 80}))
 	owner := endpointService("owner", apis.ServicePort{Port: 80})
 	owner.Spec.Selector = nil

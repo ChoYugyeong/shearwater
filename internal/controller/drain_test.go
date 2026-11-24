@@ -21,6 +21,7 @@ func TestReplicaSetDrainsBeforeDeletionAndCanCancel(t *testing.T) {
 		Status: apis.PodStatus{Phase: "Running", PodIP: "10.244.0.5", Conditions: []apis.PodCondition{{Type: "Ready", Status: "True"}}}}
 	p.Spec.NodeName = "test"
 	p.Spec.TerminationGracePeriodSeconds = new(int64(1))
+	withNode(t, m)
 	create(t, m, podResource, p)
 	if err := m.Store.Write(false, func(tx *store.Tx) error {
 		rec, err := tx.Get(objects.Key(podResource, "default", "p"))

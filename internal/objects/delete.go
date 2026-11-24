@@ -50,12 +50,16 @@ func version(group string) string {
 	return ""
 }
 
-// Delete applies the same Pod grace and finalizer rules to API and controller deletes.
-func Delete(tx *store.Tx, res *apis.Resource, rec store.Record, obj apis.Object, nodeName string,
+// Delete applies the same Pod grace and finalizer rules to API and controller
+// deletes. A Pod bound to a node that exists is deleted gracefully: its node
+// agent stops the containers and then lets the object go. With several nodes
+// that agent may run on another server; a node that is gone for good is
+// removed with `sw node remove`, which force-deletes its Pods.
+func Delete(tx store.Txn, res *apis.Resource, rec store.Record, obj apis.Object,
 	requestedGrace *int64, now time.Time) (store.Record, bool, error) {
 	m := obj.Meta()
 	var grace int64
-	if pod, ok := obj.(*apis.Pod); ok && nodeName != "" && pod.Spec.NodeName == nodeName {
+	if pod, ok := obj.(*apis.Pod); ok && pod.Spec.NodeName != "" && nodeExists(tx, pod.Spec.NodeName) {
 		grace = 30
 		if g := pod.Spec.TerminationGracePeriodSeconds; g != nil {
 			grace = *g
@@ -77,4 +81,11 @@ func Delete(tx *store.Tx, res *apis.Resource, rec store.Record, obj apis.Object,
 	}
 	deleted, err := tx.Delete(rec.Key, rec.Rev, Encoder(obj))
 	return deleted, false, err
+}
+
+// nodeExists reports whether a Node object (and so a node agent that answers
+// for its Pods) exists.
+func nodeExists(tx store.Txn, name string) bool {
+	_, err := tx.Get(store.Key{Resource: "nodes", Name: name})
+	return err == nil
 }

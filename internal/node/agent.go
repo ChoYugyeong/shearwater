@@ -28,7 +28,7 @@ const (
 var podsRes = apis.Lookup("", "v1", "pods")
 
 type Agent struct {
-	Store     *store.Store
+	Store     store.Backend // *store.Store on the control plane, the node API client on a worker
 	Runtime   runtime.Runtime
 	Net       runtime.Network
 	NodeName  string

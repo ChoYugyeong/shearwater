@@ -43,7 +43,7 @@ func (a *Agent) syncNode(ctx context.Context) {
 		return
 	}
 
-	werr := a.Store.Write(false, func(tx *store.Tx) error {
+	werr := a.Store.Transact(func(tx store.Txn) error {
 		key := objects.Key(nodesRes, "", a.NodeName)
 		node := &apis.Node{}
 		rec, err := tx.Get(key)

@@ -671,7 +671,7 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request, res *apis.Resour
 				}
 			}
 		}
-		rec, pending, err = objects.Delete(tx, res, cur, obj, s.NodeName, opts.GracePeriodSeconds, timeNow())
+		rec, pending, err = objects.Delete(tx, res, cur, obj, opts.GracePeriodSeconds, timeNow())
 		return err
 	})
 	if err != nil {

@@ -219,7 +219,7 @@ func (a *Agent) terminate(ctx context.Context, pod *apis.Pod, actual []runtime.C
 	a.forgetPod(uid, pod.Spec.Containers)
 
 	key := objects.Key(podsRes, pod.Metadata.Namespace, pod.Metadata.Name)
-	err := a.Store.Write(false, func(tx *store.Tx) error {
+	err := a.Store.Transact(func(tx store.Txn) error {
 		rec, err := tx.Get(key)
 		if errors.Is(err, store.ErrNotFound) || (err == nil && rec.UID != uid) {
 			return nil // already gone
@@ -743,7 +743,7 @@ func (a *Agent) writeStatus(pod *apis.Pod, st apis.PodStatus) error {
 		return nil
 	}
 	key := objects.Key(podsRes, pod.Metadata.Namespace, pod.Metadata.Name)
-	return a.Store.Write(false, func(tx *store.Tx) error {
+	return a.Store.Transact(func(tx store.Txn) error {
 		rec, err := tx.Get(key)
 		if errors.Is(err, store.ErrNotFound) || (err == nil && rec.UID != pod.Metadata.UID) {
 			return nil // deleted meanwhile; the next look cleans up
@@ -770,7 +770,7 @@ func (a *Agent) writeStatus(pod *apis.Pod, st apis.PodStatus) error {
 	})
 }
 
-func (a *Agent) recordTransitions(tx *store.Tx, pod *apis.Pod, old apis.PodStatus) error {
+func (a *Agent) recordTransitions(tx store.Txn, pod *apis.Pod, old apis.PodStatus) error {
 	for _, cs := range pod.Status.ContainerStatuses {
 		i := slices.IndexFunc(old.ContainerStatuses, func(c apis.ContainerStatus) bool { return c.Name == cs.Name })
 		var before apis.ContainerStatus

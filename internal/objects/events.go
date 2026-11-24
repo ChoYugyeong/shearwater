@@ -19,7 +19,7 @@ var eventsRes = apis.Lookup("", "v1", "events")
 // and warning records for each container. This avoids an unbounded list for
 // a crash-looping app. The owner UID makes the events follow that Pod through
 // garbage collection, even if an operator creates another Pod with its name.
-func PodEvent(tx *store.Tx, pod *apis.Pod, now time.Time, slot, field, reason, message, component, kind string) error {
+func PodEvent(tx store.Txn, pod *apis.Pod, now time.Time, slot, field, reason, message, component, kind string) error {
 	sum := sha256.Sum256([]byte(slot))
 	name := fmt.Sprintf("%s.%x", pod.Metadata.UID, sum[:8])
 	key := Key(eventsRes, pod.Metadata.Namespace, name)

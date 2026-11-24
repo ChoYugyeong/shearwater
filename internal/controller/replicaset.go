@@ -146,7 +146,7 @@ func (m Manager) replicaSet(tx *store.Tx, i *item, v view, budget *int, now time
 					}
 				}
 			}
-			rec, _, err := objects.Delete(tx, child.res, child.rec, child.obj, m.NodeName, nil, now)
+			rec, _, err := objects.Delete(tx, child.res, child.rec, child.obj, nil, now)
 			if err != nil {
 				return err
 			}
