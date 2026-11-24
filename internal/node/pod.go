@@ -163,6 +163,11 @@ func (a *Agent) cleanup(ctx context.Context, uid string, actual []runtime.Contai
 	if keepIP {
 		return 0, nil
 	}
+	if ips, err := a.Store.IPs("pod"); err != nil {
+		return failureRetry, err
+	} else if ip, ok := ips[uid]; ok && !a.ownsAddr(ip) {
+		return 0, nil // a Pod of another node: its address is that node's to release
+	}
 	if a.RetirePod != nil {
 		if err := a.RetirePod(ctx, uid); err != nil {
 			return failureRetry, err

@@ -99,7 +99,11 @@ func (a *Agent) fillNode(n *apis.Node, runtimeVersion string, ready bool, reason
 	n.Status.Capacity, n.Status.Allocatable = res, res
 
 	n.Status.Addresses = nil
-	if ip := hostIP(); ip != "" {
+	ip := a.NodeIP
+	if ip == "" {
+		ip = hostIP()
+	}
+	if ip != "" {
 		n.Status.Addresses = append(n.Status.Addresses, apis.NodeAddress{Type: "InternalIP", Address: ip})
 	}
 	n.Status.Addresses = append(n.Status.Addresses, apis.NodeAddress{Type: "Hostname", Address: a.NodeName})
