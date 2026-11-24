@@ -293,10 +293,10 @@ func restoreServiceRules(ctx context.Context, script string) error {
 
 func (k *KernelServices) hooks() []chainSpec {
 	return []chainSpec{
-		{"nat", "PREROUTING", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceNAT}}},
-		{"nat", "OUTPUT", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceNAT}}},
-		{"nat", "POSTROUTING", [][]string{{"-d", k.PodCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceSNAT}}},
-		{"filter", "INPUT", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceInput}}},
+		{"nat", "PREROUTING", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceNAT}}, nil},
+		{"nat", "OUTPUT", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceNAT}}, nil},
+		{"nat", "POSTROUTING", [][]string{{"-d", k.PodCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceSNAT}}, nil},
+		{"filter", "INPUT", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceInput}}, nil},
 	}
 }
 

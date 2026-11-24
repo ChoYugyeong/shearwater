@@ -447,6 +447,11 @@ func runServer(args []string) error {
 				fmt.Fprintf(os.Stderr, "network services: "+format+"\n", args...)
 			})
 		})
+		goBackground(func(ctx context.Context) {
+			runNodeNetworkPolicy(ctx, st, apis.PodCIDR, func(format string, args ...any) {
+				fmt.Fprintf(os.Stderr, "network policy: "+format+"\n", args...)
+			})
+		})
 	} else {
 		close(agentDone)
 		if advertiseIP.IsValid() {

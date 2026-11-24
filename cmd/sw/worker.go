@@ -180,6 +180,7 @@ func runWorker(o opsOptions, instance string) error {
 	})
 	gateway := n.Gateway()
 	start(func(ctx context.Context) { runNodeNetworkServices(ctx, client, gateway, logf("network services: ")) })
+	start(func(ctx context.Context) { runNodeNetworkPolicy(ctx, client, f.podCIDR, logf("network policy: ")) })
 
 	// Local health for sw up and sw status: ready while the control plane answers.
 	ln, err := net.Listen("tcp", o.Listen)
