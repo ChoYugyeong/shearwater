@@ -142,7 +142,7 @@ func runDoctor(args []string) error {
 	}
 	fmt.Printf("INFO paths: data=%s config=%s run=%s logs=%s\n", o.DataDir, o.ConfigDir, o.RunDir, o.LogDir)
 	fmt.Printf("INFO kubeconfig: %s (contains an admin token; keep it private)\n", filepath.Join(o.ConfigDir, "kubeconfig"))
-	fmt.Println("INFO policy: Stage 1 uses the local admin token; policy rules are not applied yet")
+	fmt.Println("INFO access: this kubeconfig is the administrator and may do everything; kubeconfigs written by sw user add are limited by RBAC")
 	logPath := filepath.Join(o.LogDir, "server.log")
 	fmt.Printf("INFO server log: %s\n", logPath)
 	for _, line := range recentErrors(logPath) {
