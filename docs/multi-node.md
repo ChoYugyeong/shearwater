@@ -118,7 +118,7 @@ Pod 조건에 쿠버네티스 형식으로 이유가 남아:
 
 2026-11-24 QA 배포판에서 서버 세 대를 흉내 냈어(서버마다 별도 network namespace, 전용 containerd,
 cgroup, 사설 underlay 192.168.77.0/24). 기록과 하네스는 `maintenance/20261124-multinode-tenancy/qa/`.
-마지막 두 번의 실행(`mnq-7`, `mnq-8`)에서 아홉 단계가 모두 통과했어:
+PVC 단계를 넣은 뒤의 세 번(`mnq-7`·`mnq-8`·`mnq-9`)에서 아홉 단계가 모두 통과했어(`mnq-8`·`mnq-9`는 PVC를 워커 `w1`에서 시험):
 
 1. 컨트롤 플레인 시작과 join 토큰
 2. 워커 두 대 join, 세 노드 Ready
@@ -128,7 +128,7 @@ cgroup, 사설 underlay 192.168.77.0/24). 기록과 하네스는 `maintenance/20
 6. 테넌트 격리(다른 네임스페이스 403), Pod Security(hostPath 거절), 쿼터 초과 거절
 7. NetworkPolicy가 다른 네임스페이스의 접근을 노드를 넘어 막음
 8. PVC 데이터가 쓴 노드에 남고(워커 `w1`), 같은 PVC를 쓰는 다음 Pod도 그 노드로 감, PVC 삭제 뒤에만 데이터가 지워짐
-9. 워커 네트워크를 끊었을 때 40~46초에 NotReady, `tolerationSeconds: 20`인 Pod가 65~68초에 다른 노드에서 Ready, 복구 뒤 taint 해제
+9. 워커 네트워크를 끊었을 때(`mnq-6`~`mnq-9`) 40~46초에 NotReady, `tolerationSeconds: 20`인 Pod가 65~68초에 다른 노드에서 Ready, 복구 뒤 taint 해제
 
 같은 커널을 쓰는 namespace 흉내이므로 실제 서로 다른 서버·클라우드 네트워크·방화벽에서는 아직 확인하지
 않았어. 측정 시간은 이 환경의 값이야.

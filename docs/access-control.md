@@ -39,4 +39,4 @@ sw user remove alice
 
 관리자는 `kubectl create quota team-limit --hard=pods=10,requests.cpu=4 -n team-a`로 한도를 선언할 수 있다. 해당 네임스페이스의 Pod 생성 요청에는 추적되는 CPU 요청량을 지정한다. 한도 초과 시 HTTP 403의 `exceeded quota` 메시지에 요청량·사용량·한도가 나온다. `kubectl get quota team-limit -n team-a -o yaml`로 집계된 `status.used`와 `status.hard`를 확인할 수 있다.
 
-현재 ReplicaSet 컨트롤러가 만드는 Pod는 API admission을 거치지 않는다. 집계에는 반영되지만 `pods`·CPU·메모리 한도는 컨트롤러가 생성하는 순간에 적용되지 않는다. 컨트롤러 경로에 admission을 연결하기 전에는 이 한도를 테넌트 전체의 상한으로 사용할 수 없다.
+쿼터가 있는 네임스페이스에서는 ReplicaSet 컨트롤러도 Pod를 만들기 전에 같은 admission을 거친다. 이 Pod도 사용량에 집계되고, `pods`·CPU·메모리 한도를 넘게 되면 Pod를 만들지 않고 ReplicaSet에 `FailedCreate` 이벤트를 남긴다. 그래서 Deployment로도 쿼터를 넘길 수 없다.
