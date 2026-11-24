@@ -107,4 +107,4 @@ K3s 앱 1개 첫 반복에서는 새 버전이 준비됐다는 표시 뒤 마지
 
 [runtime-comparison-alpha9.csv](runtime-comparison-alpha9.csv)는 18사례의 집계값이야. 한 줄이 한 사례이고, `idle_`, `load_`, `update_`로 시작하는 열이 각각 유휴, 평상시 부하, 업데이트 구간이야. 위 표의 PSS와 cgroup 값은 `idle_pss_mib`, `idle_memory_mib`의 중앙값이고, CPU와 p95는 `load_cpu_one_core_percent`, `load_p95_ms`의 중앙값, 배포 준비는 `deploy_s`의 중앙값이야. 업데이트 오류는 `update_errors`의 3회 합계야. `trial` 값의 `cap512`는 부하 도구의 동시 한도가 512개인 비교군이라는 뜻이고, `_wsl_busy_`가 들어간 열은 다른 작업이 섞인 WSL 전체 CPU라서 특정 도구의 사용량으로 읽으면 안 돼.
 
-요청별 기록과 1초 간격 자원 표본, 측정 스크립트는 저장소에 넣지 않았어. 스크립트가 이 PC의 시험 전용 경로에 묶여 있어서 그대로는 다른 장비에서 재현되지 않아.
+요청별 기록과 1초 간격 자원 표본은 저장소에 넣지 않았어. 이 측정에 쓴 스크립트는 이 PC의 시험 전용 경로에 묶여 있어서 그대로는 다른 장비에서 재현되지 않았어. 같은 측정 규칙을 경로에 묶이지 않게 옮긴 스크립트와 GitHub Actions 워크플로가 이제 저장소에 있어. minikube도 비교군에 들어가. [CI 런타임 비교](runtime-bench-ci.md)를 봐. 장비와 메모리 상한이 달라서 그 결과를 이 표와 섞으면 안 돼.
