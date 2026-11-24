@@ -115,7 +115,7 @@ To recover, create and approve a new plan that uses an image which previously pa
 - **Steadier certificate renewal for the public entry.** Renewal starts as soon as a certificate enters its renewal window, the previous certificate keeps serving until the renewed one is safely valid, `sw edge status` marks expired certificates, and backups include the entry settings, ACME account key and certificates.
 - **Clearer startup and verify output.** `sw up` shows the server's last log line when startup fails, and verify facts name what was actually checked for each backend (Pods and a Service, or containers and a host port).
 
-The failure explanations were checked on a fresh GitHub-hosted VM with real Docker (the source path of the quick start check). The certificate changes were checked against the Pebble ACME test server. [Release notes](docs/releases.md)
+The failure explanations are checked on a fresh GitHub-hosted VM with real Docker, both with the published release installed the README way and with a build of the current source (the quick start check). The certificate changes were checked against the Pebble ACME test server. [Release notes](docs/releases.md)
 
 ### Added in alpha.14
 
