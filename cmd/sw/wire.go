@@ -17,6 +17,7 @@ type wiring struct {
 	Admin     *http.ServeMux // served under api.AdminPrefix, administrators only
 	ConfigDir string
 	DataDir   string
+	NodeName  string // the control plane's own node ("" when it runs no workloads)
 	// Go runs fn in the background for the life of the server. The server
 	// waits for every fn to return before it closes the store.
 	Go func(name string, fn func(ctx context.Context))

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -46,6 +47,8 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw capabilities show supported agent operations and their limits
   sw server      run the API server in the foreground
   sw kubeconfig  print a kubeconfig for kubectl
+  sw node        print a join command, list or remove the servers of this cluster
+  sw join        make this server a worker of a cluster (run the command sw node token prints)
   sw user        add, list, remove users or rotate their tokens
   sw version     print the version
   sw service     render/install/manage an automatic systemd service
@@ -131,6 +134,10 @@ func main() {
 		err = runServer(args)
 	case "kubeconfig":
 		err = runKubeconfig(args)
+	case "node":
+		err = runNode(args)
+	case "join":
+		err = runJoin(args)
 	case "user":
 		err = runUser(args)
 	case "version", "--version":
@@ -159,6 +166,8 @@ func runServer(args []string) error {
 	runDir := fs.String("run-dir", defaultRunDir, "directory for pod network namespaces (a tmpfs, emptied by a reboot)")
 	nodeName := fs.String("node-name", "", "name of this node (default: the hostname)")
 	instance := fs.String("managed", "", "internal instance identifier set by sw up")
+	worker := fs.Bool("worker", false, "run as a worker node of the cluster this server joined (sw up sets it)")
+	advertise := fs.String("advertise-address", "", "IPv4 address other servers and remote kubectl reach this control plane at (default: the one sw up remembered)")
 	fs.Parse(args)
 
 	withAgent := false
@@ -193,6 +202,23 @@ func runServer(args []string) error {
 			return err
 		}
 		*listen = o.Listen
+	}
+	if *worker {
+		if !withAgent {
+			return fmt.Errorf("a worker runs containers: drop --runtime=none")
+		}
+		return runWorker(o, *instance)
+	}
+	if *advertise == "" {
+		*advertise = readClusterConfig(*configDir).AdvertiseAddress
+	}
+	var advertiseIP netip.Addr
+	if *advertise != "" {
+		a, err := parseAdvertise(*advertise)
+		if err != nil {
+			return err
+		}
+		advertiseIP = a
 	}
 	if *instance != "" {
 		if len(*instance) != 32 {
@@ -252,6 +278,15 @@ func runServer(args []string) error {
 	if err != nil {
 		return err
 	}
+	if advertiseIP.IsValid() {
+		// Remote kubectl reaches the server by this address.
+		if err := pki.EnsureServerAddresses(*configDir, []net.IP{net.IP(advertiseIP.AsSlice())}); err != nil {
+			return err
+		}
+		if mat, err = pki.Load(*configDir); err != nil {
+			return err
+		}
+	}
 	if *instance != "" {
 		// Don't advertise a ready managed server if its kubectl credentials
 		// cannot be published (for example, the filesystem is full).
@@ -272,7 +307,20 @@ func runServer(args []string) error {
 	var loops []loop
 	wired := &wiring{Server: srv, Store: st, Admin: adminMux, ConfigDir: *configDir, DataDir: *dataDir,
 		Go: func(name string, fn func(context.Context)) { loops = append(loops, loop{name, fn}) }}
+	if withAgent {
+		wired.NodeName = *nodeName
+	}
 	srv.Admit = admission.Chain(append(wireAccess(wired), wireNetworkServices(wired)...)...)
+	_, listenPort, _ := net.SplitHostPort(*listen)
+	joinURL := ""
+	if advertiseIP.IsValid() {
+		joinURL = "https://" + net.JoinHostPort(advertiseIP.String(), listenPort)
+	}
+	nodeAPI := wireNodes(wired, joinURL)
+	clusterCIDR := netip.Prefix{} // zero: a single server
+	if advertiseIP.IsValid() {
+		clusterCIDR = apis.ClusterCIDR
+	}
 	if *trace != "" {
 		f, err := os.OpenFile(*trace, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		if err != nil {
@@ -295,6 +343,15 @@ func runServer(args []string) error {
 		return fmt.Errorf("%w (is another sw server running? `--listen` picks another address)", err)
 	}
 	defer ln.Close()
+	var clusterLn net.Listener
+	if advertiseIP.IsValid() {
+		// Workers and remote kubectl connect here; the local address keeps
+		// serving the tools on this machine.
+		if clusterLn, err = net.Listen("tcp", net.JoinHostPort(advertiseIP.String(), listenPort)); err != nil {
+			return fmt.Errorf("listen for other servers on %s: %w", advertiseIP, err)
+		}
+		defer clusterLn.Close()
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	// Feature loops (wiring.Go) and node services end before the store closes.
@@ -322,6 +379,9 @@ func runServer(args []string) error {
 		rt := runtime.NewContainerd(*socket)
 		defer rt.Close()
 		n := runtime.NewNet(*runDir, apis.PodCIDR, apis.ServiceCIDR)
+		if advertiseIP.IsValid() {
+			n.Overlay, n.ClusterCIDR = true, apis.ClusterCIDR
+		}
 		// The foreground server must also prove ownership before the
 		// node agent's first pass; otherwise it could remove the previous
 		// database's surviving Pods as orphans.
@@ -359,17 +419,22 @@ func runServer(args []string) error {
 		}
 		draining := &drain.State{}
 		forwarding := &proxy.KernelManager{Manager: proxy.Manager{Store: st},
-			DataPath: &runtime.KernelServices{PodCIDR: apis.PodCIDR, ServiceCIDR: apis.ServiceCIDR}, Drain: draining}
+			DataPath: &runtime.KernelServices{PodCIDR: apis.PodCIDR, ServiceCIDR: apis.ServiceCIDR, ClusterCIDR: clusterCIDR}, Drain: draining}
 		agent := &node.Agent{
 			Store: st, Runtime: rt, Net: n,
 			RetirePod: forwarding.RetirePod,
 			NodeName:  *nodeName, DataDir: *dataDir, LogDir: *logDir, PodCIDR: apis.PodCIDR, Version: api.GitVersion,
 		}
+		if advertiseIP.IsValid() {
+			agent.NodeIP = advertiseIP.String()
+			overlay := &node.Overlay{Store: st, NodeName: *nodeName, NodeIP: advertiseIP, PodCIDR: apis.PodCIDR}
+			goBackground(overlay.Run)
+		}
 		srv.NodeName, srv.LogDir = *nodeName, *logDir
 		go func() { agent.Run(ctx); close(agentDone) }()
 		go func() {
 			defer close(controllerDone)
-			controller.Manager{Store: st, NodeName: *nodeName, Drain: draining}.Run(ctx)
+			controller.Manager{Store: st, NodeName: *nodeName, Drain: draining, Silence: nodeAPI.Live.Silence}.Run(ctx)
 		}()
 		go func() {
 			defer close(proxyDone)
@@ -384,7 +449,16 @@ func runServer(args []string) error {
 		})
 	} else {
 		close(agentDone)
-		close(controllerDone)
+		if advertiseIP.IsValid() {
+			// A control plane without workloads of its own still schedules
+			// and replaces Pods on its workers.
+			go func() {
+				defer close(controllerDone)
+				controller.Manager{Store: st, Silence: nodeAPI.Live.Silence}.Run(ctx)
+			}()
+		} else {
+			close(controllerDone)
+		}
 		close(proxyDone)
 		close(edgeDone)
 	}
@@ -400,8 +474,12 @@ func runServer(args []string) error {
 			return err
 		}
 	}
-	done := make(chan error, 1)
+	done := make(chan error, 2)
 	go func() { done <- hs.ServeTLS(ln, "", "") }()
+	if clusterLn != nil {
+		go func() { done <- hs.ServeTLS(clusterLn, "", "") }()
+		fmt.Fprintf(os.Stderr, "sw server: other servers join at %s (sw node token prints the command)\n", joinURL)
+	}
 	fmt.Fprintf(os.Stderr, "sw server %s listening on https://%s (data %s, config %s)\n", api.Version, ln.Addr(), *dataDir, *configDir)
 
 	select {

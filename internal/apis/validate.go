@@ -20,6 +20,10 @@ var ServiceCIDR = netip.MustParsePrefix("10.96.0.0/16")
 // is the bridge's.
 var PodCIDR = netip.MustParsePrefix("10.244.0.0/24")
 
+// ClusterCIDR holds the Pods of every node: the control plane keeps PodCIDR
+// and each worker gets another /24 of it (docs/design-multinode-tenancy.md 3.3).
+var ClusterCIDR = netip.MustParsePrefix("10.244.0.0/16")
+
 const MaxGraceSeconds = int64(math.MaxInt64) / int64(time.Second)
 
 // FieldError is one problem with one field. Unsupported marks a field that
