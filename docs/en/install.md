@@ -1,4 +1,4 @@
-# Install Shearwater v0.1.0-alpha.14 and deploy your first web app
+# Install Shearwater v0.1.0-alpha.15 and deploy your first web app
 *Translated from the [Korean original](../install.md). If they differ, the Korean version is current.*
 
 To start with the installer, follow the [installation, authentication, and AI connection guide](../onboarding.md). This guide covers prerequisites, manual installation, and upgrades for an existing server.
@@ -7,7 +7,7 @@ This guide is for first-time users running **WSL 2 / Ubuntu 24.04 / x86_64(amd64
 
 Shearwater is an **experimental alpha** for trusted local administrators. It supports a single node, IPv4, and TCP ClusterIP Services. It does not provide DNS, RBAC, or NetworkPolicy. It stores securityContext settings without enforcing them. Shearwater runs configured probes and uses startup and readiness probe results to determine Ready status. For apps without probes, use the curl command below to check the actual response.
 
-To decide what to test first, see the [first-run guide](../first-try.md). The steps below are for a new installation. If you already have a running instance, read **Upgrade an existing installation to alpha.14** first.
+To decide what to test first, see the [first-run guide](../first-try.md). The steps below are for a new installation. If you already have a running instance, read **Upgrade an existing installation to alpha.15** first.
 
 ## 0. Install on a new Ubuntu or Debian server with `install.py --host`
 
@@ -91,7 +91,7 @@ The following block installs only into a new version directory. It stops if the 
 ```bash
 (
   set -euo pipefail
-  version=v0.1.0-alpha.14
+  version=v0.1.0-alpha.15
   base="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
   archive="shearwater-${version}-linux-amd64.tar.gz"
   install_dir="$HOME/.local/share/shearwater/$version"
@@ -119,8 +119,8 @@ The archive contains `sw`, `sw.sha256`, this guide (`INSTALL-ko.md`), the troubl
 **Check the version.** The binary should print the release version shown below. If it prints a different value, check the executable path first. The bundled `BUILDINFO.txt` contains the public source commit, build information, and file checksums.
 
 ```bash
-"$HOME/.local/share/shearwater/v0.1.0-alpha.14/sw" version
-# sw 0.1.0-alpha.14 (Kubernetes API v1.36.0+shearwater.0.1.0-alpha.14)
+"$HOME/.local/share/shearwater/v0.1.0-alpha.15/sw" version
+# sw 0.1.0-alpha.15 (Kubernetes API v1.36.0+shearwater.0.1.0-alpha.15)
 ```
 
 The first number is the Shearwater product version. `v1.36.0` is the Kubernetes API compatibility level. The first release, alpha.1, displayed `sw 0.0.1`. This mismatch was fixed in alpha.2.
@@ -137,7 +137,7 @@ Once the app is running successfully, follow the [AI workflow](../agent-interfac
 
 If Qwen runs on Windows, you can use the separate `chat-windows.py` file from the release. Find its hash in `SHA256SUMS` from the same release and compare it with the output of `Get-FileHash .\chat-windows.py -Algorithm SHA256` in PowerShell. The helper connects Ollama on Windows to sw in WSL. It does not install a model or configure a new port. The AI workflow above covers command arguments and user-owned credentials. To verify web access, check the actual HTTP response as well as API readiness.
 
-### Upgrade an existing installation to alpha.14
+### Upgrade an existing installation to alpha.15
 
 The download above installs into a new version directory and preserves existing files. **Stop the existing server before starting the new server in section 4.** First record the current server's executable path and its values for `--data-dir`, `--config-dir`, `--run-dir`, `--log-dir`, `--containerd-socket`, `--node-name`, and `--listen`. If you are unsure whether you used the defaults, check how the current server was started.
 
@@ -147,6 +147,10 @@ Keep the existing binary for recovery. To roll back from alpha.5 to alpha.4 or e
 
 Starting in alpha.12, the first use of the `sw task` API adds the internal `agent_operations` table to SQLite. Existing app declarations and containers are not recreated. If you revert to an earlier binary, do not overwrite the current database with an old backup. To grant an AI client per-app permissions, update both the server and the client. Then follow the [delegated operations guide](agent-operations.md) to create a new restricted connection. Existing administrator credentials and `sw connect` files do not automatically convert to restricted tokens.
 
+Upgrading from alpha.14 also preserves the database format; replacing the server binary is enough.
+- `http_failed` and `diagnose` say which check failed and why. The `http` field of `sw task evidence` shows the stored proof's outcome.
+- On a server with the public entry enabled, certificate renewal changes: renewal starts as soon as a certificate enters its renewal window, and the previous certificate keeps serving until the renewed one is safely valid. Backups include the entry settings, the ACME account key and the certificates.
+
 Upgrading from alpha.13 also preserves the database format.
 
 - New Secret resources are stored in the existing object table.
@@ -155,7 +159,7 @@ Upgrading from alpha.13 also preserves the database format.
 - `sw compose serve` runs separately from the engine and provides the same delegation workflow for an existing Compose app. See the [Compose guide](compose-backend.md).
 - Replacing only the client binary is enough for regular users' read commands to use the connection saved by `sw setup` by default.
 
-When upgrading from alpha.12, replace the server binary to enable readiness checks for new Pods and the TCP tracking policy for direct connections from the host to a Pod. After replacing the binary, check that the server's `/version` reports `v1.36.0+shearwater.0.1.0-alpha.14`. See [When the two changes take effect](../connection-continuity.md).
+When upgrading from alpha.12, replace the server binary to enable readiness checks for new Pods and the TCP tracking policy for direct connections from the host to a Pod. After replacing the binary, check that the server's `/version` reports `v1.36.0+shearwater.0.1.0-alpha.15`. See [When the two changes take effect](../connection-continuity.md).
 
 **Starting in alpha.4, Shearwater runs existing probes that alpha.3 only stored.** Read the settings with `sw get pods --full` and `sw get deployments --full`. Verify the actual paths, ports, and commands first. Test apps with probes in a separate QA environment before replacing the binary. Reverting to the older binary also stops probe execution.
 
@@ -192,7 +196,7 @@ The PATH setting applies only to the current terminal. To use this kubectl in a 
 This manual installation does not add `sw` to the system PATH or create `/opt/shearwater/current/sw`. If `sw version` fails when run by name, the installation may still have succeeded. In a new Ubuntu terminal, specify the installed executable as shown below. If you installed it elsewhere, use its actual path.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.14/sw"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.15/sw"
 test -x "$sw" && "$sw" version
 printf 'Absolute Linux path to give MCP: %s\n' "$sw"
 ```
@@ -204,8 +208,8 @@ Use this **absolute Linux path** in the MCP configuration too. A Windows `C:\...
 The following variables and function also apply only to the current terminal. Define them again if you continue in a new terminal.
 
 ```bash
-sw="$HOME/.local/share/shearwater/v0.1.0-alpha.14/sw"
-example="$HOME/.local/share/shearwater/v0.1.0-alpha.14/examples/web.yaml"
+sw="$HOME/.local/share/shearwater/v0.1.0-alpha.15/sw"
+example="$HOME/.local/share/shearwater/v0.1.0-alpha.15/examples/web.yaml"
 export PATH="$HOME/.local/share/shearwater-tools/kubectl-v1.36.6:$PATH"
 kubectl_bin="$(command -v kubectl)"
 k() {
@@ -251,7 +255,7 @@ sudo "$sw" events --for="pod/$pod" -n default
 sudo "$sw" why "pod/$pod" -n default
 ```
 
-By default, `logs` reads the last 50 lines, up to 64 KiB, then exits. Use `--previous` to read logs from the previous run. If the Pod has multiple containers, select one with `-c NAME`. A successful `why` means the command collected status, events, and a limited log sample. To determine whether the app is serving traffic, check the HTTP response separately. For help interpreting output and resolving errors, see the bundled `TROUBLESHOOTING-ko.md` or the [online troubleshooting guide](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.14/docs/troubleshooting.md).
+By default, `logs` reads the last 50 lines, up to 64 KiB, then exits. Use `--previous` to read logs from the previous run. If the Pod has multiple containers, select one with `-c NAME`. A successful `why` means the command collected status, events, and a limited log sample. To determine whether the app is serving traffic, check the HTTP response separately. For help interpreting output and resolving errors, see the bundled `TROUBLESHOOTING-ko.md` or the [online troubleshooting guide](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.15/docs/troubleshooting.md).
 
 ## 6. Restart and shut down
 
@@ -287,7 +291,7 @@ After a WSL reboot, check containerd and IPv4 forwarding, then run `up` with the
 | Pod is Ready but HTTP fails | Check how long the app takes to become ready, the Service selector, the EndpointSlice, and the logs. |
 | Commands fail in another terminal | Check that you set the sw, example, and kubectl_bin variables, defined the k function, and set PATH again. |
 
-See the [compatibility details](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.14/docs/compatibility.md), [operations guide](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.14/docs/operations.md), and [security reporting page](https://github.com/ChoYugyeong/shearwater/security/advisories/new).
+See the [compatibility details](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.15/docs/compatibility.md), [operations guide](https://github.com/ChoYugyeong/shearwater/blob/v0.1.0-alpha.15/docs/operations.md), and [security reporting page](https://github.com/ChoYugyeong/shearwater/security/advisories/new).
 
 ## 8. New operations features in alpha.4
 
@@ -301,7 +305,7 @@ During a rolling replacement, Shearwater stops routing new connections to the ol
 
 ## 10. Windows forwarding and automatic startup in alpha.6
 
-The separate `shearwater-v0.1.0-alpha.14-windows-forward.zip` contains an optional TCP forwarder for cases where only Windows localhost access stops working. It also includes a tool for automatic startup at login. The Linux archive includes the same `hack/` files. These tools require Python 3.11 or later on both Windows and WSL. They support NAT with a single IPv4 address on eth0. The package does not contain a native Windows sw binary.
+The separate `shearwater-v0.1.0-alpha.15-windows-forward.zip` contains an optional TCP forwarder for cases where only Windows localhost access stops working. It also includes a tool for automatic startup at login. The Linux archive includes the same `hack/` files. These tools require Python 3.11 or later on both Windows and WSL. They support NAT with a single IPv4 address on eth0. The package does not contain a native Windows sw binary.
 
 Follow the [automatic startup guide](../automatic-start.md) in order. Verify the ZIP checksum, copy the files to a fixed path, check the Linux service, and register the scheduled task. The bundled `WINDOWS-LOCALHOST-ko.md` explains how to identify which part of the connection has failed. Connections drop during a reboot. When disabling automatic startup, shut down the supervisor cleanly first to prevent it from starting WSL again.
 

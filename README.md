@@ -45,7 +45,7 @@ You need a Linux amd64 server with Docker and the `docker compose` plugin, and a
 ```bash
 (
   set -eu
-  version=v0.1.0-alpha.14
+  version=v0.1.0-alpha.15
   release="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
   download_dir=$(mktemp -d)
   cd "$download_dir"
@@ -57,7 +57,7 @@ You need a Linux amd64 server with Docker and the `docker compose` plugin, and a
 )
 ```
 
-The output should start with `sw 0.1.0-alpha.14`. The commands below assume `sw` is on your `PATH`.
+The output should start with `sw 0.1.0-alpha.15`. The commands below assume `sw` is on your `PATH`.
 
 **2. Put Shearwater in front of one Compose project.** Keep this running.
 
@@ -94,9 +94,9 @@ Compose recreates the container during an update, so expect a short interruption
 
 Shearwater also ships a small single-node runtime. It speaks a slice of the Kubernetes API (Pod, Deployment, Service, Secret), so `kubectl` works as usual, without importing any `k8s.io` package; CI fails the build if one appears. It adds rolling updates (0 failed requests in the measurements below) and a built-in public HTTPS entry. It needs containerd, runc, networking tools and administrator access. [Installation guide](docs/en/install.md)
 
-On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.14 --host --apply` installs containerd and runc when none exist and starts the systemd service. Then use `sw setup` to prepare credentials and follow the first-app guide. [Set up credentials](docs/onboarding.md) · [Run your first web app](docs/first-try.md)
+On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.15 --host --apply` installs containerd and runc when none exist and starts the systemd service. Then use `sw setup` to prepare credentials and follow the first-app guide. [Set up credentials](docs/onboarding.md) · [Run your first web app](docs/first-try.md)
 
-**Download v0.1.0-alpha.14** · [Installer](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/install.py) · [Linux amd64 archive](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/shearwater-v0.1.0-alpha.14-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/SHA256SUMS)
+**Download v0.1.0-alpha.15** · [Installer](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.15/install.py) · [Linux amd64 archive](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.15/shearwater-v0.1.0-alpha.15-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.15/SHA256SUMS)
 
 To build from source, run `. hack/env.sh` and then `bash hack/build.sh` from the repository root. [Build guide](docs/quickstart.md)
 
@@ -108,18 +108,27 @@ To build from source, run `. hack/env.sh` and then `bash hack/build.sh` from the
 
 To recover, create and approve a new plan that uses an image which previously passed HTTP verification. [Delegation, approval and recovery examples](docs/en/agent-operations.md)
 
-## New in alpha.14
+## New in alpha.15
+
+- **Failed checks say where and why.** When a release fails its HTTP check (`http_failed`), the agent gets which check failed, on how many replicas and why, for example `HTTP 200, expected text missing`. The expected text itself is never repeated. `diagnose` reports the last failed check with its time.
+- **Evidence says what it showed.** `sw task evidence` now reports the stored proof's outcome (`passed`/`failed`), when it was taken and for which goal, so a just-verified app is no longer read as unchecked.
+- **Steadier certificate renewal for the public entry.** Renewal starts as soon as a certificate enters its renewal window, the previous certificate keeps serving until the renewed one is safely valid, `sw edge status` marks expired certificates, and backups include the entry settings, ACME account key and certificates.
+- **Clearer startup and verify output.** `sw up` shows the server's last log line when startup fails, and verify facts name what was actually checked for each backend (Pods and a Service, or containers and a host port).
+
+The failure explanations were checked on a fresh GitHub-hosted VM with real Docker (the source path of the quick start check). The certificate changes were checked against the Pebble ACME test server. [Release notes](docs/releases.md)
+
+### Added in alpha.14
 
 - **Existing Docker Compose apps.** `sw compose serve` puts the same delegation, approval and HTTP evidence in front of one service of a Compose project. Your compose files are not rewritten. [Compose guide](docs/en/compose-backend.md)
 - **Public HTTPS entry.** Annotate a Service with `shearwater.io/public-host` and `sw edge enable` serves it on ports 80/443 with ACME (HTTP-01) certificates. [Public entry guide](docs/public-entry.md)
 - **Secrets.** Containers can read `env[].valueFrom.secretKeyRef` and `envFrom[].secretRef`. Values are stored base64-encoded, not encrypted.
-- **One-command server setup.** On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.14 --host --apply` installs containerd and runc when none exist, enables IPv4 forwarding and starts the systemd service. [Install guide, section 0](docs/install.md)
+- **One-command server setup.** On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.15 --host --apply` installs containerd and runc when none exist, enables IPv4 forwarding and starts the systemd service. [Install guide, section 0](docs/install.md)
 
-These were checked in isolated local test environments and a fresh local Ubuntu VM: real kubectl, real Docker Compose, the Pebble ACME test server. They were not yet checked on a public server with real Let's Encrypt certificates. [Release notes](docs/releases.md)
+The alpha.14 additions were checked in isolated local test environments and a fresh local Ubuntu VM: real kubectl, real Docker Compose, the Pebble ACME test server. They were not yet checked on a public server with real Let's Encrypt certificates. [Release notes](docs/releases.md)
 
 ## Benchmarks
 
-Both versions ran the same nginx app on the same Ubuntu 24.04 VM with 2 vCPUs and 2,560 MiB of memory. The alpha.12 baseline comes from an earlier test series. For alpha.13, the tests used the release binary built from the public tag. These figures were not re-measured for alpha.14.
+Both versions ran the same nginx app on the same Ubuntu 24.04 VM with 2 vCPUs and 2,560 MiB of memory. The alpha.12 baseline comes from an earlier test series. For alpha.13, the tests used the release binary built from the public tag. These figures were not re-measured for alpha.14 or alpha.15.
 
 | Measurement | alpha.12 | alpha.13 |
 | --- | ---: | ---: |

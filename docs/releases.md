@@ -1,5 +1,32 @@
 # 릴리스와 버전 확인
 
+## v0.1.0-alpha.15
+
+- **실패한 검사의 위치와 이유.** `http_failed` 결과의 사실(`facts`)에 어느 검사가 몇 개 사본에서 왜 실패했는지 적어. 예: `check GET / failed on 1 of 1 replicas: HTTP 200, expected text missing`. 앱의 앞 주소(Service 또는 공개 포트)도 따로 적어.
+  - 기대한 문구 자체는 적지 않아. 비공개 검사 파일에서 올 수 있어서야.
+  - `diagnose`도 같은 목표의 마지막 실패 검사를 시각과 함께 보여 줘.
+- **저장된 증거의 결과.** `sw task evidence`의 `http`가 저장된 증거의 결과(`passed`/`failed`, `retained: true`, `checkedAt`, `goalGeneration`)야. 맨 위 `state`는 지금 상태를 다시 확인하기 전까지 `needs_verification`으로 남아. 저장된 기록은 실시간 검사가 아니기 때문이야.
+- **공개 진입점 인증서 갱신.**
+  - 인증서가 갱신 시기에 들어가면 갱신 반복이 바로 깨어나.
+  - 갱신한 인증서는 이전 인증서의 남은 기간 절반(최대 1시간)이 지나 안전하게 유효해질 때까지 이전 인증서를 계속 써.
+  - `sw edge status`가 만료된 인증서를 표시해.
+  - 백업에 `edge.json`, ACME 계정 키, 인증서가 들어가.
+- **시작 실패 표시.** `sw up`이 시작 중 실패하면 서버 로그의 마지막 줄을 보여 줘.
+- **verify 사실 문구.** 백엔드마다 실제로 검사한 범위(엔진: 새 Pod와 내부 Service, Compose: 컨테이너와 공개 호스트 포트)를 적어. Compose에도 "Pod/internal Service"라고 쓰던 문구를 고쳤어.
+
+**업데이트:** DB 형식은 바뀌지 않아. 서버 실행 파일을 교체한 뒤 다음 세 곳의 버전을 확인해.
+- `sw version`: `0.1.0-alpha.15`
+- 서버 `/version`의 `gitVersion`: `v1.36.0+shearwater.0.1.0-alpha.15`
+- Node의 `kubeletVersion`: `v1.36.0+shearwater.0.1.0-alpha.15`
+
+[설치와 기존 서버 업데이트](install.md)
+
+**확인한 범위:**
+- 실패 설명과 증거 표시: 단위 시험과, 새 GitHub 호스팅 VM의 실제 Docker·Compose에서 README 빠른 시작 경로(source 27/27).
+- 인증서 갱신: 격리된 QA 환경에서 ACME 시험 서버 Pebble로 19단계, 240초 인증서로 실제 갱신까지.
+- 실제 Let's Encrypt와 공인 IP 서버는 아직 확인하지 않았어.
+- README의 업데이트·밀도 측정값은 alpha.13에서 잰 것이야. 4개 도구 비교는 [CI 비교](benchmarks/runtime-bench-ci.md)에 있어.
+
 ## v0.1.0-alpha.14
 
 - **기존 Docker Compose 앱도 같은 위임 흐름으로.** `sw compose serve`를 Compose 프로젝트 앞에 띄우면, AI는 엔진과 같은 `sw task` 위임·정확한 계획 승인·실행 기록·컨테이너별 HTTP 증거로 서비스 하나를 업데이트하고 복구해.

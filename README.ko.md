@@ -45,7 +45,7 @@ Docker와 `docker compose` 플러그인이 있는 Linux amd64 서버, 그리고 
 ```bash
 (
   set -eu
-  version=v0.1.0-alpha.14
+  version=v0.1.0-alpha.15
   release="https://github.com/ChoYugyeong/shearwater/releases/download/$version"
   download_dir=$(mktemp -d)
   cd "$download_dir"
@@ -57,7 +57,7 @@ Docker와 `docker compose` 플러그인이 있는 Linux amd64 서버, 그리고 
 )
 ```
 
-출력이 `sw 0.1.0-alpha.14`로 시작하면 돼요. 아래 명령은 `sw`가 `PATH`에 있다고 가정해요.
+출력이 `sw 0.1.0-alpha.15`로 시작하면 돼요. 아래 명령은 `sw`가 `PATH`에 있다고 가정해요.
 
 **2. Compose 프로젝트 하나 앞에 Shearwater 띄우기.** 계속 켜 두세요.
 
@@ -94,9 +94,9 @@ Compose는 업데이트할 때 컨테이너를 새로 만들어서 짧게 끊길
 
 Shearwater에는 작은 단일 노드 런타임도 있어요. Kubernetes API 일부(Pod, Deployment, Service, Secret)를 직접 구현해서 `kubectl`을 그대로 쓸 수 있고, `k8s.io` 패키지는 하나도 가져오지 않아요. 들어오면 CI가 빌드를 실패시켜요. 롤링 업데이트(아래 측정에서 실패 요청 0건)와 내장 공개 HTTPS 진입점이 더해져요. containerd, runc, 네트워크 도구, 관리자 권한이 필요해요. [설치 준비](docs/install.md)
 
-새 Ubuntu·Debian 서버라면 `sudo python3 install.py --version v0.1.0-alpha.14 --host --apply`가 containerd·runc가 없을 때 설치하고 systemd 서비스를 시작해요. 그다음 `sw setup`으로 인증 정보를 준비하고 첫 앱 안내를 따라가세요. [인증 정보 준비](docs/onboarding.md) · [첫 웹 앱 실행](docs/first-try.md)
+새 Ubuntu·Debian 서버라면 `sudo python3 install.py --version v0.1.0-alpha.15 --host --apply`가 containerd·runc가 없을 때 설치하고 systemd 서비스를 시작해요. 그다음 `sw setup`으로 인증 정보를 준비하고 첫 앱 안내를 따라가세요. [인증 정보 준비](docs/onboarding.md) · [첫 웹 앱 실행](docs/first-try.md)
 
-**v0.1.0-alpha.14 내려받기** · [설치 도우미](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/install.py) · [Linux amd64 묶음](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/shearwater-v0.1.0-alpha.14-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/SHA256SUMS)
+**v0.1.0-alpha.15 내려받기** · [설치 도우미](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.15/install.py) · [Linux amd64 묶음](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.15/shearwater-v0.1.0-alpha.15-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.15/SHA256SUMS)
 
 소스에서 빌드하려면 저장소 루트에서 `. hack/env.sh` 뒤에 `bash hack/build.sh`를 실행해요. [빌드 안내](docs/quickstart.md)
 
@@ -108,18 +108,27 @@ Shearwater에는 작은 단일 노드 런타임도 있어요. Kubernetes API 일
 
 복구할 때는 이전에 HTTP 검사까지 통과한 이미지로 새 계획을 만들고 다시 승인해요. [위임·승인·복구 명령 예제](docs/agent-operations.md)
 
-## alpha.14에서 새로 생긴 것
+## alpha.15에서 새로 생긴 것
+
+- **실패한 검사가 어디서 왜 실패했는지 알려 줘요.** 배포가 HTTP 검사를 통과하지 못하면(`http_failed`) 에이전트는 어느 검사가 몇 개 사본에서 왜 실패했는지 받아요. 예: `HTTP 200, expected text missing`. 기대한 문구 자체는 적지 않아요. `diagnose`도 마지막 실패 검사를 시각과 함께 보여 줘요.
+- **증거가 무엇을 보여 줬는지 말해요.** `sw task evidence`가 저장된 증거의 결과(`passed`/`failed`), 확인 시각, 목표 세대를 보여 줘서, 방금 검증된 앱이 미확인처럼 읽히지 않아요.
+- **공개 진입점 인증서 갱신이 더 안정적이에요.** 갱신 시기가 되면 바로 깨어나고, 새 인증서가 안전하게 유효해질 때까지 이전 인증서를 계속 써요. `sw edge status`가 만료를 표시하고, 백업에 진입점 설정·ACME 계정 키·인증서가 들어가요.
+- **시작·검증 출력이 더 분명해요.** 시작이 실패하면 `sw up`이 서버 로그의 마지막 줄을 보여 주고, verify의 사실 문구가 백엔드마다 실제로 검사한 대상(Pod와 Service, 또는 컨테이너와 호스트 포트)을 적어요.
+
+실패 설명은 새 GitHub 호스팅 VM의 실제 Docker에서 확인했어요(빠른 시작 검사의 source 경로). 인증서 변경은 ACME 시험 서버 Pebble로 확인했어요. [릴리스 기록](docs/releases.md)
+
+### alpha.14에서 추가된 것
 
 - **기존 Docker Compose 앱.** `sw compose serve`를 Compose 프로젝트 앞에 띄우면 서비스 하나를 같은 위임·승인·HTTP 증거 흐름으로 맡길 수 있어요. compose 파일은 고치지 않아요. [Compose 안내](docs/compose-backend.md)
 - **공개 HTTPS 진입점.** Service에 `shearwater.io/public-host` 주석을 달고 `sw edge enable`을 켜면 80·443 포트로 내보내요. 인증서는 ACME(HTTP-01)로 받아요. [공개 진입점 안내](docs/public-entry.md)
 - **Secret.** 컨테이너가 `env[].valueFrom.secretKeyRef`와 `envFrom[].secretRef`로 값을 읽어요. 값은 base64로 저장할 뿐 암호화하지 않아요.
-- **새 서버를 한 번에.** 새 Ubuntu·Debian 서버에서 `sudo python3 install.py --version v0.1.0-alpha.14 --host --apply`를 실행하면, containerd가 없을 때만 containerd·runc를 설치하고 IPv4 전달을 켠 뒤 systemd 서비스를 시작해요. [설치 안내 0절](docs/install.md)
+- **새 서버를 한 번에.** 새 Ubuntu·Debian 서버에서 `sudo python3 install.py --version v0.1.0-alpha.15 --host --apply`를 실행하면, containerd가 없을 때만 containerd·runc를 설치하고 IPv4 전달을 켠 뒤 systemd 서비스를 시작해요. [설치 안내 0절](docs/install.md)
 
 이 기능들은 이 PC의 격리된 시험 환경과 새로 만든 로컬 Ubuntu VM에서 확인했어요. 실제 kubectl, 실제 Docker Compose, ACME 시험용 서버 Pebble을 썼어요. 공인 서버와 실제 Let's Encrypt 인증서로는 아직 확인하지 않았어요. [릴리스 기록](docs/releases.md)
 
 ## 측정 결과
 
-같은 Ubuntu 24.04 VM(2 vCPU · 2,560 MiB)에서 같은 nginx 웹 앱을 시험했어요. alpha.12는 앞선 여섯 회의 기준값이에요. alpha.13은 공개 태그에서 새로 빌드한 배포 파일로 다시 쟀어요. alpha.14에서는 다시 재지 않았어요.
+같은 Ubuntu 24.04 VM(2 vCPU · 2,560 MiB)에서 같은 nginx 웹 앱을 시험했어요. alpha.12는 앞선 여섯 회의 기준값이에요. alpha.13은 공개 태그에서 새로 빌드한 배포 파일로 다시 쟀어요. alpha.14와 alpha.15에서는 다시 재지 않았어요.
 
 | 측정 항목 | 공개 alpha.12 | 공개 alpha.13 |
 | --- | ---: | ---: |
