@@ -1,0 +1,39 @@
+{
+  "manifest_version": "0.3",
+  "name": "shearwater",
+  "display_name": "Shearwater",
+  "version": "VERSION",
+  "description": "Approved, verified deploys for AI agents: one delegated app, one approved plan, HTTP proof.",
+  "long_description": "Connects an AI agent to one app that an operator delegated with `sw task create` (Docker Compose or Shearwater's own runtime). The agent can plan deploy, update and recover; every plan stops at awaiting_approval until the operator approves its exact hash, runs once, and counts as healthy only after each new replica returns the expected HTTP response. The agent never receives the Docker socket or the operator token.",
+  "author": {
+    "name": "ChoYugyeong",
+    "url": "https://github.com/ChoYugyeong"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChoYugyeong/shearwater"
+  },
+  "homepage": "https://github.com/ChoYugyeong/shearwater",
+  "documentation": "https://github.com/ChoYugyeong/shearwater/blob/main/docs/en/compose-backend.md",
+  "license": "Apache-2.0",
+  "server": {
+    "type": "binary",
+    "entry_point": "server/sw",
+    "mcp_config": {
+      "command": "${__dirname}/server/sw",
+      "args": ["mcp", "--workflow", "${user_config.workflow}", "--allow-write"],
+      "env": {}
+    }
+  },
+  "user_config": {
+    "workflow": {
+      "type": "file",
+      "title": "Delegation file (work.json)",
+      "description": "The work.json your operator created with `sw task create` for one app.",
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["linux"]
+  }
+}

@@ -1,0 +1,107 @@
+name: MCP Registry
+# Publishes Shearwater's MCP server to the official MCP Registry
+# (registry.modelcontextprotocol.io) as an MCPB bundle, with no stored secrets:
+#   - the bundle is rebuilt from the published, checksummed release archive
+#     (sw, LICENSE, NOTICE and third-party notices) and attached to that release;
+#   - server.json gets the release version, the bundle URL and its SHA-256;
+#   - `mcp-publisher login github-oidc` proves the io.github.ChoYugyeong/*
+#     namespace from this workflow.
+# Safe to re-run: an existing bundle asset is reused and an already published
+# version is skipped.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag, e.g. v0.1.0-alpha.14
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag }}
+  MCP_PUBLISHER_VERSION: "1.8.9"
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # attach the bundle to the release
+      id-token: write   # GitHub OIDC for the registry namespace
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the tag
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || { echo "bad tag $TAG"; exit 1; }
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+          echo "BUNDLE=shearwater-mcp-${TAG}-linux-amd64.mcpb" >> "$GITHUB_ENV"
+      - name: Fetch and verify the release archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/rel" && cd "$RUNNER_TEMP/rel"
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "shearwater-${TAG}-linux-amd64.tar.gz" -p SHA256SUMS
+          sha256sum --check --strict --ignore-missing SHA256SUMS
+          tar -xzf "shearwater-${TAG}-linux-amd64.tar.gz"
+          (cd "shearwater-${TAG}-linux-amd64" && sha256sum --check sw.sha256)
+      - name: Build or reuse the MCPB bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/rel"
+          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -qx "$BUNDLE"; then
+            echo "bundle already attached; reusing it"
+            gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "$BUNDLE"
+          else
+            src="shearwater-${TAG}-linux-amd64"
+            mkdir -p bundle/server
+            sed "s/\"VERSION\"/\"$VERSION\"/" "$GITHUB_WORKSPACE/packaging/mcpb/manifest.json" > bundle/manifest.json
+            python3 -c 'import json,sys; m=json.load(open("bundle/manifest.json")); assert m["version"]==sys.argv[1], m["version"]' "$VERSION"
+            install -m 755 "$src/sw" bundle/server/sw
+            cp -r "$src/LICENSE" "$src/NOTICE" "$src/THIRD_PARTY_NOTICES.md" "$src/LICENSES" bundle/
+            # Fixed timestamps and order so the same release builds the same bytes.
+            find bundle -exec touch -d '2026-01-01T00:00:00Z' {} +
+            (cd bundle && find . -type f | LC_ALL=C sort | zip -X -q -@ "../$BUNDLE")
+            gh release upload "$TAG" -R "$GITHUB_REPOSITORY" "$BUNDLE"
+          fi
+          unzip -l "$BUNDLE"
+          echo "SHA=$(sha256sum "$BUNDLE" | cut -d' ' -f1)" >> "$GITHUB_ENV"
+      - name: Fill server.json for this release
+        run: |
+          python3 - <<'EOF'
+          import json, os
+          s = json.load(open("server.json"))
+          tag, version = os.environ["TAG"], os.environ["VERSION"]
+          s["version"] = version
+          pkg = s["packages"][0]
+          pkg["identifier"] = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/releases/download/{tag}/{os.environ['BUNDLE']}"
+          pkg["fileSha256"] = os.environ["SHA"]
+          json.dump(s, open("server.json", "w"), indent=2)
+          print(json.dumps(s, indent=2))
+          EOF
+      - name: Skip a version that is already published
+        id: listed
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            "https://registry.modelcontextprotocol.io/v0/servers/io.github.ChoYugyeong%2Fshearwater/versions/${VERSION}")
+          case "$status" in
+            200) echo "already=true" >> "$GITHUB_OUTPUT"; echo "$VERSION is already published" ;;
+            404) echo "$VERSION is not published yet" ;;
+            *) echo "unexpected registry status $status"; exit 1 ;;
+          esac
+      - name: Install mcp-publisher (pinned, checksum-verified)
+        if: steps.listed.outputs.already != 'true'
+        run: |
+          base="https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}"
+          curl -fsSLO "${base}/mcp-publisher_linux_amd64.tar.gz"
+          curl -fsSLO "${base}/registry_${MCP_PUBLISHER_VERSION}_checksums.txt"
+          grep " mcp-publisher_linux_amd64.tar.gz$" "registry_${MCP_PUBLISHER_VERSION}_checksums.txt" | sha256sum -c -
+          tar -xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
+      - name: Publish server.json
+        if: steps.listed.outputs.already != 'true'
+        run: |
+          ./mcp-publisher validate
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

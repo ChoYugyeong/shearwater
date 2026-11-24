@@ -1,0 +1,42 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ChoYugyeong/shearwater",
+  "title": "Shearwater",
+  "description": "Approved, verified deploys for AI agents: one delegated app, one approved plan, HTTP proof.",
+  "version": "0.1.0-alpha.14",
+  "websiteUrl": "https://github.com/ChoYugyeong/shearwater",
+  "repository": {
+    "url": "https://github.com/ChoYugyeong/shearwater",
+    "source": "github",
+    "id": "1455538967"
+  },
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/shearwater-mcp-v0.1.0-alpha.14-linux-amd64.mcpb",
+      "fileSha256": "FILLED_BY_WORKFLOW_0000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp",
+          "description": "Run the MCP server."
+        },
+        {
+          "type": "named",
+          "name": "--workflow",
+          "description": "Absolute path of the work.json an operator created with `sw task create` for one app. It carries the app, the allowed actions and a token that expires.",
+          "isRequired": true,
+          "format": "filepath"
+        },
+        {
+          "type": "named",
+          "name": "--allow-write",
+          "description": "Let the agent plan deploy/update/recover. Plans still stop at awaiting_approval until the operator approves the exact hash. Omit for read-only status and verify."
+        }
+      ]
+    }
+  ]
+}
