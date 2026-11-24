@@ -155,6 +155,16 @@ var tableColumns = map[string][]tableColumn{
 		col("Ports", "string", 0, "Ports of the endpoints"),
 		col("Endpoints", "string", 0, "Addresses of the endpoints"),
 		ageCol},
+	"Ingress": {nameCol,
+		col("Class", "string", 0, "IngressClass handling this Ingress"),
+		col("Hosts", "string", 0, "Host names routed by this Ingress"),
+		col("Address", "string", 0, "Address of the public entry serving this Ingress"),
+		col("Ports", "string", 0, "Ports serving this Ingress"),
+		ageCol},
+	"IngressClass": {nameCol,
+		col("Controller", "string", 0, "Controller responsible for this IngressClass"),
+		col("Parameters", "string", 0, "Optional parameters object for this IngressClass"),
+		ageCol},
 }
 
 func nameColP1() tableColumn {
@@ -388,8 +398,65 @@ func cells(obj apis.Object, now time.Time) []any {
 			since(o.FirstTimestamp, now), strconv.Itoa(int(o.Count)), m.Name}
 	case *apis.EndpointSlice:
 		return sliceCells(o, now)
+	case *apis.Ingress:
+		return ingressCells(o, now)
+	case *apis.IngressClass:
+		return ingressClassCells(o, now)
 	}
 	return []any{m.Name, age}
+}
+
+func ingressCells(ing *apis.Ingress, now time.Time) []any {
+	class := "<none>"
+	if ing.Spec.IngressClassName != nil && *ing.Spec.IngressClassName != "" {
+		class = *ing.Spec.IngressClassName
+	}
+	var hosts []string
+	seen := map[string]bool{}
+	for _, r := range ing.Spec.Rules {
+		h := r.Host
+		if h == "" {
+			h = "*"
+		}
+		if !seen[h] {
+			seen[h] = true
+			hosts = append(hosts, h)
+		}
+	}
+	if len(hosts) == 0 && ing.Spec.DefaultBackend != nil {
+		hosts = []string{"*"}
+	}
+	hostStr := "*"
+	if len(hosts) > 3 {
+		hostStr = strings.Join(hosts[:3], ",") + fmt.Sprintf(" + %d more...", len(hosts)-3)
+	} else if len(hosts) > 0 {
+		hostStr = strings.Join(hosts, ",")
+	}
+	var addrs []string
+	for _, lb := range ing.Status.LoadBalancer.Ingress {
+		if lb.IP != "" {
+			addrs = append(addrs, lb.IP)
+		} else if lb.Hostname != "" {
+			addrs = append(addrs, lb.Hostname)
+		}
+	}
+	ports := "80"
+	if len(ing.Spec.TLS) > 0 {
+		ports = "80, 443"
+	}
+	return []any{ing.Metadata.Name, class, hostStr, strings.Join(addrs, ","), ports, since(ing.Metadata.CreationTimestamp, now)}
+}
+
+func ingressClassCells(ic *apis.IngressClass, now time.Time) []any {
+	params := "<none>"
+	if p := ic.Spec.Parameters; p != nil {
+		params = p.Kind
+		if p.APIGroup != nil && *p.APIGroup != "" {
+			params += "." + *p.APIGroup
+		}
+		params += "/" + p.Name
+	}
+	return []any{ic.Metadata.Name, ic.Spec.Controller, params, since(ic.Metadata.CreationTimestamp, now)}
 }
 
 // tableRowFor builds the row for one stored object.
