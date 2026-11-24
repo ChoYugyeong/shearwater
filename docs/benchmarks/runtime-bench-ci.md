@@ -24,15 +24,15 @@ push마다 돌리지 않아. 네 도구를 3회씩 재면 한 시간쯤 걸리�
 - **수동 실행**(`workflow_dispatch`): 도구, 앱 수, 반복 횟수를 입력으로 바꿀 수 있어.
 - **주기 실행**: 매주 월요일 03:17 UTC.
 
-결과는 실행마다 artifact `runtime-comparison-<실행 번호>`로 90일 동안 남아. 원본 요청 기록(JSONL), 1초 간격 자원 표본, `summary.csv`, `summary.json`, `summary.md`가 들어 있어. `summary.md`는 실행 화면의 Job summary에도 붙어.
+결과는 실행마다 artifact `runtime-comparison-<실행 ID>`(`github.run_id`)로 90일 동안 남아. 원본 요청 기록(JSONL), 1초 간격 자원 표본, `summary.csv`, `summary.json`, `summary.md`가 들어 있어. `summary.md`는 실행 화면의 Job summary에도 붙어.
 
 ## 공유 러너에서 무엇을 믿을 수 있나
 
 GitHub 호스팅 러너는 다른 사람과 같은 물리 장비를 나눠 쓰는 VM이야. 같은 커밋도 실행마다 지연 시간이 흔들려. 그래서 보는 순서를 정해 뒀어.
 
 1. **메모리**(전체 프로세스 PSS, cgroup 전체): 이웃 VM의 영향이 가장 적어.
-2. **배포 준비 시간**: 수 초 단위라 흔들림보다 차이가 커.
-3. **업데이트 오류 수**: 오류 0과 수백 건의 차이는 잡음으로 생기지 않아.
+2. **배포 준비 시간**: 지연 시간보다 덜 흔들려. 다만 1초 안팎의 차이는 반복 범위를 같이 보고, Compose의 긴 값에는 준비 검사 첫 시점과 상태를 알려 주는 방식의 차이가 들어 있다는 걸 기억해.
+3. **업데이트 오류 수**: 오류 0과 수백 건의 차이는 잡음으로 생기지 않아. 다만 네 도구 모두 종료 유예 5초에 종료 전 대기가 없는 같은 앱 설정이야. K3s·minikube의 오류는 종료 전 대기를 넣으면 달라질 수 있어([종료 설정 대조](runtime-comparison-alpha9.md#k3s의-업데이트-오류는-종료-설정에-따라-달라졌어)).
 4. 부하 CPU와 p95 지연은 참고만 해. 1ms 안팎의 차이는 잡음으로 봐.
 
 한 job 안에서 네 도구를 **번갈아** 돌려. 반복마다 순서를 한 칸씩 돌려서(1회차 compose→k3s→minikube→shearwater, 2회차 k3s→minikube→shearwater→compose ...) 실행 중간에 러너가 느려져도 한 도구만 손해 보지 않게 해. 그래도 실행 사이 비교는 같은 러너 종류끼리만 해.
@@ -45,13 +45,14 @@ alpha.9 비교의 측정 규칙을 그대로 옮겼어. 숫자를 읽는 방법�
 - 앱 1개와 앱 10개. 10개는 복제본 10개가 아니라 독립된 앱 10개야.
 - 각 도구는 새로 켠 뒤 이미지를 미리 받고, 같은 앱을 한 번 띄웠다 지우는 예열을 한 다음 재. 배포 시간에 다운로드와 첫 압축 해제가 들어가지 않아.
 - 구간: 유휴 15초 → 초당 200요청 30초 → 같은 부하 45초 중 10초 지점에 v1→v2 업데이트. 요청마다 새 TCP 연결, 제한 시간 2초, 재시도 없음.
+- 업데이트가 부하 시작 후 43초(구간 끝 2초 전) 안에 끝나지 않으면 덜 덮인 구간을 세지 않으려고 그 사례 전체를 실패로 처리해. 표에서 빠지고 `Failed`에 남으니 표의 반복 수가 줄 수 있어.
 - 앱 제한은 제출한 설정이 아니라 실제 커널 값(각 앱 cgroup의 `memory.max`, `cpu.max`)을 읽어서 확인해. 네 도구 모두 같은 방법(시험 cgroup 안의 nginx 주 프로세스)으로 확인해.
 
 ### 격리
 
 러너는 일회용이지만, 러너에 미리 깔린 Docker와 겹치지 않게 격리해서 재.
 
-- 도구마다 **전용 cgroup**(CPU 4개, 메모리 4GiB, swap 0)을 만들고 엔진, containerd, shim, 앱, 보조 Pod를 전부 그 안에 넣어. 부하 생성기, 수집기, kubectl·docker 같은 CLI는 밖에 있어서 집계에 안 들어가.
+- 도구마다 **전용 cgroup**(CPU 4개, 메모리 4GiB, swap 0)을 만들고 엔진, containerd, shim, 앱, 보조 Pod를 전부 그 안에 넣어. 부하 생성기, 수집기, kubectl·docker 같은 CLI는 밖에 있어서 집계에 안 들어가. 엔진을 띄우고 감시하는 작은 Python 프로세스 하나는 네 도구 모두 안에 들어가(alpha.9에서는 약 7MiB).
 - 도구마다 **전용 네트워크 공간**(`swbench`)을 새로 만들어. K3s·flannel·kube-proxy·minikube가 남긴 인터페이스, 경로, iptables 규칙이 다음 도구에 섞이지 않게 하려고야. 바깥과는 veth 하나와 이름 붙인 iptables 체인 두 개(`SWBENCH-FWD`, `SWBENCH-NAT`)로만 이어져. 끝나면 지워.
 - 한 번에 한 도구만 켜.
 - kubelet이 바꾸는 커널 값(`vm.overcommit_memory=1`, `kernel.panic=10` 등)을 시작할 때 모든 도구에 똑같이 맞추고 끝나면 되돌려. minikube의 kubelet은 특권 컨테이너라서 그대로 두면 측정 도중에 호스트 값을 바꿔 버려.
@@ -65,7 +66,7 @@ alpha.9 비교의 측정 규칙을 그대로 옮겼어. 숫자를 읽는 방법�
 | 시험 cgroup 메모리 상한 | 2.5GiB | 4GiB. 3GiB에서는 minikube 노드 컨테이너(2,600MiB)와 dockerd가 상한에 닿아서 올렸고, 네 도구 모두 같아 |
 | Kubernetes CPU 요청량 | 제한과 같은 0.5 CPU | 0.1 CPU. 4코어 러너에서는 0.5씩 요청하면 앱 10개 중 3개가 스케줄되지 못해. 커널 제한(`cpu.max`)은 그대로 0.5 CPU야 |
 | 반복 | 3회 | 기본 3회(입력으로 변경) |
-| 이미지 준비 | 미리 만든 tar를 가져옴 | 각 실행기가 digest로 직접 받음(시간 측정 밖) |
+| 이미지 준비 | 미리 만든 tar를 가져옴 | 각 실행기가 같은 digest를 `mirror.gcr.io`(Docker Hub 미러)에서 직접 받음(시간 측정 밖). 공유 러너 주소가 Docker Hub 비로그인 한도에 걸려서야. K3s 구성요소 이미지는 공식 airgap 묶음으로 넣음 |
 | 커널 값 | K3s 때문에 두 값을 바꿈 | kubelet 기본값 여섯 개와 `ip_forward`를 모두에게 맞춤 |
 
 그래서 CI 표와 alpha.9 표의 숫자를 한 표에 섞으면 안 돼.
@@ -74,11 +75,12 @@ alpha.9 비교의 측정 규칙을 그대로 옮겼어. 숫자를 읽는 방법�
 
 - minikube는 docker 안에 노드 컨테이너 하나를 띄우고 그 안에서 Kubernetes를 돌려. 그래서 dockerd와 노드 컨테이너가 전부 집계에 들어가. 노드 컨테이너는 `--memory=2600mb --cpus=4`로 띄워.
 - Service IP는 노드 컨테이너 안에만 있어. `minikube tunnel`과 같은 방식으로 Service 대역을 노드로 보내는 경로를 네트워크 공간에 하나 추가해서, 다른 Kubernetes 도구처럼 Service IP로 요청을 보내.
+- minikube의 Kubernetes는 v1.37.0이고 K3s(v1.37.2+k3s1)와 달리 Traefik·metrics-server·ServiceLB가 기본으로 꺼져 있어. 둘 다 각자의 기본 구성 그대로야.
 - 러너에서는 root로 돌기 때문에 `--force`를 붙여. minikube는 docker 드라이버를 root로 쓰는 걸 기본으로 막아.
 
 ## 직접 돌리기
 
-root와 cgroup v2가 있는 **일회용 Linux**에서만 돌려. 실행하는 동안 iptables, 커널 값, cgroup을 바꾸기 때문에 `--yes` 없이는 시작하지 않아. 운영 앱이 있는 호스트에서는 돌리지 마.
+root와 cgroup v2가 있는 **일회용 x86_64 Linux**에서만 돌려. 실행하는 동안 iptables, 커널 값, cgroup을 바꾸기 때문에 `--yes` 없이는 시작하지 않아. 운영 앱이 있는 호스트에서는 돌리지 마.
 
 ```bash
 bash hack/build.sh
@@ -86,10 +88,13 @@ go build -trimpath -o dist/benchload ./hack/benchload
 sudo python3 hack/bench_runtime.py run --yes --keep-going \
   --out /tmp/swbench-out --tool-dir /path/to/tools \
   --tools shearwater,k3s --apps 1 --repeats 1
-python3 hack/bench_runtime.py summarize /tmp/swbench-out
 ```
 
-`--tool-dir`에는 워크플로가 받는 것과 같은 파일(Docker 정적 묶음의 `dockerd`·`containerd`·`ctr`·`runc`·`docker`, `docker-compose`, `k3s`, `minikube`, `kubectl`)을 두면 돼. 없으면 PATH에서 찾아. 버전과 체크섬은 워크플로의 `env`에 고정돼 있어.
+`run`이 끝나면 `summary.*`가 바로 만들어져. 나중에 집계만 다시 만들려면 root 소유가 된 결과 폴더의 소유자를 바꾼 뒤 `python3 hack/bench_runtime.py summarize /tmp/swbench-out`을 돌려. 스크립트를 직접 돌릴 때 `--repeats` 기본값은 1이고, 워크플로 기본값은 3이야.
+
+WSL처럼 커널을 다른 배포판과 같이 쓰는 환경에서는 `--no-kernel-tuning`으로 커널 값을 건드리지 않을 수 있어. 이때는 `net.ipv4.ip_forward=1`이 미리 켜져 있어야 하고, kubelet이 스스로 커널 값을 바꾸는 K3s·minikube는 같이 잴 수 없어(Compose와 Shearwater만).
+
+`--tool-dir`에는 워크플로가 받는 것과 같은 파일(Docker 정적 묶음 전체(`dockerd`·`containerd`·`containerd-shim-runc-v2`·`ctr`·`runc`·`docker`·`docker-proxy` 등), `docker-compose`, `k3s`, `minikube`, `kubectl`)을 두면 돼. 없으면 PATH에서 찾아. 받은 파일의 버전과 체크섬은 워크플로의 `env`에 고정돼 있어. minikube가 실행 중에 받는 노드 이미지와 Kubernetes v1.37.0은 버전만 고정이고, nginx 이미지 digest는 스크립트에 고정돼 있어.
 
 한 도구가 실패해도 `--keep-going`이면 나머지는 계속 재고, 실패 기록(`failure-*.txt`)은 결과 폴더에 남아. 실패한 도구를 몰래 다시 돌리지 않아. 실패가 하나라도 있으면 명령은 0이 아닌 값으로 끝나.
 

@@ -44,7 +44,10 @@ import time
 import traceback
 
 TOOLS = ('compose', 'k3s', 'minikube', 'shearwater')
-DEFAULT_IMAGE = 'docker.io/library/nginx@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284'
+# The same digest as the alpha.9 run (docker.io/library/nginx:1.28.0-alpine),
+# pulled from Google's Docker Hub mirror: shared CI runner addresses hit Docker
+# Hub's anonymous pull limit.
+DEFAULT_IMAGE = 'mirror.gcr.io/library/nginx@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284'
 NETNS = 'swbench'
 HOST_LINK = 'swb-host0'
 PEER_LINK = 'swb-peer0'
@@ -184,7 +187,7 @@ def summarize_case(folder, tool, trial):
             'kernel_mib': statistics.median(r['memory_stat'].get('kernel', 0) for r in rows) / 2**20,
             'cpu_one_core_percent': (last['cpu']['usage_usec'] - first['cpu']['usage_usec']) / 1e6 / span * 100 if span else None,
             'throttled_s': (last['cpu'].get('throttled_usec', 0) - first['cpu'].get('throttled_usec', 0)) / 1e6,
-            'oom_kills': last['memory_events'].get('oom_kill', 0),
+            'oom_kills': last['memory_events'].get('oom_kill', 0) - first['memory_events'].get('oom_kill', 0),
             'phase_memory_max_hits': last['memory_events'].get('max', 0) - first['memory_events'].get('max', 0),
         }
         if phase != 'idle':
@@ -199,6 +202,8 @@ def summarize_case(folder, tool, trial):
                 p99_ms=quantile([r['latency_ms'] for r in ok], .99),
                 late_over_5ms=sum(r['dispatch_lag_ms'] > 5 for r in req),
                 dispatch_p95_ms=quantile([r['dispatch_lag_ms'] for r in req], .95),
+                # From the planned send time: includes any client-side delay.
+                scheduled_p95_ms=quantile([r['scheduled_latency_ms'] for r in ok], .95),
             )
         result[phase] = stats
     return result
@@ -310,6 +315,16 @@ def network_up():
     for table, chain in (('filter', FWD_CHAIN), ('nat', NAT_CHAIN)):
         if sh(['iptables', '-w', '5', '-t', table, '-S', chain], check=False, capture_output=True).returncode == 0:
             raise SystemExit(f'iptables chain {chain} already exists; refusing to adopt it')
+    # Nothing of ours existed before this point, so a partial setup can be
+    # undone with the same idempotent teardown.
+    try:
+        _network_create()
+    except BaseException:
+        network_down()
+        raise
+
+
+def _network_create():
     sh(['ip', 'netns', 'add', NETNS])
     sh(['ip', 'link', 'add', HOST_LINK, 'type', 'veth', 'peer', 'name', PEER_LINK])
     sh(['ip', 'link', 'set', PEER_LINK, 'netns', NETNS])
@@ -342,6 +357,14 @@ def network_down():
         sh(ipt + ['-t', table, '-X', chain], check=False, capture_output=True)
     sh(['ip', 'netns', 'delete', NETNS], check=False, capture_output=True)
     sh(['ip', 'link', 'delete', HOST_LINK], check=False, capture_output=True)
+    left = []
+    if NETNS in sh(['ip', 'netns', 'list'], check=False, capture_output=True).stdout.split():
+        left.append(f'netns {NETNS}')
+    for table, chain in (('filter', FWD_CHAIN), ('nat', NAT_CHAIN)):
+        if sh(ipt + ['-t', table, '-S', chain], check=False, capture_output=True).returncode == 0:
+            left.append(f'iptables {table} {chain}')
+    if left:
+        raise RuntimeError('network teardown left: ' + ', '.join(left))
 
 
 def upstream_resolv():
@@ -357,20 +380,25 @@ def upstream_resolv():
     return 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n'
 
 
+def kernel_read():
+    return {name: (Path('/proc/sys') / name.replace('.', '/')).read_text().strip() for name in KERNEL}
+
+
 def kernel_apply():
-    before = {name: (Path('/proc/sys') / name.replace('.', '/')).read_text().strip() for name in KERNEL}
-    try:
-        for name, value in KERNEL.items():
-            (Path('/proc/sys') / name.replace('.', '/')).write_text(value)
-    except OSError:
-        kernel_restore(before)
-        raise
-    return before
+    for name, value in KERNEL.items():
+        (Path('/proc/sys') / name.replace('.', '/')).write_text(value)
 
 
 def kernel_restore(before):
+    """Try every key even if one fails, then report all failures."""
+    failed = []
     for name, value in before.items():
-        (Path('/proc/sys') / name.replace('.', '/')).write_text(value)
+        try:
+            (Path('/proc/sys') / name.replace('.', '/')).write_text(value)
+        except OSError as e:
+            failed.append(f'{name}={value}: {e}')
+    if failed:
+        raise RuntimeError('kernel values not restored: ' + '; '.join(failed))
 
 
 def cgroup_pids(group):
@@ -403,6 +431,10 @@ class Engine:
         self.pid = None
         self.proc = None
         self.net_owned = False
+        # Only what this Engine created is ever stopped or removed: a refused
+        # start must not touch another run's cgroup or files.
+        self.root_owned = False
+        self.cg_owned = False
         self.env = dict(os.environ, GOMAXPROCS=str(args.cpus), HOME=str(self.root / 'home'),
                         MINIKUBE_HOME=str(self.root / 'home' / '.minikube'),
                         DOCKER_HOST=f'unix://{RUN}/docker.sock', DOCKER_CONFIG=str(self.root / 'home' / '.docker'),
@@ -422,11 +454,13 @@ class Engine:
         if self.root.exists() or self.cg.exists() or self.out.exists():
             raise RuntimeError(f'{self.trial}: work, cgroup or output already exists')
         self.root.mkdir(parents=True, mode=0o700)
+        self.root_owned = True
         (self.root / MARKER).write_text(self.trial)
         for sub in ('tmp', 'home'):
             (self.root / sub).mkdir()
         self.out.mkdir(parents=True)
         self.cg.mkdir()
+        self.cg_owned = True
         (self.cg / 'memory.max').write_text(str(self.a.memory_mib * 2**20))
         (self.cg / 'memory.swap.max').write_text('0')
         (self.cg / 'cpu.max').write_text(f'{self.a.cpus * 100000} 100000')
@@ -434,6 +468,11 @@ class Engine:
         # A fresh network namespace per trial: K3s, flannel, kube-proxy and
         # minikube leave interfaces, routes and iptables rules behind that
         # would otherwise change the next tool's network.
+        if self.tool == 'k3s' and self.a.k3s_airgap:
+            # K3s imports these at start instead of pulling its add-on images.
+            images = self.root / 'k3s' / 'agent' / 'images'
+            images.mkdir(parents=True)
+            shutil.copy(self.a.k3s_airgap, images / Path(self.a.k3s_airgap).name)
         network_up()
         self.net_owned = True
         log = (self.out / 'guardian.log').open('w')
@@ -456,6 +495,10 @@ class Engine:
             time.sleep(.25)
 
     def stop(self):
+        if not self.cg_owned:
+            if self.net_owned:
+                network_down()
+            return
         if self.proc is not None and self.proc.poll() is None:
             os.kill(self.pid, signal.SIGTERM)
         end = time.monotonic() + 45
@@ -479,11 +522,11 @@ class Engine:
                 self.cg.rmdir()
             except OSError as e:
                 print(f'{self.trial}: cgroup not removed: {e}', file=sys.stderr)
+        (self.out / 'stopped.json').write_text(json.dumps({'forced': forced, 'time': time.time()}))
+        if self.root_owned and not self.a.keep_work and (self.root / MARKER).read_text() == self.trial:
+            shutil.rmtree(self.root, ignore_errors=True)
         if self.net_owned:
             network_down()
-        (self.out / 'stopped.json').write_text(json.dumps({'forced': forced, 'time': time.time()}))
-        if not self.a.keep_work and (self.root / MARKER).exists():
-            shutil.rmtree(self.root, ignore_errors=True)
 
     # -- commands inside the namespace (outside the cgroup)
 
@@ -793,9 +836,20 @@ class Engine:
                 f'--duration={seconds}s', f'--rate={self.a.rate}', '--out=' + str(folder / f'{phase}-requests.jsonl')]
         started = time.monotonic()
         p = subprocess.Popen(args, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        if update:
-            update(started)
-        _, stderr = p.communicate(timeout=seconds + 240)
+        try:
+            if update:
+                update(started)
+            _, stderr = p.communicate(timeout=seconds + 240)
+        finally:
+            # The generator lives outside the trial cgroup; a failed update must
+            # not leave it holding the namespace.
+            if p.poll() is None:
+                p.terminate()
+                try:
+                    p.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                    p.wait()
         if p.returncode:
             raise RuntimeError('load generator failed: ' + stderr[-2000:])
 
@@ -991,6 +1045,10 @@ def preflight(args, tools):
     args.sw = str(Path(args.sw).resolve())
     if 'shearwater' in tools and not Path(args.sw).is_file():
         raise SystemExit('--sw must point at the sw binary to measure')
+    if args.k3s_airgap:
+        args.k3s_airgap = str(Path(args.k3s_airgap).resolve())
+        if not Path(args.k3s_airgap).is_file():
+            raise SystemExit('--k3s-airgap must point at the K3s airgap image bundle')
     args.loadgen = str(Path(args.loadgen).resolve())
     if not Path(args.loadgen).is_file():
         raise SystemExit('--loadgen must point at the built hack/benchload binary')
@@ -1001,7 +1059,9 @@ def run(args):
     unknown = set(tools) - set(TOOLS)
     if unknown:
         raise SystemExit(f'unknown tools: {sorted(unknown)}')
-    apps = [int(x) for x in args.apps.split(',')]
+    apps = [int(x) for x in args.apps.split(',') if x.strip()]
+    if not tools or not apps or min(apps) < 1 or args.repeats < 1:
+        raise SystemExit('need at least one tool, app counts >= 1 and --repeats >= 1')
     if args.tool_dir:
         args.tool_dir = str(Path(args.tool_dir).resolve())
     preflight(args, tools)
@@ -1027,12 +1087,21 @@ def run(args):
             raise SystemExit('--no-kernel-tuning needs net.ipv4.ip_forward=1 already set')
         before = {}
     else:
-        before = kernel_apply()
+        before = kernel_read()
     (out / 'kernel-before.json').write_text(json.dumps(before, indent=2))
     meta['kernel_tuning'] = 'off' if args.no_kernel_tuning else 'kubelet defaults applied to every tool'
     (out / 'run.json').write_text(json.dumps({'meta': meta, 'tools': tools, 'apps': apps}, indent=2))
+
+    # A cancelled CI job sends SIGTERM; turn it into an exception so every
+    # finally below (engine stop, network and kernel restore) still runs.
+    def cancel(signum, _frame):
+        raise KeyboardInterrupt(f'signal {signum}')
+
+    signal.signal(signal.SIGTERM, cancel)
     failed = []
     try:
+        if before:
+            kernel_apply()
         for r in range(1, args.repeats + 1):
             order = tools[(r - 1) % len(tools):] + tools[:(r - 1) % len(tools)]
             for tool in order:
@@ -1078,6 +1147,7 @@ def main(argv=None):
     r.add_argument('--loadgen', default='dist/benchload')
     r.add_argument('--tool-dir', default='')
     r.add_argument('--image', default=DEFAULT_IMAGE)
+    r.add_argument('--k3s-airgap', default='', help='k3s-airgap-images-amd64.tar.zst, so K3s pulls no add-on images')
     r.add_argument('--cpus', type=int, default=4)
     r.add_argument('--memory-mib', type=int, default=4096)
     r.add_argument('--minikube-memory-mib', type=int, default=2600)

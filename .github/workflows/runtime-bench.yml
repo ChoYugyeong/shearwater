@@ -46,6 +46,7 @@ jobs:
       COMPOSE_SHA256: af426722a8af5de812fcee30cc1c39f0639f5f723cbadefb25e5d4db054064cf
       K3S_VERSION: v1.37.2+k3s1
       K3S_SHA256: 265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda
+      K3S_AIRGAP_SHA256: 35a5af1e69b57b8b627a4f6b1c29ea104209b661067b8c97fd40dc3f860bfcd2
       MINIKUBE_VERSION: v1.39.0
       MINIKUBE_SHA256: b738496da01be06bbaf80c688f57ce25acd3849fbb518155f3a88e03ef555aa4
       MINIKUBE_KUBERNETES: v1.37.0
@@ -80,6 +81,9 @@ jobs:
           install -m 755 docker/* "$TOOLS_DIR/"
           get docker-compose "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-x86_64" "$COMPOSE_SHA256"
           get k3s "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION/+/%2B}/k3s" "$K3S_SHA256"
+          # Add-on images for K3s, so it pulls nothing from Docker Hub.
+          get k3s-airgap-images-amd64.tar.zst "https://github.com/k3s-io/k3s/releases/download/${K3S_VERSION/+/%2B}/k3s-airgap-images-amd64.tar.zst" "$K3S_AIRGAP_SHA256"
+          install -m 644 k3s-airgap-images-amd64.tar.zst "$TOOLS_DIR/"
           get minikube "https://github.com/kubernetes/minikube/releases/download/${MINIKUBE_VERSION}/minikube-linux-amd64" "$MINIKUBE_SHA256"
           get kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" "$KUBECTL_SHA256"
           install -m 755 docker-compose k3s minikube kubectl "$TOOLS_DIR/"
@@ -101,7 +105,7 @@ jobs:
             --out "$OUT_DIR" --work /var/lib/swbench \
             --sw dist/sw --loadgen dist/benchload --tool-dir "$TOOLS_DIR" \
             --tools "$BENCH_TOOLS" --apps "$BENCH_APPS" --repeats "$BENCH_REPEATS" \
-            --minikube-kubernetes "$MINIKUBE_KUBERNETES"
+            --minikube-kubernetes "$MINIKUBE_KUBERNETES" --k3s-airgap "$TOOLS_DIR/k3s-airgap-images-amd64.tar.zst"
       - name: Job summary
         if: always()
         run: |
