@@ -2,22 +2,22 @@
 
 [English](README.md) · **한국어**
 
-*Human-approved updates for single-node containers.*
+*AI 에이전트에게 서버 배포를 맡겨도 돼요. 단, 승인한 변경만, 딱 한 번, 실제로 응답할 때까지는 "완료"가 아니에요.*
 
-**“웹 앱을 새 이미지로 바꾸고, 새 버전이 실제로 응답하는지 확인해 줘.”**
+이제 AI 에이전트가 MCP로 서버를 바꿀 수 있어요. Shearwater는 에이전트와 Linux 서버 한 대 사이에 들어가요. 에이전트는 맡긴 앱 하나만 건드릴 수 있고, 사람이 정확한 계획을 승인해요. 그 계획은 모델이 바뀌거나 서버가 재시작돼도 딱 한 번만 실행돼요. 그리고 새 사본 하나하나가 기대한 응답을 HTTP로 돌려주기 전에는 에이전트가 성공을 보고할 수 없어요.
 
-Shearwater는 Linux 서버 한 대에서 작은 웹 앱을 운영하는 오픈소스 도구예요. AI가 변경을 제안하면 사람이 대상과 내용을 보고 그 계획 하나만 승인해요. 대화나 서버가 중간에 끊겨도 같은 작업을 이어가고, 새 앱 사본(Pod)과 내부 접속 주소(Service)에 HTTP 요청을 보내 결과를 확인해요.
+**이미 쓰고 있는 Docker Compose 프로젝트** 앞에 붙일 수 있어요(root 불필요, compose 파일은 고치지 않아요). Kubernetes API 일부를 직접 구현한 **자체 런타임**으로도 돌릴 수 있어요.
 
-[처음 시작하기](#처음-시작하기) · [앱 하나를 AI에게 맡기기](#앱-하나를-ai에게-맡기기) · [측정 결과](#측정-결과)
+[Docker Compose로 시작하기](#docker-compose로-시작하기) · [자체 런타임으로 시작하기](#자체-런타임으로-시작하기) · [측정 결과](#측정-결과)
 
 <p align="center">
   <img src="docs/media/approved-update.gif" width="576" alt="실제 업데이트 기록 재생. 승인 대기, 승인 후 미적용, 새 배포 요청 거절, 원래 계획의 HTTP 검증 통과 순서예요.">
 </p>
 
-**기록 재생** · alpha.12 개발 중 Qwen과 nginx로 진행한 시험의 MCP 요청·응답을 발췌했어요. 이 시험에서는 운영자 역할의 검사 프로그램이 계획을 확인하고 승인했어요. [시험 조건과 결과](docs/agent-operations-verification.md)
-
 <details>
-<summary>네 장면을 글로 읽기</summary>
+<summary>기록 재생 내용을 글로 읽기</summary>
+
+alpha.12 개발 중 Qwen과 nginx로 진행한 시험의 MCP 요청·응답을 발췌했어요. 이 시험에서는 운영자 역할의 검사 프로그램이 계획을 확인하고 승인했어요. [시험 조건과 결과](docs/agent-operations-verification.md)
 
 1. AI가 `update`를 요청하자 `awaiting_approval`이 돌아왔어요. `approved`와 `applied`는 모두 `false`였어요.
 2. 같은 계획을 승인한 뒤 `verify`로 읽은 상태는 `approved_pending`이었어요. `approved`는 `true`, `applied`는 아직 `false`였어요.
@@ -26,13 +26,17 @@ Shearwater는 Linux 서버 한 대에서 작은 웹 앱을 운영하는 오픈�
 
 </details>
 
-## 처음 시작하기
+### 다른 방법과 무엇이 다른가요?
 
-WSL 2의 Ubuntu 24.04(amd64)에서 체험할 수 있어요. 컨테이너를 실행할 containerd·runc, 네트워크 도구와 관리자 권한이 필요해요. [설치 준비물](docs/install.md)
+- **플랫폼의 MCP 서버(Coolify, Dokploy)**: 에이전트가 팀의 여러 앱에 걸쳐 플랫폼 API를 부를 수 있어요. Shearwater는 에이전트를 기한이 있는 앱 하나로 묶고, 해시로 검토하는 계획에서 멈추고, 결과를 확인한 뒤에야 성공을 보고해요.
+- **범용 MCP 승인 프록시**: 도구 호출 전에 사람에게 물어봐요. 그 뒤에 배포가 실제로 됐는지는 몰라요. Shearwater는 새 사본 하나하나를 HTTP로 확인하고 증거를 남겨요.
+- **에이전트에게 `docker compose up`을 그냥 맡기기**: 에이전트가 Docker 소켓을 쥐게 되고, 남는 건 "아마 떠 있을 거예요"뿐이에요.
 
-**v0.1.0-alpha.14 다운로드** · [설치기](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/install.py) · [Linux amd64 압축 파일](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/shearwater-v0.1.0-alpha.14-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/SHA256SUMS)
+## Docker Compose로 시작하기
 
-Ubuntu Bash에서 아래 명령을 실행하세요. 빈 임시 폴더에 설치기를 받아 체크섬을 검사해요. 설치기는 압축 파일과 그 안의 `sw`도 검증한 뒤 버전별 폴더에 설치해요.
+Docker와 `docker compose` 플러그인이 있는 Linux amd64 서버, 그리고 `docker` 그룹에 속한 운영자 계정이 필요해요. root는 필요 없고, Shearwater는 containerd나 compose 파일을 바꾸지 않아요.
+
+**1. `sw` 설치.** 빈 임시 폴더에 설치 도우미를 받고 체크섬을 확인한 뒤, 이 버전을 전용 폴더에 설치해요.
 
 ```bash
 (
@@ -49,9 +53,48 @@ Ubuntu Bash에서 아래 명령을 실행하세요. 빈 임시 폴더에 설치�
 )
 ```
 
-버전 출력에서 `0.1.0-alpha.14`을 확인하세요. 첫 앱은 `sw setup`으로 인증을 준비한 뒤 예제 nginx의 첫 HTTP 응답까지 따라가면 돼요. [인증 준비](docs/onboarding.md) · [첫 웹 앱 띄우기](docs/first-try.md)
+출력이 `sw 0.1.0-alpha.14`로 시작하면 돼요. 아래 명령은 `sw`가 `PATH`에 있다고 가정해요.
 
-소스에서 빌드하려면 저장소 루트에서 `. hack/env.sh` 다음 `bash hack/build.sh`를 실행하세요. [개발 환경과 빌드 안내](docs/quickstart.md)
+**2. Compose 프로젝트 하나 앞에 Shearwater 띄우기.** 계속 켜 두세요.
+
+```bash
+sw compose serve --file /srv/shop/compose.yaml --project shop --listen 127.0.0.1:16444
+```
+
+**3. 서비스 하나를 에이전트에게 맡기기.** 이 예시는 `web` 서비스의 업데이트와 복구를 허용하고, 응답에 `Welcome`이 들어 있어야 통과로 봐요. 에이전트는 다른 OS 계정에서 돌리는 걸 권장해서, 넘겨줄 폴더를 홈 밖에 만들어요.
+
+```bash
+sudo install -d -o "$USER" -m 0755 /srv/sw-handoff   # 처음 한 번만
+sw task create --config-dir ~/.config/shearwater-compose --listen 127.0.0.1:16444 \
+  -n shop --name web --port 80 --allow update,recover --expect-body "Welcome" \
+  --out /srv/sw-handoff/web --ttl 2h
+```
+
+**4. 에이전트 연결.** 에이전트의 MCP 클라이언트에 이 명령을 등록해요. 에이전트는 이 서비스 하나에 묶인 토큰만 받고, Docker 소켓이나 운영자 토큰은 받지 않아요.
+
+```bash
+sw mcp --workflow=/srv/sw-handoff/web/work.json --allow-write
+```
+
+**5. 제안을 검토하고 승인하기.** 에이전트의 계획이 `awaiting_approval`로 돌아오면, 운영자 터미널에서 확인하고 정확한 해시로 승인해요. 에이전트가 이어서 실행하면 HTTP 증거를 읽을 수 있어요.
+
+```bash
+sw task review  --config-dir ~/.config/shearwater-compose --listen 127.0.0.1:16444 --id=OPERATION_ID
+sw task approve --config-dir ~/.config/shearwater-compose --listen 127.0.0.1:16444 --id=OPERATION_ID --confirm=EXACT_PLAN_HASH
+sw task evidence --config-dir ~/.config/shearwater-compose --listen 127.0.0.1:16444 --id=OPERATION_ID
+```
+
+Compose는 업데이트할 때 컨테이너를 새로 만들어서 짧게 끊길 수 있어요. 무중단 롤링이 필요하면 아래 자체 런타임을 쓰세요. compose 파일 여러 개, 에이전트 계정 분리, 실패 처리는 [Compose 안내](docs/compose-backend.md)에 있어요.
+
+## 자체 런타임으로 시작하기
+
+Shearwater에는 작은 단일 노드 런타임도 있어요. Kubernetes API 일부(Pod, Deployment, Service, Secret)를 직접 구현해서 `kubectl`을 그대로 쓸 수 있고, `k8s.io` 패키지는 하나도 가져오지 않아요. 들어오면 CI가 빌드를 실패시켜요. 롤링 업데이트(아래 측정에서 실패 요청 0건)와 내장 공개 HTTPS 진입점이 더해져요. containerd, runc, 네트워크 도구, 관리자 권한이 필요해요. [설치 준비](docs/install.md)
+
+새 Ubuntu·Debian 서버라면 `sudo python3 install.py --version v0.1.0-alpha.14 --host --apply`가 containerd·runc가 없을 때 설치하고 systemd 서비스를 시작해요. 그다음 `sw setup`으로 인증 정보를 준비하고 첫 앱 안내를 따라가세요. [인증 정보 준비](docs/onboarding.md) · [첫 웹 앱 실행](docs/first-try.md)
+
+**v0.1.0-alpha.14 내려받기** · [설치 도우미](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/install.py) · [Linux amd64 묶음](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/shearwater-v0.1.0-alpha.14-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/SHA256SUMS)
+
+소스에서 빌드하려면 저장소 루트에서 `. hack/env.sh` 뒤에 `bash hack/build.sh`를 실행해요. [빌드 안내](docs/quickstart.md)
 
 ## 앱 하나를 AI에게 맡기기
 
@@ -95,6 +138,6 @@ Ubuntu Bash에서 아래 명령을 실행하세요. 빈 임시 폴더에 설치�
 
 관리자 한 명이 신뢰하는 작은 HTTP 앱을 맡기는 **실험적 알파**예요. 단일 노드·IPv4·TCP ClusterIP를 지원해요. 선택 기능인 공개 진입점이 주석을 단 Service의 TLS를 맡지만, 공개 도메인 연결과 로그인은 따로 확인해야 하고, 이미지 복구에는 DB 데이터 복원이 포함되지 않아요. `securityContext`는 저장만 하며 다중 사용자 격리와 RBAC는 지원 범위 밖이에요. [호환표](docs/compatibility.md)
 
-단일 서버에서 앱 몇 개를 빌드하고 실행하려면 Docker Compose도 좋은 선택이에요. 여러 노드, Ingress, PVC, Helm이 필요하면 Kubernetes나 K3s를 살펴보세요. [도구별 용도 비교](docs/choosing-shearwater.md)
+이미 Docker Compose로 앱 몇 개를 돌리고 있다면 Compose는 그대로 두고 그 앞에 Shearwater를 붙이세요. 여러 노드, Ingress, PVC, Helm이 필요하면 Kubernetes나 K3s를 살펴보세요. [도구별 용도 비교](docs/choosing-shearwater.md)
 
 [문제 진단하기](docs/troubleshooting.md) · [체험 결과 남기기](docs/first-try-feedback.md) · [기여하기](CONTRIBUTING.md) · [보안 제보](SECURITY.md) · [Apache 2.0 라이선스](LICENSE) · [출처 고지](NOTICE)

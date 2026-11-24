@@ -2,22 +2,22 @@
 
 **English** · [한국어](README.ko.md)
 
-*Human-approved updates for single-node containers.*
+*Let an AI agent deploy to your server — but only the change you approved, exactly once, and not "done" until it actually answers.*
 
-> “Update my web app to the new image and check that it serves the new version.”
+AI agents can now change servers through MCP. Shearwater sits between the agent and one Linux server. The agent may touch only the app you delegated. You approve the exact plan. The plan runs once, even if the model changes or the server restarts. And the agent cannot report success until every new replica returns the response you expected over HTTP.
 
-Shearwater lets an AI agent operate a small web app on one Linux server. The agent proposes a change to a specific app. You review and approve that plan. If the conversation ends or the server restarts, the agent can resume the same operation and check the HTTP response from every new replica (Pod) and the app’s internal address (Service).
+Put it in front of an **existing Docker Compose project** (no root, your compose files are not rewritten), or run it with **its own small runtime** that speaks a slice of the Kubernetes API.
 
-[Quick start](#quick-start) · [Delegate an app](#delegate-an-app) · [Benchmarks](#benchmarks)
+[Quick start with Docker Compose](#quick-start-existing-docker-compose-app) · [Own runtime](#quick-start-own-runtime) · [Benchmarks](#benchmarks)
 
 <p align="center">
   <img src="docs/media/approved-update-en.gif" width="576" alt="An agent proposes an update. The approved plan waits to run, a second deployment is rejected, and the original update passes its HTTP check.">
 </p>
 
-This replay shows the Model Context Protocol (MCP) messages from a Qwen test with nginx during alpha.12 development. A test program played the operator’s role and approved the plan. The detailed guides linked below are in Korean. [Test setup and results](docs/agent-operations-verification.md)
-
 <details>
-<summary>Read the four steps as text</summary>
+<summary>What the replay shows, as text</summary>
+
+This replays the Model Context Protocol (MCP) messages from a Qwen test with nginx during alpha.12 development. A test program played the operator and approved the plan. [Test setup and results](docs/agent-operations-verification.md)
 
 1. The agent requests `update`. The server returns `awaiting_approval`, with both `approved` and `applied` set to `false`.
 2. After approval, `verify` reports `approved_pending`. The plan is approved and still waiting to run.
@@ -26,13 +26,17 @@ This replay shows the Model Context Protocol (MCP) messages from a Qwen test wit
 
 </details>
 
-## Quick start
+### Why not just…
 
-The release below runs on Linux amd64. The installation guide walks through Ubuntu 24.04 on WSL 2. Running containers requires containerd, runc, networking tools and administrator access on the host. [Installation prerequisites](docs/install.md)
+- **…a platform's MCP server (Coolify, Dokploy)?** Those let an agent call the platform's API across your team's apps. Shearwater limits the agent to one app with an expiry, stops at a plan you review by hash, and checks the result before it reports success.
+- **…a generic MCP approval proxy?** Those ask a human before a tool call runs. They don't know whether the deploy worked afterwards. Shearwater checks every new replica over HTTP and keeps the evidence.
+- **…letting the agent run `docker compose up`?** Then the agent holds the Docker socket, and "it should be running now" is all you get.
 
-**Download v0.1.0-alpha.14** · [Installer](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/install.py) · [Linux amd64 archive](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/shearwater-v0.1.0-alpha.14-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/SHA256SUMS)
+## Quick start: existing Docker Compose app
 
-Run this in Ubuntu Bash. It downloads the installer to an empty temporary directory and verifies its checksum. The installer checks the archive and the `sw` executable and installs this version in its own directory.
+You need a Linux amd64 server with Docker and the `docker compose` plugin, and an operator account in the `docker` group. Root is not required, and Shearwater does not change containerd or your compose files.
+
+**1. Install `sw`.** The commands download the installer to an empty temporary directory, verify its checksum, and install this version in its own directory.
 
 ```bash
 (
@@ -49,7 +53,46 @@ Run this in Ubuntu Bash. It downloads the installer to an empty temporary direct
 )
 ```
 
-The output should start with `sw 0.1.0-alpha.14`. Next, use `sw setup` to prepare credentials and follow the first-app guide to get an HTTP response from the example nginx app. [Set up credentials](docs/onboarding.md) · [Run your first web app](docs/first-try.md)
+The output should start with `sw 0.1.0-alpha.14`. The commands below assume `sw` is on your `PATH`.
+
+**2. Put Shearwater in front of one Compose project.** Keep this running.
+
+```bash
+sw compose serve --file /srv/shop/compose.yaml --project shop --listen 127.0.0.1:16444
+```
+
+**3. Delegate one service to the agent.** This example allows updates and recovery for the `web` service and requires the response to contain `Welcome`. Running the agent under a separate OS account is recommended, so the handoff folder lives outside your home directory.
+
+```bash
+sudo install -d -o "$USER" -m 0755 /srv/sw-handoff   # once
+sw task create --config-dir ~/.config/shearwater-compose --listen 127.0.0.1:16444 \
+  -n shop --name web --port 80 --allow update,recover --expect-body "Welcome" \
+  --out /srv/sw-handoff/web --ttl 2h
+```
+
+**4. Connect the agent.** Give the agent's MCP client this command. It gets a token for this one service, never the Docker socket or your operator token.
+
+```bash
+sw mcp --workflow=/srv/sw-handoff/web/work.json --allow-write
+```
+
+**5. Review and approve what it proposes.** When the agent's plan returns `awaiting_approval`, check it and approve the exact hash from your operator terminal. After the agent continues, read the HTTP evidence.
+
+```bash
+sw task review  --config-dir ~/.config/shearwater-compose --listen 127.0.0.1:16444 --id=OPERATION_ID
+sw task approve --config-dir ~/.config/shearwater-compose --listen 127.0.0.1:16444 --id=OPERATION_ID --confirm=EXACT_PLAN_HASH
+sw task evidence --config-dir ~/.config/shearwater-compose --listen 127.0.0.1:16444 --id=OPERATION_ID
+```
+
+Compose recreates the container during an update, so expect a short interruption; use the own runtime below for rolling updates. The full guide covers multiple compose files, separate agent accounts and failure handling (in Korean). [Compose guide](docs/compose-backend.md)
+
+## Quick start: own runtime
+
+Shearwater also ships a small single-node runtime. It speaks a slice of the Kubernetes API (Pod, Deployment, Service, Secret), so `kubectl` works as usual, without importing any `k8s.io` package; CI fails the build if one appears. It adds rolling updates (0 failed requests in the measurements below) and a built-in public HTTPS entry. It needs containerd, runc, networking tools and administrator access. [Installation prerequisites](docs/install.md)
+
+On a fresh Ubuntu or Debian server, `sudo python3 install.py --version v0.1.0-alpha.14 --host --apply` installs containerd and runc when none exist and starts the systemd service. Then use `sw setup` to prepare credentials and follow the first-app guide. [Set up credentials](docs/onboarding.md) · [Run your first web app](docs/first-try.md)
+
+**Download v0.1.0-alpha.14** · [Installer](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/install.py) · [Linux amd64 archive](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/shearwater-v0.1.0-alpha.14-linux-amd64.tar.gz) · [SHA256SUMS](https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/SHA256SUMS)
 
 To build from source, run `. hack/env.sh` and then `bash hack/build.sh` from the repository root. [Build guide](docs/quickstart.md)
 
@@ -95,6 +138,6 @@ The same measurement now runs on GitHub Actions with minikube added (manually an
 
 Shearwater is an **experimental alpha** for one operator running trusted HTTP apps on a single node. It supports IPv4 and TCP ClusterIP Services. Its HTTP checks cover internal endpoints. The optional public entry terminates TLS for annotated Services, but public DNS and login flows need separate checks, and rolling back an image does not restore database contents. Shearwater stores `securityContext` fields without enforcing them. Multi-tenant isolation and Kubernetes RBAC are outside its supported scope. [Compatibility matrix](docs/compatibility.md)
 
-Docker Compose is also a good fit for building and running a few apps on one server. Consider Kubernetes or K3s if you need multiple nodes, Ingress, persistent volume claims or Helm. [Compare use cases](docs/choosing-shearwater.md)
+If you already run a few apps with Docker Compose, keep Compose and put Shearwater in front of it. Consider Kubernetes or K3s if you need multiple nodes, Ingress, persistent volume claims or Helm. [Compare use cases](docs/choosing-shearwater.md)
 
 [Troubleshooting](docs/troubleshooting.md) · [First-use feedback](docs/first-try-feedback.md) · [Contributing](CONTRIBUTING.md) · [Report a security issue](SECURITY.md) · [Apache 2.0 license](LICENSE) · [Notices](NOTICE)
