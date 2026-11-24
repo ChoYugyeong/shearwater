@@ -1,0 +1,87 @@
+name: Compose quick start
+# Follows the README's Docker Compose quick start on a fresh GitHub-hosted VM
+# that has Docker and nothing from Shearwater: install, compose serve,
+# delegate, a scripted MCP agent, review/approve, evidence. It also checks that
+# a release which answers HTTP 200 without the expected text is never reported
+# healthy, and that recovery returns to the last verified image.
+#
+# "release" uses the README installer and the published release, the way a new
+# user would. "source" builds sw from this commit.
+on:
+  push:
+    paths:
+      - README.md
+      - README.ko.md
+      - docs/compose-backend.md
+      - docs/en/compose-backend.md
+      - hack/compose-quickstart-check.py
+      - internal/compose/**
+      - internal/operation/**
+      - cmd/sw/compose.go
+      - cmd/sw/operation.go
+      - .github/workflows/compose-quickstart.yml
+  workflow_dispatch:
+  schedule:
+    # Mondays 04:41 UTC, after the runtime comparison.
+    - cron: '41 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-quickstart-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quickstart:
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [release, source]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: matrix.source == 'source'
+        with:
+          go-version: '1.27.3'
+          cache: true
+      - name: Build sw from this commit
+        if: matrix.source == 'source'
+        env:
+          CGO_ENABLED: '0'
+        run: bash hack/build.sh
+      - name: Host facts
+        run: |
+          id
+          docker version --format 'docker {{.Server.Version}}'
+          docker compose version
+          nproc; free -m; uname -r
+      - name: Follow the README quick start
+        run: |
+          out="$RUNNER_TEMP/quickstart"
+          echo "OUT_DIR=$out" >> "$GITHUB_ENV"
+          if [ "${{ matrix.source }}" = release ]; then
+            # The version the README tells people to install.
+            version=$(grep -oE 'version=v[0-9][^ ]+' README.md | head -1 | cut -d= -f2)
+            python3 hack/compose-quickstart-check.py --release "$version" --out "$out"
+          else
+            python3 hack/compose-quickstart-check.py --sw dist/sw --out "$out"
+          fi
+      - name: Job summary
+        if: always()
+        run: |
+          if [ -f "$OUT_DIR/summary.md" ]; then
+            { echo "### ${{ matrix.source }}"; cat "$OUT_DIR/summary.md"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: compose-quickstart-${{ matrix.source }}-${{ github.run_id }}
+          path: ${{ env.OUT_DIR }}
+          if-no-files-found: warn
+          retention-days: 90
