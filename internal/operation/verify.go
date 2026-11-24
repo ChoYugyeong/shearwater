@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -121,6 +122,10 @@ func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Res
 		}
 		after.record.LastCheck = &proof
 		result.Next = "diagnose the failed check; recovery needs a newly approved plan"
+		if !passed {
+			_, why := proofFacts(&proof)
+			result.Facts = append(result.Facts, why...)
+		}
 		if passed {
 			result.State = "healthy"
 			result.VerifiedImage = proof.Image
@@ -162,6 +167,61 @@ func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Res
 		return save(tx, after.record, false)
 	})
 	return result, err
+}
+
+// reasonText turns a probe reason code into words a person or model can act on.
+var reasonText = map[string]string{
+	"expected_content_missing": "expected text missing",
+	"unexpected_status":        "status was not 200",
+	"connection_failed":        "connection failed",
+	"read_failed":              "reading the body failed",
+	"body_too_large":           "body larger than 64 KiB",
+	"invalid_managed_address":  "address is not a managed app address",
+	"invalid_request":          "request could not be built",
+}
+
+func probeWords(p HTTPProof) string {
+	why := reasonText[p.Reason]
+	if why == "" {
+		why = strings.ReplaceAll(p.Reason, "_", " ")
+	}
+	if p.Status > 0 {
+		return "HTTP " + strconv.Itoa(p.Status) + ", " + why
+	}
+	return why
+}
+
+// proofFacts reports whether every probe in a proof passed and, for each
+// check that failed, where it failed and why. It names the path, the status
+// and the reason, never the expected text: that may come from a private checks
+// file the agent is not shown.
+func proofFacts(p *Proof) (bool, []string) {
+	passed := len(p.Pods) > 0
+	var facts []string
+	for i, c := range p.Checks {
+		failed, reasons := 0, []string{}
+		for _, pod := range p.Pods {
+			if i >= len(pod.Checks) || pod.Checks[i].Passed {
+				continue
+			}
+			failed++
+			if w := probeWords(pod.Checks[i]); !slices.Contains(reasons, w) {
+				reasons = append(reasons, w)
+			}
+		}
+		if failed > 0 {
+			passed = false
+			facts = append(facts, "check GET "+c.Path+" failed on "+strconv.Itoa(failed)+" of "+strconv.Itoa(len(p.Pods))+" replicas: "+strings.Join(reasons, "; "))
+		}
+		if i < len(p.Service) && !p.Service[i].Passed {
+			passed = false
+			facts = append(facts, "check GET "+c.Path+" failed on the app's front address: "+probeWords(p.Service[i]))
+		}
+	}
+	if len(p.Pods) == 0 {
+		facts = append(facts, "no ready replica was checked")
+	}
+	return passed, facts
 }
 
 // Probe only addresses the backend manages. No DNS, environment proxy, cookies,
@@ -221,6 +281,16 @@ func (m *Manager) diagnose(tx *store.Tx, r Record, result *Result) error {
 		return e
 	}
 	result.Unknown = append(result.Unknown, "runtime failure reasons are observations, not a proven root cause; HTTP is not checked by diagnose")
+	// The last HTTP check of the current goal is the most useful observation
+	// after http_failed. Report it as retained, with its time, not as current.
+	if c := r.LastCheck; c != nil && c.Generation == r.Generation {
+		if ok, why := proofFacts(c); !ok {
+			at := c.At.UTC().Format(time.RFC3339)
+			for _, w := range why {
+				result.Facts = append(result.Facts, "last HTTP check ("+at+"): "+w)
+			}
+		}
+	}
 	if r.LastGood != nil && r.Pending == "" {
 		result.Next = "if recovery was requested, recover creates a plan for the last verified immutable image; otherwise verify"
 	} else if r.Pending == "" {

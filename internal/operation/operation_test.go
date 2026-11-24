@@ -390,6 +390,58 @@ func TestOldPodHTTP200CannotProveNewReleaseAndChecksAreRequired(t *testing.T) {
 	}
 }
 
+func TestFailedCheckSaysWhereAndWhyAndEvidenceSaysWhatItShowed(t *testing.T) {
+	f := newFixture(t)
+	f.deploy()
+	f.ready("old")
+	// Healthy first: the operator's evidence must say the retained proof passed,
+	// instead of leaving only the summary state "needs_verification".
+	if r := f.call(false, Request{Action: "verify"}); r.State != "healthy" {
+		t.Fatal(r)
+	}
+	ev := f.call(true, Request{Action: "evidence"})
+	http, _ := ev.HTTP.(map[string]any)
+	if http["state"] != "passed" || http["retained"] != true || ev.CheckedAt == nil || ev.VerifiedPods != 1 ||
+		!strings.Contains(strings.Join(ev.Facts, "\n"), "every configured check passed on 1 replicas") ||
+		!strings.Contains(ev.Next, "not a live check") {
+		t.Fatal("evidence does not describe the passed proof", ev)
+	}
+	// The agent may not read full retained proof.
+	f.reject(f.token, Request{Action: "evidence"}, "FORBIDDEN")
+
+	// A release that answers 200 without the expected text.
+	p := f.call(false, Request{Action: "update", Image: imageTwo})
+	f.call(true, Request{Action: "approve", Plan: p.Plan})
+	f.call(false, Request{Action: "continue", Plan: p.Plan})
+	f.removeEndpoints("web-old")
+	f.ready("new")
+	f.m.Probe = func(_ context.Context, _ string, _ int32, c Check) HTTPProof {
+		return HTTPProof{Path: c.Path, Status: 200, Reason: "expected_content_missing"}
+	}
+	r := f.call(false, Request{Action: "verify"})
+	facts := strings.Join(r.Facts, "\n")
+	if r.State != "http_failed" || !strings.Contains(facts, "check GET / failed on 1 of 1 replicas: HTTP 200, expected text missing") ||
+		!strings.Contains(facts, "failed on the app's front address: HTTP 200, expected text missing") {
+		t.Fatal("http_failed does not say where and why", r)
+	}
+	// The expected text ("release" here) can come from a private checks file:
+	// the failure lines must never echo it.
+	for _, line := range r.Facts {
+		if strings.HasPrefix(line, "check GET") && strings.Contains(line, "release") {
+			t.Fatal("expected text leaked into agent facts", line)
+		}
+	}
+	d := f.call(false, Request{Action: "diagnose"})
+	if !strings.Contains(strings.Join(d.Facts, "\n"), "last HTTP check (") || !strings.Contains(strings.Join(d.Facts, "\n"), "expected text missing") {
+		t.Fatal("diagnose hides the retained failed check", d)
+	}
+	ev = f.call(true, Request{Action: "evidence"})
+	http, _ = ev.HTTP.(map[string]any)
+	if http["state"] != "failed" || !strings.Contains(strings.Join(ev.Facts, "\n"), "expected text missing") {
+		t.Fatal("evidence does not describe the failed proof", ev)
+	}
+}
+
 func TestHealthyCurrentImageDoesNotCompleteStagedUpdate(t *testing.T) {
 	f := newFixture(t)
 	f.deploy()

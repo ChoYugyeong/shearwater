@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -183,8 +184,30 @@ func (m *Manager) Act(ctx context.Context, id, token string, admin bool, q Reque
 					return fail("FORBIDDEN", "full retained proof is an operator action")
 				}
 				result.Evidence = r.LastCheck
-				if r.LastCheck != nil {
-					result.ProofID = digest(r.LastCheck)
+				if c := r.LastCheck; c != nil {
+					result.ProofID = digest(c)
+					// The stored proof is not the current state. Say what it showed
+					// and when, next to the summary state, so "needs_verification"
+					// is not read as a failed check.
+					ok, why := proofFacts(c)
+					at := c.At.UTC().Format(time.RFC3339)
+					result.CheckedAt = &c.At
+					result.VerifiedPods = len(c.Pods)
+					outcome := "failed"
+					if ok {
+						outcome = "passed"
+						why = []string{"every configured check passed on " + strconv.Itoa(len(c.Pods)) + " replicas and the app's front address"}
+						if len(c.Service) == 0 {
+							why[0] = "every configured check passed on " + strconv.Itoa(len(c.Pods)) + " replicas"
+						}
+					}
+					result.HTTP = map[string]any{"state": outcome, "retained": true, "checkedAt": at, "goalGeneration": c.Generation}
+					for _, w := range why {
+						result.Facts = append(result.Facts, "retained proof ("+at+", generation "+strconv.FormatInt(c.Generation, 10)+"): "+w)
+					}
+					result.Next = "this is the proof stored at checkedAt, not a live check; run verify for the current state"
+				} else {
+					result.Facts = append(result.Facts, "no HTTP proof has been retained yet")
 				}
 			}
 			if q.Action == "diagnose" {
