@@ -160,8 +160,22 @@ python3 install.py --version "$version" --apply
     return str(sw)
 
 
+def pull(ref):
+    """Fetch a test fixture image. Shared CI addresses hit registry rate limits,
+    so retry with a pause; this is set-up, not part of the checked path."""
+    for attempt in range(1, 7):
+        p = run(['docker', 'pull', '-q', ref], check=False)
+        if p.returncode == 0:
+            return
+        log(f'pull {ref} failed (attempt {attempt}): {p.stderr.strip()[-200:]}')
+        time.sleep(20 * attempt)
+    raise SystemExit(f'could not pull {ref}')
+
+
 def build_images(work):
     """v1, v2 and broken, pushed to a local registry so each has a digest."""
+    pull('mirror.gcr.io/library/registry:2')
+    pull(BASE_IMAGE)
     run(['docker', 'run', '-d', '--name', 'swqs-registry', '-p', f'{REGISTRY}:5000', 'mirror.gcr.io/library/registry:2'])
     for _ in range(50):
         try:
