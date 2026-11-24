@@ -340,6 +340,8 @@ func (s *Server) serveAPI(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	switch {
+	case res.Group == apis.AuthorizationGroup || res.Group == apis.AuthenticationGroup:
+		err = s.review(w, r, res, ri)
 	case ri.name == "":
 		switch r.Method {
 		case http.MethodGet:
