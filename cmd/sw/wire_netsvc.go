@@ -10,7 +10,9 @@ import (
 	"shearwater/internal/apis"
 	"shearwater/internal/dns"
 	"shearwater/internal/edge"
+	"shearwater/internal/netpol"
 	"shearwater/internal/objects"
+	"shearwater/internal/runtime"
 	"shearwater/internal/store"
 )
 
@@ -77,4 +79,25 @@ func runNodeNetworkServices(ctx context.Context, r store.Reader, gateway netip.A
 	if err := srv.Run(ctx); err != nil && ctx.Err() == nil && logf != nil {
 		logf("cluster DNS stopped: %v", err)
 	}
+}
+
+// runNodeNetworkPolicy reconciles NetworkPolicy rules for this node's local
+// Pods until ctx ends. It runs on every node that has a node agent (control
+// plane and workers) next to runNodeNetworkServices.
+func runNodeNetworkPolicy(ctx context.Context, r store.Reader, podCIDR netip.Prefix, logf func(string, ...any)) {
+	if !podCIDR.IsValid() || !podCIDR.Addr().Is4() {
+		if logf != nil {
+			logf("network policy not started: invalid pod CIDR %s", podCIDR)
+		}
+		<-ctx.Done()
+		return
+	}
+	cidr := podCIDR.Masked()
+	m := &netpol.Manager{
+		Store:    r,
+		PodCIDR:  cidr,
+		DataPath: &runtime.KernelNetpol{PodCIDR: cidr},
+		Logf:     logf,
+	}
+	m.Run(ctx)
 }
