@@ -122,5 +122,11 @@ jobs:
           tar -xzf gitleaks.tar.gz
           ./gitleaks git "$GITHUB_WORKSPACE" --log-opts=--all --redact=100 --no-banner
 
-# Privileged runtime tests need an explicitly isolated Linux/WSL environment.
-# They are documented in docs/alpha-release.md; this job does not claim to run them.
+# These jobs run no containers. Two things with a real runtime live elsewhere:
+# - runtime-bench.yml runs sw on a GitHub-hosted runner as root, next to
+#   minikube, K3s and Docker Compose (manual and weekly, not per push), and
+#   records memory, deploy time and update errors. It is a comparison, not a
+#   pass/fail gate for this workflow.
+# - The alpha runtime checks (alpha-check.sh, M2-M6, restarts, reboots) need an
+#   explicitly isolated Linux/WSL environment and are not run by any workflow.
+#   See docs/alpha-release.md.
