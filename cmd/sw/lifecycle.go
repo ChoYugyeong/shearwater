@@ -330,9 +330,21 @@ func runUp(args []string) error {
 	fs := flag.NewFlagSet("sw up", flag.ContinueOnError)
 	var o opsOptions
 	o.flags(fs)
+	advertise := fs.String("advertise-address", "", "IPv4 address other servers and remote kubectl reach this control plane at; remembered in --config-dir")
 	if err := parseOps(fs, args, &o); err != nil {
 		return err
 	}
+	if *advertise != "" {
+		if err := saveAdvertise(o.ConfigDir, *advertise); err != nil {
+			return err
+		}
+	}
+	return upWith(o)
+}
+
+// upWith starts the managed server for o: a control plane, or a worker when
+// this server joined a cluster (sw join).
+func upWith(o opsOptions) error {
 	if o.Runtime == "containerd" && os.Geteuid() != 0 {
 		return needRoot("start the node")
 	}
@@ -356,10 +368,10 @@ func runUp(args []string) error {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			if err := apiReady(ctx, o); err != nil {
+			if err := readyCheck(ctx, o); err != nil {
 				return err
 			}
-			return printKubeconfig(o, "already running")
+			return printReady(o, "already running")
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
@@ -388,6 +400,9 @@ func runUp(args []string) error {
 	cmd := exec.Command(exe, "server", "--managed="+id, "--listen="+o.Listen, "--data-dir="+o.DataDir,
 		"--config-dir="+o.ConfigDir, "--run-dir="+o.RunDir, "--log-dir="+o.LogDir,
 		"--containerd-socket="+o.Socket, "--node-name="+o.NodeName, "--runtime="+o.Runtime)
+	if isWorker(o.ConfigDir) {
+		cmd.Args = append(cmd.Args, "--worker")
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	if err := cmd.Start(); err != nil {
@@ -401,8 +416,8 @@ func runUp(args []string) error {
 	defer tick.Stop()
 	for {
 		if st, err := readState(o.RunDir); err == nil && st.PID == cmd.Process.Pid && st.Instance == id {
-			if err := apiReady(ctx, o); err == nil {
-				return printKubeconfig(o, "running")
+			if err := readyCheck(ctx, o); err == nil {
+				return printReady(o, "running")
 			}
 		}
 		select {
@@ -424,6 +439,21 @@ func runUp(args []string) error {
 		case <-tick.C:
 		}
 	}
+}
+
+// readyCheck and printReady pick the control plane's or the worker's form.
+func readyCheck(ctx context.Context, o opsOptions) error {
+	if isWorker(o.ConfigDir) {
+		return workerReady(ctx, o)
+	}
+	return apiReady(ctx, o)
+}
+
+func printReady(o opsOptions, state string) error {
+	if isWorker(o.ConfigDir) {
+		return printWorker(o, state)
+	}
+	return printKubeconfig(o, state)
 }
 
 func apiReady(ctx context.Context, o opsOptions) error {

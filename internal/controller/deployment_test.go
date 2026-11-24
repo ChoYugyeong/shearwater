@@ -379,7 +379,7 @@ func TestPausedReplacementWaitsForSurgeSlot(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, _, err = objects.Delete(tx, podResource, rec, &p, m.NodeName, nil, time.Now())
+		_, _, err = objects.Delete(tx, podResource, rec, &p, nil, time.Now())
 		return err
 	}); err != nil {
 		t.Fatal(err)

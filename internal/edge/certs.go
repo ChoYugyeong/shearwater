@@ -32,10 +32,12 @@ type Certs struct {
 	Issuer Issuer
 	Now    func() time.Time
 
-	mu     sync.Mutex
-	certs  map[string]*tls.Certificate
-	tokens map[string]string // challenge path -> key authorization
-	state  map[string]*CertState
+	mu          sync.Mutex
+	certs       map[string]*tls.Certificate
+	secretCerts map[string]*tls.Certificate
+	secretState map[string]*CertState
+	tokens      map[string]string // challenge path -> key authorization
+	state       map[string]*CertState
 	// pending holds a renewed certificate whose validity has not started on
 	// this machine's clock yet; the current one is served until it has.
 	pending map[string]*pendingCert
@@ -76,7 +78,31 @@ func (c *Certs) now() time.Time {
 func (c *Certs) init() {
 	if c.certs == nil {
 		c.certs, c.tokens, c.state = map[string]*tls.Certificate{}, map[string]string{}, map[string]*CertState{}
+		c.secretCerts, c.secretState = map[string]*tls.Certificate{}, map[string]*CertState{}
 		c.pending = map[string]*pendingCert{}
+	}
+}
+
+// SetSecretCerts replaces the TLS certificates backed by kubernetes.io/tls
+// Secrets referenced from Ingress spec.tls[].secretName. Secret certificates
+// take precedence over ACME certificates for the same host and reflect Secret
+// updates immediately.
+func (c *Certs) SetSecretCerts(certs map[string]*tls.Certificate) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.init()
+	c.secretCerts = make(map[string]*tls.Certificate, len(certs))
+	c.secretState = make(map[string]*CertState, len(certs))
+	for host, cert := range certs {
+		if cert == nil {
+			continue
+		}
+		c.secretCerts[host] = cert
+		st := &CertState{Ready: true}
+		if leaf := leafOf(cert); leaf != nil {
+			st.NotAfter = leaf.NotAfter
+		}
+		c.secretState[host] = st
 	}
 }
 
@@ -119,6 +145,9 @@ func (c *Certs) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, er
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	host := requestHost(hello.ServerName)
+	if cert := c.secretCerts[host]; cert != nil {
+		return cert, nil
+	}
 	if p := c.pending[host]; p != nil && !c.now().Before(p.at) {
 		c.certs[host] = p.cert
 		delete(c.pending, host)
@@ -133,7 +162,7 @@ func (c *Certs) GetCertificate(hello *tls.ClientHelloInfo) (*tls.Certificate, er
 func (c *Certs) Ready(host string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.certs[host] != nil
+	return c.secretCerts[host] != nil || c.certs[host] != nil
 }
 
 // Challenge returns the HTTP-01 response for a request path, if one is active.
@@ -160,8 +189,11 @@ func (c *Certs) present(token, keyAuthorization string) func() {
 func (c *Certs) States() map[string]CertState {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make(map[string]CertState, len(c.state))
+	out := make(map[string]CertState, len(c.state)+len(c.secretState))
 	for h, s := range c.state {
+		out[h] = *s
+	}
+	for h, s := range c.secretState {
 		out[h] = *s
 	}
 	return out
@@ -211,6 +243,9 @@ func (c *Certs) Ensure(ctx context.Context, hosts []string) time.Duration {
 		}
 	}
 	c.mu.Unlock()
+	if c.Issuer == nil {
+		return 12 * time.Hour
+	}
 	next := 12 * time.Hour
 	for _, host := range hosts {
 		if ctx.Err() != nil {

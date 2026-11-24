@@ -31,6 +31,10 @@ type Net struct {
 	Dir         string // where pod namespaces are bound, /run/shearwater/netns
 	PodCIDR     netip.Prefix
 	ServiceCIDR netip.Prefix
+	// Overlay: this node is one of several and reaches the others' Pods
+	// through the VXLAN device. ClusterCIDR is every node's Pods together.
+	Overlay     bool
+	ClusterCIDR netip.Prefix
 
 	mu             sync.Mutex
 	mtu            uint32
@@ -98,6 +102,10 @@ func (n *Net) EnsureHost() error {
 		return err
 	}
 	n.mtu = uplinkMTU()
+	if n.Overlay {
+		// Pod packets to other nodes are wrapped in VXLAN; leave room.
+		n.mtu -= OverlayOverhead
+	}
 
 	s, err := nlOpen()
 	if err != nil {

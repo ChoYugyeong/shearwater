@@ -163,6 +163,11 @@ func (a *Agent) cleanup(ctx context.Context, uid string, actual []runtime.Contai
 	if keepIP {
 		return 0, nil
 	}
+	if ips, err := a.Store.IPs("pod"); err != nil {
+		return failureRetry, err
+	} else if ip, ok := ips[uid]; ok && !a.ownsAddr(ip) {
+		return 0, nil // a Pod of another node: its address is that node's to release
+	}
 	if a.RetirePod != nil {
 		if err := a.RetirePod(ctx, uid); err != nil {
 			return failureRetry, err
@@ -219,7 +224,7 @@ func (a *Agent) terminate(ctx context.Context, pod *apis.Pod, actual []runtime.C
 	a.forgetPod(uid, pod.Spec.Containers)
 
 	key := objects.Key(podsRes, pod.Metadata.Namespace, pod.Metadata.Name)
-	err := a.Store.Write(false, func(tx *store.Tx) error {
+	err := a.Store.Transact(func(tx store.Txn) error {
 		rec, err := tx.Get(key)
 		if errors.Is(err, store.ErrNotFound) || (err == nil && rec.UID != uid) {
 			return nil // already gone
@@ -652,7 +657,7 @@ func (a *Agent) containerConfig(pod *apis.Pod, c *apis.Container, attempt int, v
 		if !ok {
 			return cfg, fmt.Errorf("volume %q is not prepared", vm.Name)
 		}
-		cfg.Mounts = append(cfg.Mounts, runtime.Mount{Source: src, Destination: vm.MountPath, ReadOnly: vm.ReadOnly})
+		cfg.Mounts = append(cfg.Mounts, runtime.Mount{Source: src, Destination: vm.MountPath, ReadOnly: vm.ReadOnly || claimReadOnly(pod, vm.Name)})
 	}
 	if q, ok := c.Resources.Limits["cpu"]; ok {
 		milli, err := q.MilliValue()
@@ -743,7 +748,7 @@ func (a *Agent) writeStatus(pod *apis.Pod, st apis.PodStatus) error {
 		return nil
 	}
 	key := objects.Key(podsRes, pod.Metadata.Namespace, pod.Metadata.Name)
-	return a.Store.Write(false, func(tx *store.Tx) error {
+	return a.Store.Transact(func(tx store.Txn) error {
 		rec, err := tx.Get(key)
 		if errors.Is(err, store.ErrNotFound) || (err == nil && rec.UID != pod.Metadata.UID) {
 			return nil // deleted meanwhile; the next look cleans up
@@ -770,7 +775,7 @@ func (a *Agent) writeStatus(pod *apis.Pod, st apis.PodStatus) error {
 	})
 }
 
-func (a *Agent) recordTransitions(tx *store.Tx, pod *apis.Pod, old apis.PodStatus) error {
+func (a *Agent) recordTransitions(tx store.Txn, pod *apis.Pod, old apis.PodStatus) error {
 	for _, cs := range pod.Status.ContainerStatuses {
 		i := slices.IndexFunc(old.ContainerStatuses, func(c apis.ContainerStatus) bool { return c.Name == cs.Name })
 		var before apis.ContainerStatus

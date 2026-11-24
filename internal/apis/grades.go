@@ -19,7 +19,7 @@ func (f StoredField) Warning() string {
 }
 
 const (
-	noteScheduling = "there is one node and no scheduling rules are evaluated"
+	noteScheduling = "the scheduler evaluates node selectors, node affinity, taints and tolerations, not Pod affinity"
 	noteSecurity   = "containers run with the runtime's default security settings"
 )
 
@@ -33,17 +33,13 @@ func StoredOnly(o Object) []StoredField {
 		out = append(out, StoredField{Field: field, Value: string(b), Note: note})
 	}
 	podSpec := func(s *PodSpec, path string) {
-		if s.DNSPolicy != "" && s.DNSPolicy != "ClusterFirst" {
-			add(path+".dnsPolicy", s.DNSPolicy, "there is no cluster DNS in stage 1")
-		}
-		if len(s.NodeSelector) > 0 {
-			add(path+".nodeSelector", s.NodeSelector, noteScheduling)
-		}
-		if !rawEmpty(s.Affinity) {
-			add(path+".affinity", s.Affinity, noteScheduling)
-		}
-		if !rawEmpty(s.Tolerations) {
-			add(path+".tolerations", s.Tolerations, noteScheduling)
+		if a := s.Affinity; a != nil {
+			if !rawEmpty(a.PodAffinity) {
+				add(path+".affinity.podAffinity", a.PodAffinity, noteScheduling)
+			}
+			if !rawEmpty(a.PodAntiAffinity) {
+				add(path+".affinity.podAntiAffinity", a.PodAntiAffinity, noteScheduling)
+			}
 		}
 		if s.PriorityClassName != "" {
 			add(path+".priorityClassName", s.PriorityClassName, "there are no priority classes and no preemption")
@@ -54,15 +50,20 @@ func StoredOnly(o Object) []StoredField {
 		for i := range s.Containers {
 			c := &s.Containers[i]
 			cp := fmt.Sprintf("%s.containers[%d]", path, i)
-			if len(c.Resources.Requests) > 0 {
-				add(cp+".resources.requests", c.Resources.Requests, "only limits are enforced; requests are not used for placement")
-			}
 			if !rawEmpty(c.SecurityContext) {
 				add(cp+".securityContext", c.SecurityContext, noteSecurity)
 			}
 		}
 	}
 	switch v := o.(type) {
+	case *PersistentVolume:
+		add("spec.capacity.storage", v.Spec.Capacity["storage"], "used to match claims; the directory has no filesystem quota")
+	case *PersistentVolumeClaim:
+		add("spec.resources.requests.storage", v.Spec.Resources.Requests["storage"], "used for binding and namespace accounting; the directory has no filesystem quota")
+	case *StorageClass:
+		if v.AllowVolumeExpansion != nil && *v.AllowVolumeExpansion {
+			add("allowVolumeExpansion", true, "volume expansion is not implemented")
+		}
 	case *Pod:
 		podSpec(&v.Spec, "spec")
 	case *Deployment:
@@ -81,9 +82,6 @@ func StoredOnly(o Object) []StoredField {
 	case *Service:
 		if a := v.Spec.SessionAffinity; a != "" && a != "None" {
 			add("spec.sessionAffinity", a, "the service proxy does not pin a client to one pod")
-		}
-		if v.Spec.ClusterIP == "None" {
-			add("spec.clusterIP", "None", "a headless service needs cluster DNS, which stage 1 does not have")
 		}
 	}
 	return out

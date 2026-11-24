@@ -2,6 +2,7 @@ package controller
 
 import (
 	"cmp"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -146,7 +147,7 @@ func (m Manager) replicaSet(tx *store.Tx, i *item, v view, budget *int, now time
 					}
 				}
 			}
-			rec, _, err := objects.Delete(tx, child.res, child.rec, child.obj, m.NodeName, nil, now)
+			rec, _, err := objects.Delete(tx, child.res, child.rec, child.obj, nil, now)
 			if err != nil {
 				return err
 			}
@@ -170,6 +171,18 @@ func (m Manager) replicaSet(tx *store.Tx, i *item, v view, budget *int, now time
 		objects.Stamp(podResource, p)
 		setPodDeployment(p, slots)
 		p.Metadata.Name = p.Metadata.GenerateName + p.Metadata.UID[:8]
+		if m.AdmitPod != nil && v.quotas[p.Metadata.Namespace] {
+			// Quota usage is read from committed state, so a namespace with a
+			// quota gets one new Pod per pass; the next pass follows the commit.
+			if v.quotaCreated[p.Metadata.Namespace] {
+				break
+			}
+			if err := m.AdmitPod(tx, p); err != nil {
+				return objects.ObjectEvent(tx, i.res, &rs.Metadata, now, "create", "FailedCreate",
+					fmt.Sprintf("Error creating: pods %q is forbidden: %v", p.Metadata.GenerateName, err), "shearwater-controller", "Warning")
+			}
+			v.quotaCreated[p.Metadata.Namespace] = true
+		}
 		if _, err := tx.Create(objects.Put(podResource, p)); err != nil {
 			return err
 		}

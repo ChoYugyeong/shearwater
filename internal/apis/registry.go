@@ -12,8 +12,11 @@ type Resource struct {
 	Namespaced     bool
 
 	Create, Update, Delete bool // through the API; get and list always work
-	StatusSub              bool // has /status
-	ScaleSub               bool // has /scale
+	// CreateOnly: answered, not stored (access reviews); only "create" is
+	// advertised and get, list and watch do not apply.
+	CreateOnly bool
+	StatusSub  bool // has /status
+	ScaleSub   bool // has /scale
 
 	// AnnotationsMoveGeneration: metadata.generation goes up when the
 	// annotations change, not only when the spec does. Kubernetes does this for
@@ -66,7 +69,10 @@ var Resources = []*Resource{
 	},
 	{
 		Version: "v1", Plural: "nodes", Singular: "node", Kind: "Node", ShortNames: []string{"no"},
-		New: func() Object { return &Node{} },
+		Update: true, Delete: true, // cordon, taints, labels; removing a node that is gone
+		New:            func() Object { return &Node{} },
+		Validate:       func(o Object) ErrorList { return ValidateNode(o.(*Node)) },
+		ValidateUpdate: func(o, old Object) ErrorList { return ValidateNodeUpdate(o.(*Node), old.(*Node)) },
 	},
 	{
 		Version: "v1", Plural: "pods", Singular: "pod", Kind: "Pod", ShortNames: []string{"po"}, Categories: all,
@@ -128,6 +134,17 @@ var Resources = []*Resource{
 		Namespaced: true,
 		New:        func() Object { return &EndpointSlice{} },
 	},
+}
+
+// Register adds a resource from a feature's own file, from an init function,
+// so features do not all edit the list above. Registered resources come after
+// the built-in ones, in file-name order. A second resource with the same
+// group, version and plural is a programming error.
+func Register(r *Resource) {
+	if Lookup(r.Group, r.Version, r.Plural) != nil {
+		panic("apis: " + r.APIVersion() + " " + r.Plural + " is registered twice")
+	}
+	Resources = append(Resources, r)
 }
 
 func Lookup(group, version, plural string) *Resource {

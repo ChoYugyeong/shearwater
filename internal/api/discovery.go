@@ -28,6 +28,9 @@ type apiResource struct {
 }
 
 func verbs(res *apis.Resource) []string {
+	if res.CreateOnly {
+		return []string{"create"}
+	}
 	v := []string{"get", "list", "watch"}
 	if res.Create {
 		v = append(v, "create")

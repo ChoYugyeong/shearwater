@@ -28,13 +28,14 @@ const (
 var podsRes = apis.Lookup("", "v1", "pods")
 
 type Agent struct {
-	Store     *store.Store
+	Store     store.Backend // *store.Store on the control plane, the node API client on a worker
 	Runtime   runtime.Runtime
 	Net       runtime.Network
 	NodeName  string
 	DataDir   string       // /var/lib/shearwater
 	LogDir    string       // /var/log/shearwater
-	PodCIDR   netip.Prefix // 10.244.0.0/24
+	PodCIDR   netip.Prefix // this node's pod range: 10.244.0.0/24 on the control plane, another /24 on a worker
+	NodeIP    string       // the address other nodes reach this node at ("" picks the host's first address)
 	Version   string       // reported as the kubelet version
 	Now       func() time.Time
 	Logf      func(format string, args ...any)
@@ -184,6 +185,9 @@ func (a *Agent) observe(c store.Change) {
 // every uid that still has a container, a namespace or an address. It returns
 // the revision the pod list was read at.
 func (a *Agent) resync(ctx context.Context) int64 {
+	if err := a.collectVolumes(); err != nil {
+		a.Logf("collecting persistent volumes: %v", err)
+	}
 	if err := a.Runtime.SweepSnapshots(ctx); err != nil {
 		a.Logf("checking for orphan snapshots: %v", err)
 	}
@@ -214,8 +218,12 @@ func (a *Agent) resync(ctx context.Context) int64 {
 		}
 	}
 	if ips, err := a.Store.IPs("pod"); err == nil {
-		for uid := range ips {
-			uids[uid] = true
+		for uid, ip := range ips {
+			// With several nodes the table also holds other nodes' Pods.
+			// Their addresses are not ours to look after or give back.
+			if a.ownsAddr(ip) {
+				uids[uid] = true
+			}
 		}
 	}
 	for uid := range uids {
@@ -308,4 +316,10 @@ func (a *Agent) forgetPod(uid string, containers []apis.Container) {
 		delete(a.resets, uid+"/"+c.Name)
 		delete(a.probes, uid+"/"+c.Name)
 	}
+}
+
+// ownsAddr reports whether ip is in this node's pod range.
+func (a *Agent) ownsAddr(ip string) bool {
+	addr, err := netip.ParseAddr(ip)
+	return err == nil && a.PodCIDR.Masked().Contains(addr)
 }

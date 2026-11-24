@@ -124,7 +124,7 @@ func pruneHistory(tx *store.Tx, d *apis.Deployment, old []*rolloutSet, now time.
 		if i.rec.Deleting || s.live != 0 || s.target != 0 {
 			continue
 		}
-		if _, _, err := objects.Delete(tx, i.res, i.rec, i.obj, "", nil, now); err != nil {
+		if _, _, err := objects.Delete(tx, i.res, i.rec, i.obj, nil, now); err != nil {
 			return err
 		}
 		// The ReplicaSet loop shares this view. Skip this set later in the pass

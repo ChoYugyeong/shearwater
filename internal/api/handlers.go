@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"shearwater/internal/admission"
 	"shearwater/internal/apis"
 	"shearwater/internal/objects"
 	"shearwater/internal/patch"
@@ -286,6 +287,10 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request, res *apis.Resour
 				return newErr(http.StatusForbidden, "Forbidden", "FORBIDDEN", "never", "namespace %q is being deleted; nothing can be created in it", m.Namespace)
 			}
 		}
+		if err := s.admit(admission.Request{Identity: ri.id, Operation: admission.Create, Resource: res,
+			Namespace: m.Namespace, Name: m.Name, Object: obj, Tx: tx, DryRun: dry}); err != nil {
+			return err
+		}
 		if svc, ok := obj.(*apis.Service); ok && svc.Spec.ClusterIP != "None" {
 			if err := allocateNewServiceIP(tx, res, svc); err != nil {
 				return err
@@ -387,6 +392,11 @@ func (s *Server) replace(tx *store.Tx, q url.Values, res *apis.Resource, ri reqI
 	}
 	if len(errs) > 0 {
 		return rec, nil, errInvalid(res, ri.name, errs)
+	}
+	dry, _ := dryRun(q)
+	if err := s.admit(admission.Request{Identity: ri.id, Operation: admission.Update, Resource: res,
+		Namespace: om.Namespace, Name: ri.name, Object: obj, Old: old, Tx: tx, DryRun: dry}); err != nil {
+		return rec, nil, err
 	}
 	if !bytes.Equal(apis.SpecJSON(obj), apis.SpecJSON(old)) ||
 		(res.AnnotationsMoveGeneration && !maps.Equal(m.Annotations, om.Annotations)) {
@@ -661,7 +671,7 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request, res *apis.Resour
 				}
 			}
 		}
-		rec, pending, err = objects.Delete(tx, res, cur, obj, s.NodeName, opts.GracePeriodSeconds, timeNow())
+		rec, pending, err = objects.Delete(tx, res, cur, obj, opts.GracePeriodSeconds, timeNow())
 		return err
 	})
 	if err != nil {

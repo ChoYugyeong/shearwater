@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"shearwater/internal/apis"
+	"shearwater/internal/objects"
 	"shearwater/internal/store"
 )
 
@@ -35,9 +36,9 @@ type Server struct {
 	// OnStatus receives the routing and certificate state after each change.
 	OnStatus func(Status)
 
-	routes atomic.Pointer[map[string]Route]
-	proxy  *httputil.ReverseProxy
-	last   string
+	table atomic.Pointer[Table]
+	proxy *httputil.ReverseProxy
+	last  string
 }
 
 // Status is the state `sw edge status` prints.
@@ -85,18 +86,12 @@ func (s *Server) init() {
 		},
 		ErrorLog: log.New(discard{}, "", 0),
 	}
-	empty := map[string]Route{}
-	s.routes.Store(&empty)
+	s.table.Store(emptyTable())
 }
 
 type discard struct{}
 
 func (discard) Write(p []byte) (int, error) { return len(p), nil }
-
-func (s *Server) lookup(hostport string) (Route, bool) {
-	route, ok := (*s.routes.Load())[requestHost(hostport)]
-	return route, ok
-}
 
 func (s *Server) forward(w http.ResponseWriter, r *http.Request, route Route) {
 	s.proxy.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), routeKey{}, route)))
@@ -110,17 +105,23 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	route, ok := s.lookup(r.Host)
+	tbl := s.table.Load()
+	reqHost := requestHost(r.Host)
+	route, ok := tbl.Match(r.Host, r.URL.Path)
+	namedHost := route.Host
+	if namedHost == "" && tbl.HasHost(reqHost) {
+		namedHost = reqHost
+	}
 	switch {
 	case !ok:
 		http.Error(w, "no app is published at this host name", http.StatusNotFound)
-	case s.HTTPS == nil:
+	case s.HTTPS == nil || namedHost == "":
 		s.forward(w, r, route)
-	case !s.Certs.Ready(route.Host):
+	case !s.Certs.Ready(namedHost):
 		w.Header().Set("Retry-After", "30")
 		http.Error(w, "the certificate for this host is not ready yet", http.StatusServiceUnavailable)
 	default:
-		target := "https://" + route.Host
+		target := "https://" + namedHost
 		if _, port, err := net.SplitHostPort(s.HTTPS.Addr().String()); err == nil && port != "443" {
 			target += ":" + port
 		}
@@ -129,47 +130,132 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) serveHTTPS(w http.ResponseWriter, r *http.Request) {
-	route, ok := s.lookup(r.Host)
+	tbl := s.table.Load()
+	reqHost := requestHost(r.Host)
 	// The certificate was chosen by TLS server name; refuse a different Host
 	// header so one published app cannot be reached under another's name.
-	if !ok || r.TLS == nil || requestHost(r.TLS.ServerName) != route.Host {
+	if r.TLS == nil || reqHost == "" || requestHost(r.TLS.ServerName) != reqHost || !tbl.HasHost(reqHost) {
 		http.Error(w, "no app is published at this host name", http.StatusMisdirectedRequest)
+		return
+	}
+	route, ok := tbl.Match(r.Host, r.URL.Path)
+	if !ok {
+		http.Error(w, "no app is published at this path", http.StatusNotFound)
 		return
 	}
 	s.forward(w, r, route)
 }
 
 func (s *Server) refresh() ([]string, []string, error) {
-	records, _, err := s.Store.List("", "services", "")
+	svcRecs, _, err := s.Store.List("", "services", "")
 	if err != nil {
 		return nil, nil, err
 	}
-	services := make([]apis.Service, 0, len(records))
-	for _, rec := range records {
+	ingRecs, _, err := s.Store.List("networking.k8s.io", "ingresses", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	secRecs, _, err := s.Store.List("", "secrets", "")
+	if err != nil {
+		return nil, nil, err
+	}
+	services := make([]apis.Service, 0, len(svcRecs))
+	for _, rec := range svcRecs {
 		var svc apis.Service
 		if json.Unmarshal(rec.Data, &svc) == nil {
 			services = append(services, svc)
 		}
 	}
-	routes, problems := Routes(services)
-	s.routes.Store(&routes)
-	hosts := make([]string, 0, len(routes))
-	for h := range routes {
-		hosts = append(hosts, h)
+	ingresses := make([]apis.Ingress, 0, len(ingRecs))
+	for _, rec := range ingRecs {
+		var ing apis.Ingress
+		if json.Unmarshal(rec.Data, &ing) == nil {
+			ingresses = append(ingresses, ing)
+		}
 	}
-	slices.Sort(hosts)
-	return hosts, problems, nil
+	secrets := make([]apis.Secret, 0, len(secRecs))
+	for _, rec := range secRecs {
+		var sec apis.Secret
+		if json.Unmarshal(rec.Data, &sec) == nil {
+			secrets = append(secrets, sec)
+		}
+	}
+	tbl, problems := BuildTable(services, ingresses)
+	if s.Certs != nil {
+		secretCerts, certProblems := LoadSecretCerts(tbl.SecretTLS, secrets)
+		problems = append(problems, certProblems...)
+		s.Certs.SetSecretCerts(secretCerts)
+	}
+	s.table.Store(tbl)
+	s.syncIngressStatus(ingRecs)
+	return tbl.ACMEHosts, problems, nil
 }
 
-func (s *Server) report(hosts, problems []string) {
+func (s *Server) listenIP() string {
+	if s.HTTP == nil {
+		return ""
+	}
+	if ta, ok := s.HTTP.Addr().(*net.TCPAddr); ok && ta.IP != nil && !ta.IP.IsUnspecified() {
+		return ta.IP.String()
+	}
+	c, err := net.Dial("udp4", "192.0.2.1:9")
+	if err != nil {
+		return ""
+	}
+	defer c.Close()
+	if ua, ok := c.LocalAddr().(*net.UDPAddr); ok && ua.IP != nil {
+		return ua.IP.String()
+	}
+	return ""
+}
+
+func (s *Server) syncIngressStatus(ingRecs []store.Record) {
+	ip := s.listenIP()
+	if ip == "" || len(ingRecs) == 0 {
+		return
+	}
+	res := apis.Lookup("networking.k8s.io", "v1", "ingresses")
+	if res == nil {
+		return
+	}
+	for _, rec := range ingRecs {
+		if rec.Deleting {
+			continue
+		}
+		var ing apis.Ingress
+		if json.Unmarshal(rec.Data, &ing) != nil || !HandlesIngress(&ing) {
+			continue
+		}
+		lb := ing.Status.LoadBalancer.Ingress
+		if len(lb) == 1 && lb[0].IP == ip && lb[0].Hostname == "" && len(lb[0].Ports) == 0 {
+			continue
+		}
+		_ = s.Store.Write(false, func(tx *store.Tx) error {
+			cur, err := tx.Get(rec.Key)
+			if err != nil || cur.Deleting || cur.UID != rec.UID {
+				return nil
+			}
+			var latest apis.Ingress
+			if json.Unmarshal(cur.Data, &latest) != nil || !HandlesIngress(&latest) {
+				return nil
+			}
+			latest.Status.LoadBalancer.Ingress = []apis.IngressLoadBalancerIngress{{IP: ip}}
+			_, _, err = tx.Update(objects.Put(res, &latest), cur.Rev)
+			return err
+		})
+	}
+}
+
+func (s *Server) report(problems []string) {
 	if s.OnStatus == nil {
 		return
 	}
-	st := Status{HTTP: s.HTTP.Addr().String(), Problems: problems, Routes: []Route{}}
-	routes := *s.routes.Load()
-	for _, h := range hosts {
-		st.Routes = append(st.Routes, routes[h])
+	tbl := s.table.Load()
+	routes := slices.Clone(tbl.AllRoutes)
+	if routes == nil {
+		routes = []Route{}
 	}
+	st := Status{HTTP: s.HTTP.Addr().String(), Problems: problems, Routes: routes}
 	if s.HTTPS != nil {
 		st.HTTPS, st.Certs = s.HTTPS.Addr().String(), s.Certs.States()
 	}
@@ -226,7 +312,7 @@ func (s *Server) Run(ctx context.Context) error {
 				mu.Unlock()
 				wait := s.Certs.Ensure(ctx, current)
 				mu.Lock()
-				s.report(hosts, problems)
+				s.report(problems)
 				mu.Unlock()
 				t := time.NewTimer(wait)
 				select {
@@ -250,7 +336,7 @@ func (s *Server) Run(ctx context.Context) error {
 			mu.Lock()
 			grew := !slices.Equal(h, hosts)
 			hosts, problems = h, p
-			s.report(hosts, problems)
+			s.report(problems)
 			mu.Unlock()
 			if grew {
 				select {

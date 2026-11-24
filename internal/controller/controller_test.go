@@ -22,6 +22,13 @@ func testManager(t *testing.T) Manager {
 	return Manager{Store: db, NodeName: "test"}
 }
 
+// withNode creates the test node without conditions: it exists, so its Pods
+// are deleted gracefully, but it is not Ready.
+func withNode(t *testing.T, m Manager) {
+	t.Helper()
+	create(t, m, apis.Lookup("", "v1", "nodes"), &apis.Node{Metadata: apis.ObjectMeta{Name: m.NodeName}})
+}
+
 func create(t *testing.T, m Manager, res *apis.Resource, obj apis.Object) {
 	t.Helper()
 	objects.Stamp(res, obj)
@@ -137,7 +144,7 @@ func TestForegroundWaitsForBlockingGrandchild(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, _, err = objects.Delete(tx, res, r, d, m.NodeName, nil, time.Now())
+		_, _, err = objects.Delete(tx, res, r, d, nil, time.Now())
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -199,7 +206,7 @@ func TestForegroundBreaksBlockingOwnershipCycle(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		_, _, err = objects.Delete(tx, podResource, r, a, m.NodeName, nil, time.Now())
+		_, _, err = objects.Delete(tx, podResource, r, a, nil, time.Now())
 		return err
 	}); err != nil {
 		t.Fatal(err)

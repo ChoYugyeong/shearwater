@@ -83,7 +83,13 @@ func (n *Net) CheckHostRanges(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// The overlay device carries this node's network address, so the kernel
+	// keeps a local /32 route for it inside the Pod range.
+	overlay := s.overlayIndex()
 	for _, r := range routes {
+		if overlay != 0 && r.index == overlay {
+			continue
+		}
 		if r.prefix.Overlaps(n.PodCIDR) && !(br.index != 0 && r.index == br.index && r.prefix.Bits() >= n.PodCIDR.Bits()) {
 			return fmt.Errorf("Pod range %s overlaps host route %s", n.PodCIDR, r.prefix)
 		}
@@ -96,7 +102,7 @@ func (n *Net) CheckHostRanges(ctx context.Context) error {
 		return err
 	}
 	for _, a := range addresses {
-		if (n.PodCIDR.Contains(a.prefix.Addr()) && a.index != br.index) ||
+		if (n.PodCIDR.Contains(a.prefix.Addr()) && a.index != br.index && (overlay == 0 || a.index != overlay)) ||
 			(n.ServiceCIDR.Contains(a.prefix.Addr()) && a.index != svc.index) {
 			return fmt.Errorf("host interface %d already has address %s in a Shearwater range", a.index, a.prefix)
 		}
@@ -119,6 +125,10 @@ func CheckIPv4Forwarding() error {
 // namespace mounts have been stopped. It removes our links, chains and exact
 // jump rules. It never flushes a shared table or changes a system-wide sysctl.
 func (n *Net) TeardownHost(ctx context.Context) error {
+	// NetworkPolicy chains hang off SHEARWATER-FORWARD; they go first.
+	if err := (&KernelNetpol{PodCIDR: n.PodCIDR}).Teardown(ctx); err != nil {
+		return err
+	}
 	s, err := nlOpenContext(ctx)
 	if err != nil {
 		return err
@@ -158,7 +168,7 @@ func (n *Net) TeardownHost(ctx context.Context) error {
 			}
 		}
 	}
-	return nil
+	return TeardownOverlay()
 }
 
 func iptablesOutput(ctx context.Context, args ...string) (string, error) {
@@ -174,6 +184,9 @@ func iptablesOutput(ctx context.Context, args ...string) (string, error) {
 type chainSpec struct {
 	table, name string
 	rules       [][]string
+	// optional rows another Shearwater part may have put in this chain (the
+	// NetworkPolicy jump); they are neither required nor foreign.
+	optional []string
 }
 
 type chainState struct {
@@ -183,17 +196,27 @@ type chainState struct {
 
 func (n *Net) chainSpecs() []chainSpec {
 	br, pods, svcs := n.Bridge, n.PodCIDR.String(), n.ServiceCIDR.String()
+	forward := [][]string{
+		{"-i", br, "-o", br, "-j", "ACCEPT"},
+		{"-i", br, "!", "-o", br, "-j", "ACCEPT"},
+		{"-o", br, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"},
+	}
+	nat := [][]string{
+		{"-d", pods, "-j", "RETURN"},
+		{"-d", svcs, "-j", "RETURN"},
+	}
+	if n.Overlay {
+		// Rules are only ever added to these chains, never rewritten, so a
+		// node that existed before it joined a cluster keeps its chains.
+		// Pods of other nodes arrive through the overlay device.
+		forward = append(forward, []string{"-i", OverlayName, "-o", br, "-j", "ACCEPT"})
+		// Traffic to other nodes' Pods keeps its source address.
+		nat = append(nat, []string{"-d", n.ClusterCIDR.String(), "-j", "RETURN"})
+	}
+	nat = append(nat, []string{"!", "-o", br, "-j", "MASQUERADE"})
 	return []chainSpec{
-		{"filter", forwardChain, [][]string{
-			{"-i", br, "-o", br, "-j", "ACCEPT"},
-			{"-i", br, "!", "-o", br, "-j", "ACCEPT"},
-			{"-o", br, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"},
-		}},
-		{"nat", postroutingName, [][]string{
-			{"-d", pods, "-j", "RETURN"},
-			{"-d", svcs, "-j", "RETURN"},
-			{"!", "-o", br, "-j", "MASQUERADE"},
-		}},
+		{"filter", forwardChain, forward, []string{"-A " + forwardChain + " -j " + netpolChain}},
+		{"nat", postroutingName, nat, nil},
 	}
 }
 
@@ -214,6 +237,9 @@ func (c chainSpec) read(ctx context.Context) (chainState, error) {
 	}
 	s := chainState{exists: true}
 	for _, row := range rows[1:] {
+		if slices.Contains(c.optional, row) {
+			continue
+		}
 		i := slices.IndexFunc(c.rules, func(rule []string) bool {
 			return row == "-A "+c.name+" "+strings.Join(rule, " ")
 		})

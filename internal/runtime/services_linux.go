@@ -36,8 +36,11 @@ type ServiceRoute struct {
 // retiring Pod's address must not be released until both have succeeded.
 type KernelServices struct {
 	PodCIDR, ServiceCIDR netip.Prefix
-	last                 string
-	checked              time.Time
+	// ClusterCIDR holds the backends of every node when there are several
+	// (zero: only this node's PodCIDR).
+	ClusterCIDR netip.Prefix
+	last        string
+	checked     time.Time
 }
 
 func (k *KernelServices) validate(routes []ServiceRoute) error {
@@ -47,8 +50,12 @@ func (k *KernelServices) validate(routes []ServiceRoute) error {
 			return fmt.Errorf("invalid or duplicate Service route %s", r.Address)
 		}
 		seen[r.Address] = true
+		backends := k.PodCIDR
+		if k.ClusterCIDR.IsValid() {
+			backends = k.ClusterCIDR
+		}
 		for _, b := range r.Backends {
-			if !IsUID(b.UID) || !b.Address.Addr().Is4() || !k.PodCIDR.Contains(b.Address.Addr()) || b.Address.Port() == 0 {
+			if !IsUID(b.UID) || !b.Address.Addr().Is4() || !backends.Contains(b.Address.Addr()) || b.Address.Port() == 0 {
 				return fmt.Errorf("invalid Service backend %s", b.Address)
 			}
 		}
@@ -96,7 +103,7 @@ func ownedServiceRule(row, chain string) bool {
 	for i := 0; i < len(f); i += 2 {
 		key, value := f[i], strings.Trim(f[i+1], "\"")
 		if key == "-m" {
-			if modules[value] || (value != "comment" && value != "tcp" && value != "conntrack" && value != "statistic") {
+			if modules[value] || (value != "comment" && value != "tcp" && value != "conntrack" && value != "statistic" && value != "addrtype") {
 				return false
 			}
 			modules[value] = true
@@ -120,6 +127,13 @@ func ownedServiceRule(row, chain string) bool {
 			return err == nil && ip.Addr().Is4() && ip.Port() == 9
 		}
 		if chain == serviceSNAT && target == "MASQUERADE" && options["-p"] == "tcp" && options["--ctstate"] == "DNAT" && len(options) == 7 && len(modules) == 2 && modules["conntrack"] {
+			d, e1 := netip.ParsePrefix(options["-d"])
+			o, e2 := netip.ParsePrefix(options["--ctorigdst"])
+			return e1 == nil && e2 == nil && d.Addr().Is4() && o.Addr().Is4()
+		}
+		// The host's own Service connections to Pods on other nodes.
+		if chain == serviceSNAT && target == "MASQUERADE" && options["-p"] == "tcp" && options["--ctstate"] == "DNAT" &&
+			options["--src-type"] == "LOCAL" && len(options) == 8 && len(modules) == 3 && modules["conntrack"] && modules["addrtype"] {
 			d, e1 := netip.ParsePrefix(options["-d"])
 			o, e2 := netip.ParsePrefix(options["--ctorigdst"])
 			return e1 == nil && e2 == nil && d.Addr().Is4() && o.Addr().Is4()
@@ -240,6 +254,15 @@ func (k *KernelServices) rules(routes []ServiceRoute, blocked map[netip.Addr]boo
 	// SNAT also handles a Pod connecting to its own Service (hairpin). Match
 	// the ORIGINAL destination, so direct Pod traffic keeps its source IP.
 	fmt.Fprintf(&nat, "-A %s -p tcp -d %s -m conntrack --ctorigdst %s --ctstate DNAT -m comment --comment %s -j MASQUERADE\n", serviceSNAT, k.PodCIDR, k.ServiceCIDR, serviceMarker)
+	if k.ClusterCIDR.IsValid() {
+		// A connection the host itself makes to a ClusterIP (the public
+		// entry, a probe of a Service) has the VIP's local address as its
+		// source. Sent on to a Pod on another node, the reply would go to that
+		// node's own copy of the VIP. Masquerade those, as kube-proxy does;
+		// Pod traffic keeps its source address for NetworkPolicy.
+		fmt.Fprintf(&nat, "-A %s -p tcp -d %s -m addrtype --src-type LOCAL -m conntrack --ctorigdst %s --ctstate DNAT -m comment --comment %s -j MASQUERADE\n",
+			serviceSNAT, k.ClusterCIDR, k.ServiceCIDR, serviceMarker)
+	}
 	fmt.Fprintln(&nat, markerRule(serviceSNAT))
 	fmt.Fprintln(&nat, "COMMIT")
 	fmt.Fprintln(&filter, markerRule(serviceInput))
@@ -284,13 +307,25 @@ func restoreServiceRules(ctx context.Context, script string) error {
 	return nil
 }
 
+// DefaultClusterCIDR is the cluster range sw down --all also cleans up after,
+// whether or not this run knew it was part of a cluster.
+var DefaultClusterCIDR = netip.MustParsePrefix("10.244.0.0/16")
+
 func (k *KernelServices) hooks() []chainSpec {
-	return []chainSpec{
-		{"nat", "PREROUTING", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceNAT}}},
-		{"nat", "OUTPUT", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceNAT}}},
-		{"nat", "POSTROUTING", [][]string{{"-d", k.PodCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceSNAT}}},
-		{"filter", "INPUT", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceInput}}},
+	hooks := []chainSpec{
+		{"nat", "PREROUTING", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceNAT}}, nil},
+		{"nat", "OUTPUT", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceNAT}}, nil},
+		{"nat", "POSTROUTING", [][]string{{"-d", k.PodCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceSNAT}}, nil},
+		{"filter", "INPUT", [][]string{{"-d", k.ServiceCIDR.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceInput}}, nil},
 	}
+	if k.ClusterCIDR.IsValid() {
+		hooks = append(hooks, clusterSNATHook(k.ClusterCIDR))
+	}
+	return hooks
+}
+
+func clusterSNATHook(cluster netip.Prefix) chainSpec {
+	return chainSpec{"nat", "POSTROUTING", [][]string{{"-d", cluster.String(), "-m", "comment", "--comment", serviceMarker, "-j", serviceSNAT}}, nil}
 }
 
 func (k *KernelServices) Reconcile(ctx context.Context, routes []ServiceRoute) error {
@@ -407,7 +442,12 @@ func (k *KernelServices) Teardown(ctx context.Context) error {
 		}
 		all[i] = rows
 	}
-	for _, h := range k.hooks() {
+	hooks := k.hooks()
+	if !k.ClusterCIDR.IsValid() {
+		// sw down --all does not know whether this node joined a cluster.
+		hooks = append(hooks, clusterSNATHook(DefaultClusterCIDR))
+	}
+	for _, h := range hooks {
 		if _, err := iptablesOutput(ctx, append([]string{"-t", h.table, "-C", h.name}, h.rules[0]...)...); err != nil {
 			continue
 		}

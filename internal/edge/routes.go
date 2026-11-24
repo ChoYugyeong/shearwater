@@ -24,12 +24,15 @@ const (
 	maxHosts       = 8
 )
 
-// Route sends one public host name to one Service port.
+// Route sends one public host (and optional path) to one Service port.
 type Route struct {
 	Host      string `json:"host"`
+	Path      string `json:"path,omitempty"`
+	PathType  string `json:"pathType,omitempty"`
 	Namespace string `json:"namespace"`
 	Service   string `json:"service"`
 	Backend   string `json:"backend"` // ClusterIP:port
+	Source    string `json:"source,omitempty"`
 }
 
 // Routes builds the routing table from Services. A Service that cannot be
@@ -119,4 +122,28 @@ func backendOf(s apis.Service) (string, error) {
 		return "", fmt.Errorf("%s=%q matches no TCP port", PortAnnotation, want)
 	}
 	return "", fmt.Errorf("it has %d TCP ports; choose one with %s", len(tcp), PortAnnotation)
+}
+
+// backendOfPort resolves an explicit Service backend port by number or name
+// (used by Ingress rules and defaultBackend).
+func backendOfPort(s apis.Service, port apis.ServiceBackendPort) (string, error) {
+	ip, err := netip.ParseAddr(s.Spec.ClusterIP)
+	if err != nil || !ip.Is4() || !apis.ServiceCIDR.Contains(ip) {
+		return "", fmt.Errorf("it has no ClusterIP")
+	}
+	for _, p := range s.Spec.Ports {
+		if p.Protocol != "" && p.Protocol != "TCP" {
+			continue
+		}
+		if port.Number != 0 && p.Port == port.Number {
+			return netip.AddrPortFrom(ip, uint16(p.Port)).String(), nil
+		}
+		if port.Name != "" && p.Name == port.Name {
+			return netip.AddrPortFrom(ip, uint16(p.Port)).String(), nil
+		}
+	}
+	if port.Number != 0 {
+		return "", fmt.Errorf("no TCP port %d", port.Number)
+	}
+	return "", fmt.Errorf("no TCP port named %q", port.Name)
 }

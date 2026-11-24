@@ -62,7 +62,7 @@ func (m Manager) collect(tx *store.Tx, v view, now time.Time) (bool, error) {
 		if waiting && blocking[i.rec.UID] {
 			meta.Finalizers = append(meta.Finalizers, objects.ForegroundFinalizer)
 		}
-		_, _, err := objects.Delete(tx, i.res, i.rec, i.obj, m.NodeName, nil, now)
+		_, _, err := objects.Delete(tx, i.res, i.rec, i.obj, nil, now)
 		return true, err
 	}
 	return breakForegroundCycle(tx, v)

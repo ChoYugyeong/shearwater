@@ -106,7 +106,7 @@ func (a *Agent) probeStopReason(p *apis.Pod, c *apis.Container, id string) strin
 	return a.loadProbe(p, c, id).StopReason
 }
 func (a *Agent) probeEvent(p *apis.Pod, c *apis.Container, kind, reason, message string) error {
-	return a.Store.Write(false, func(tx *store.Tx) error {
+	return a.Store.Transact(func(tx store.Txn) error {
 		rec, err := tx.Get(objects.Key(podsRes, p.Metadata.Namespace, p.Metadata.Name))
 		if err != nil {
 			return err

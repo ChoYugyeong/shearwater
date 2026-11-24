@@ -20,6 +20,10 @@ var ServiceCIDR = netip.MustParsePrefix("10.96.0.0/16")
 // is the bridge's.
 var PodCIDR = netip.MustParsePrefix("10.244.0.0/24")
 
+// ClusterCIDR holds the Pods of every node: the control plane keeps PodCIDR
+// and each worker gets another /24 of it (docs/design-multinode-tenancy.md 3.3).
+var ClusterCIDR = netip.MustParsePrefix("10.244.0.0/16")
+
 const MaxGraceSeconds = int64(math.MaxInt64) / int64(time.Second)
 
 // FieldError is one problem with one field. Unsupported marks a field that
@@ -133,6 +137,8 @@ func validatePodSpec(s *PodSpec, path string, errs *ErrorList) {
 	if !slices.Contains([]string{"Always", "OnFailure", "Never"}, s.RestartPolicy) {
 		errs.oneOf(path+".restartPolicy", s.RestartPolicy, "Always", "OnFailure", "Never")
 	}
+	validateScheduling(s, path, errs)
+	validateDNS(s, path, errs)
 	if g := s.TerminationGracePeriodSeconds; g != nil && (*g < 0 || *g > MaxGraceSeconds) {
 		errs.invalid(path+".terminationGracePeriodSeconds", *g, fmt.Sprintf("must be between 0 and %d", MaxGraceSeconds))
 	}
@@ -153,10 +159,12 @@ func validatePodSpec(s *PodSpec, path string, errs *ErrorList) {
 		}
 		volumes[v.Name] = true
 		switch {
-		case v.EmptyDir != nil && v.HostPath != nil:
-			errs.forbidden(f, "a volume has exactly one source; both emptyDir and hostPath are set")
-		case v.EmptyDir == nil && v.HostPath == nil:
-			errs.unsupported(f, "only emptyDir and hostPath volumes are implemented (no configMap, secret or persistentVolumeClaim)")
+		case v.EmptyDir != nil && v.HostPath != nil || v.PersistentVolumeClaim != nil && (v.EmptyDir != nil || v.HostPath != nil):
+			errs.forbidden(f, "a volume must have exactly one source")
+		case v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil:
+			errs.unsupported(f, "only emptyDir, hostPath and persistentVolumeClaim volumes are implemented")
+		case v.PersistentVolumeClaim != nil && !IsDNS1123Subdomain(v.PersistentVolumeClaim.ClaimName):
+			errs.invalid(f+".persistentVolumeClaim.claimName", v.PersistentVolumeClaim.ClaimName, nameSubdomain)
 		case v.HostPath != nil && !strings.HasPrefix(v.HostPath.Path, "/"):
 			errs.invalid(f+".hostPath.path", v.HostPath.Path, "must be an absolute path")
 		}
