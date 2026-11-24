@@ -26,6 +26,7 @@ type PodSpec struct {
 
 	// stored only
 	DNSPolicy         string            `json:"dnsPolicy,omitempty"`
+	DNSConfig         *PodDNSConfig     `json:"dnsConfig,omitempty"`
 	NodeSelector      map[string]string `json:"nodeSelector,omitempty"`
 	Affinity          json.RawMessage   `json:"affinity,omitempty"`
 	Tolerations       json.RawMessage   `json:"tolerations,omitempty"`

@@ -1,12 +1,15 @@
 package node
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"shearwater/internal/apis"
@@ -56,9 +59,14 @@ func (a *Agent) ensurePodFiles(pod *apis.Pod, ip string) (volumes map[string]str
 	if err := writeIfChanged(filepath.Join(dir, "hosts"), []byte(hosts)); err != nil {
 		return nil, err
 	}
-	// Stage 1: the host's resolver configuration, copied once (design 7).
+	// Write resolv.conf once per pod according to dnsPolicy and dnsConfig
+	// (docs/design-multinode-tenancy.md 4.2); existing pods are not rewritten.
 	if resolv := filepath.Join(dir, "resolv.conf"); !exists(resolv) {
-		data, _ := os.ReadFile("/etc/resolv.conf")
+		var hostResolv []byte
+		if pod.Spec.DNSPolicy == "Default" {
+			hostResolv, _ = os.ReadFile("/etc/resolv.conf")
+		}
+		data := renderResolvConf(pod, a.dnsGateway(), hostResolv)
 		if err := os.WriteFile(resolv, data, 0o644); err != nil {
 			return nil, err
 		}
@@ -99,6 +107,148 @@ func (a *Agent) ensurePodFiles(pod *apis.Pod, ip string) (volumes map[string]str
 func exists(path string) bool {
 	_, err := os.Lstat(path)
 	return err == nil
+}
+
+// dnsGateway is the node's bridge gateway IP (the first address of PodCIDR),
+// where the in-process cluster DNS server listens on port 53.
+func (a *Agent) dnsGateway() netip.Addr {
+	cidr := a.PodCIDR
+	if !cidr.IsValid() {
+		cidr = apis.PodCIDR
+	}
+	return cidr.Masked().Addr().Next()
+}
+
+// renderResolvConf generates a pod's /etc/resolv.conf from its dnsPolicy,
+// optional dnsConfig, the node's DNS gateway address and (for Default) the
+// host's /etc/resolv.conf.
+func renderResolvConf(pod *apis.Pod, gateway netip.Addr, hostResolv []byte) []byte {
+	policy := pod.Spec.DNSPolicy
+	cfg := pod.Spec.DNSConfig
+	if policy == "Default" && cfg == nil {
+		return hostResolv
+	}
+
+	var nameservers []string
+	var searches []string
+	var options []apis.PodDNSConfigOption
+
+	switch policy {
+	case "Default":
+		nameservers, searches, options = parseResolvConf(hostResolv)
+	case "None":
+		// Start empty; only dnsConfig supplies entries.
+	default:
+		// "", "ClusterFirst", and "ClusterFirstWithHostNet" (hostNetwork is not supported).
+		if gateway.IsValid() {
+			nameservers = append(nameservers, gateway.String())
+		}
+		ns := pod.Metadata.Namespace
+		if ns == "" {
+			ns = "default"
+		}
+		searches = append(searches, ns+".svc.cluster.local", "svc.cluster.local", "cluster.local")
+		five := "5"
+		options = append(options, apis.PodDNSConfigOption{Name: "ndots", Value: &five})
+	}
+
+	if cfg != nil {
+		for _, ns := range cfg.Nameservers {
+			ns = strings.TrimSpace(ns)
+			if ns != "" && !slices.Contains(nameservers, ns) {
+				nameservers = append(nameservers, ns)
+			}
+		}
+		for _, s := range cfg.Searches {
+			s = strings.TrimSpace(s)
+			if s != "" && !slices.Contains(searches, s) {
+				searches = append(searches, s)
+			}
+		}
+		for _, opt := range cfg.Options {
+			name := strings.TrimSpace(opt.Name)
+			if name == "" {
+				continue
+			}
+			replaced := false
+			for i := range options {
+				if options[i].Name == name {
+					options[i] = apis.PodDNSConfigOption{Name: name, Value: opt.Value}
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				options = append(options, apis.PodDNSConfigOption{Name: name, Value: opt.Value})
+			}
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("# Written by Shearwater for this pod.\n")
+	if len(searches) > 0 {
+		b.WriteString("search ")
+		b.WriteString(strings.Join(searches, " "))
+		b.WriteByte('\n')
+	}
+	for _, ns := range nameservers {
+		b.WriteString("nameserver ")
+		b.WriteString(ns)
+		b.WriteByte('\n')
+	}
+	if len(options) > 0 {
+		var parts []string
+		for _, opt := range options {
+			if opt.Value != nil && *opt.Value != "" {
+				parts = append(parts, opt.Name+":"+*opt.Value)
+			} else {
+				parts = append(parts, opt.Name)
+			}
+		}
+		b.WriteString("options ")
+		b.WriteString(strings.Join(parts, " "))
+		b.WriteByte('\n')
+	}
+	return []byte(b.String())
+}
+
+func parseResolvConf(data []byte) (nameservers, searches []string, options []apis.PodDNSConfigOption) {
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || line[0] == '#' || line[0] == ';' {
+			continue
+		}
+		if i := strings.IndexAny(line, "#;"); i >= 0 {
+			line = strings.TrimSpace(line[:i])
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		switch fields[0] {
+		case "nameserver":
+			if !slices.Contains(nameservers, fields[1]) {
+				nameservers = append(nameservers, fields[1])
+			}
+		case "search", "domain":
+			for _, s := range fields[1:] {
+				if !slices.Contains(searches, s) {
+					searches = append(searches, s)
+				}
+			}
+		case "options":
+			for _, tok := range fields[1:] {
+				if k, v, ok := strings.Cut(tok, ":"); ok {
+					val := v
+					options = append(options, apis.PodDNSConfigOption{Name: k, Value: &val})
+				} else {
+					options = append(options, apis.PodDNSConfigOption{Name: tok})
+				}
+			}
+		}
+	}
+	return nameservers, searches, options
 }
 
 // removePodFiles deletes the pod's directory (with its emptyDir volumes) and
