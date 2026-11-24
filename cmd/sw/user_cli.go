@@ -7,11 +7,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 )
 
-const userUsage = "usage: sw user add NAME [--namespace NS] [--role admin|edit|view] [--cluster-role NAME] [--out FILE] | list | remove NAME | token NAME [--out FILE]"
+const userUsage = "usage: sw user add NAME [--namespace NS] [--role admin|edit|view] [--cluster-role NAME] [--out FILE] [--server URL] | list | remove NAME | token NAME [--out FILE] [--server URL]"
 
 func runUser(args []string) error {
 	if len(args) == 0 {
@@ -26,6 +28,7 @@ func runUser(args []string) error {
 	fs := flag.NewFlagSet("sw user "+action, flag.ContinueOnError)
 	config := fs.String("config-dir", defaultConfigDir, "administrator certificate and token directory")
 	listen := fs.String("listen", defaultListen, "administrator API address")
+	server := fs.String("server", "", "API address written into the kubeconfig (default: the address this control plane advertises to other machines, otherwise --listen)")
 	var o userOptions
 	var out string
 	switch action {
@@ -113,11 +116,35 @@ func runUser(args []string) error {
 		fmt.Println(issued.Token)
 		return nil
 	}
-	if err := atomicPrivateFile(out, userKubeconfig(c.url, ca, issued)); err != nil {
+	target := *server
+	if target == "" {
+		target = userServer(*config, c.url)
+	}
+	if err := atomicPrivateFile(out, userKubeconfig(target, ca, issued)); err != nil {
 		return fmt.Errorf("kubeconfig write failed: %w; use sw user token %s --out FILE to recover", err, o.Name)
 	}
 	fmt.Printf("wrote kubeconfig for %s to %s\n", o.Name, out)
 	return nil
+}
+
+// userServer is the API address a user's kubeconfig names. A user usually
+// works from another machine, so it is the address this control plane
+// advertises (sw up --advertise-address) when it has one, on the port of the
+// local address the command used; otherwise that local address.
+func userServer(configDir, local string) string {
+	advertise := readClusterConfig(configDir).AdvertiseAddress
+	if advertise == "" {
+		return local
+	}
+	u, err := url.Parse(local)
+	if err != nil {
+		return local
+	}
+	_, port, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		return local
+	}
+	return "https://" + net.JoinHostPort(advertise, port)
 }
 
 func userKubeconfig(server string, ca []byte, user issuedUser) []byte {
