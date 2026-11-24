@@ -24,18 +24,63 @@ type PodSpec struct {
 	NodeName                      string      `json:"nodeName,omitempty"`
 	Volumes                       []Volume    `json:"volumes,omitempty" patchStrategy:"merge,retainKeys" patchMergeKey:"name"`
 
+	// scheduling (docs/design-multinode-tenancy.md 3.4)
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+	Affinity     *Affinity         `json:"affinity,omitempty"`
+	Tolerations  []Toleration      `json:"tolerations,omitempty"`
+
 	// stored only
-	DNSPolicy         string            `json:"dnsPolicy,omitempty"`
-	NodeSelector      map[string]string `json:"nodeSelector,omitempty"`
-	Affinity          json.RawMessage   `json:"affinity,omitempty"`
-	Tolerations       json.RawMessage   `json:"tolerations,omitempty"`
-	PriorityClassName string            `json:"priorityClassName,omitempty"`
-	SecurityContext   json.RawMessage   `json:"securityContext,omitempty"`
+	DNSPolicy         string          `json:"dnsPolicy,omitempty"`
+	PriorityClassName string          `json:"priorityClassName,omitempty"`
+	SecurityContext   json.RawMessage `json:"securityContext,omitempty"`
 
 	// rejected when set
 	InitContainers     json.RawMessage `json:"initContainers,omitempty"`
 	HostNetwork        bool            `json:"hostNetwork,omitempty"`
 	ServiceAccountName string          `json:"serviceAccountName,omitempty"`
+}
+
+// Affinity: node affinity is used for placement; Pod affinity and
+// anti-affinity are stored only.
+type Affinity struct {
+	NodeAffinity    *NodeAffinity   `json:"nodeAffinity,omitempty"`
+	PodAffinity     json.RawMessage `json:"podAffinity,omitempty"`
+	PodAntiAffinity json.RawMessage `json:"podAntiAffinity,omitempty"`
+}
+
+type NodeAffinity struct {
+	RequiredDuringSchedulingIgnoredDuringExecution  *NodeSelector             `json:"requiredDuringSchedulingIgnoredDuringExecution,omitempty"`
+	PreferredDuringSchedulingIgnoredDuringExecution []PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
+}
+
+// NodeSelector matches a node when any of its terms matches.
+type NodeSelector struct {
+	NodeSelectorTerms []NodeSelectorTerm `json:"nodeSelectorTerms"`
+}
+
+// NodeSelectorTerm matches when all of its requirements match.
+type NodeSelectorTerm struct {
+	MatchExpressions []NodeSelectorRequirement `json:"matchExpressions,omitempty"`
+	MatchFields      []NodeSelectorRequirement `json:"matchFields,omitempty"`
+}
+
+type NodeSelectorRequirement struct {
+	Key      string   `json:"key"`
+	Operator string   `json:"operator"` // In, NotIn, Exists, DoesNotExist, Gt, Lt
+	Values   []string `json:"values,omitempty"`
+}
+
+type PreferredSchedulingTerm struct {
+	Weight     int32            `json:"weight"`
+	Preference NodeSelectorTerm `json:"preference"`
+}
+
+type Toleration struct {
+	Key               string `json:"key,omitempty"`
+	Operator          string `json:"operator,omitempty"` // Exists or Equal (default)
+	Value             string `json:"value,omitempty"`
+	Effect            string `json:"effect,omitempty"` // NoSchedule, PreferNoSchedule, NoExecute; empty: all
+	TolerationSeconds *int64 `json:"tolerationSeconds,omitempty"`
 }
 
 type Container struct {
@@ -355,7 +400,17 @@ type Node struct {
 func (o *Node) Meta() *ObjectMeta { return &o.Metadata }
 
 type NodeSpec struct {
-	PodCIDR string `json:"podCIDR,omitempty"`
+	PodCIDR       string   `json:"podCIDR,omitempty"`
+	PodCIDRs      []string `json:"podCIDRs,omitempty"`
+	Unschedulable bool     `json:"unschedulable,omitempty"`
+	Taints        []Taint  `json:"taints,omitempty"`
+}
+
+type Taint struct {
+	Key       string `json:"key"`
+	Value     string `json:"value,omitempty"`
+	Effect    string `json:"effect"` // NoSchedule, PreferNoSchedule or NoExecute
+	TimeAdded *Time  `json:"timeAdded,omitempty"`
 }
 
 type NodeStatus struct {

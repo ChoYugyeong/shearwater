@@ -66,7 +66,10 @@ var Resources = []*Resource{
 	},
 	{
 		Version: "v1", Plural: "nodes", Singular: "node", Kind: "Node", ShortNames: []string{"no"},
-		New: func() Object { return &Node{} },
+		Update: true, Delete: true, // cordon, taints, labels; removing a node that is gone
+		New:            func() Object { return &Node{} },
+		Validate:       func(o Object) ErrorList { return ValidateNode(o.(*Node)) },
+		ValidateUpdate: func(o, old Object) ErrorList { return ValidateNodeUpdate(o.(*Node), old.(*Node)) },
 	},
 	{
 		Version: "v1", Plural: "pods", Singular: "pod", Kind: "Pod", ShortNames: []string{"po"}, Categories: all,

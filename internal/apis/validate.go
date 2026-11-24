@@ -133,6 +133,7 @@ func validatePodSpec(s *PodSpec, path string, errs *ErrorList) {
 	if !slices.Contains([]string{"Always", "OnFailure", "Never"}, s.RestartPolicy) {
 		errs.oneOf(path+".restartPolicy", s.RestartPolicy, "Always", "OnFailure", "Never")
 	}
+	validateScheduling(s, path, errs)
 	if g := s.TerminationGracePeriodSeconds; g != nil && (*g < 0 || *g > MaxGraceSeconds) {
 		errs.invalid(path+".terminationGracePeriodSeconds", *g, fmt.Sprintf("must be between 0 and %d", MaxGraceSeconds))
 	}

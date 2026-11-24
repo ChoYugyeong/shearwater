@@ -241,11 +241,13 @@ func TestCreateFromProtobuf(t *testing.T) {
 
 func TestStoredOnlyWarnings(t *testing.T) {
 	c := newClient(t)
-	body := `{"apiVersion":"v1","kind":"Pod","metadata":{"name":"probed"},"spec":{"dnsPolicy":"ClusterFirst","containers":[{"name":"c","image":"nginx:1.27",
+	// Requests are used for placement now that there can be several nodes,
+	// so they no longer warn; priorityClassName is still stored only.
+	body := `{"apiVersion":"v1","kind":"Pod","metadata":{"name":"probed"},"spec":{"dnsPolicy":"ClusterFirst","priorityClassName":"high","containers":[{"name":"c","image":"nginx:1.27",
 		"livenessProbe":{"httpGet":{"path":"/","port":80}},"resources":{"requests":{"cpu":"100m"}}}]}}`
 	r := c.want(c.do("POST", pods, body), 201)
 	w := strings.Join(r.header.Values("Warning"), "\n")
-	if strings.Contains(w, "livenessProbe") || !strings.Contains(w, "spec.containers[0].resources.requests") {
+	if strings.Contains(w, "livenessProbe") || strings.Contains(w, "resources.requests") || !strings.Contains(w, "spec.priorityClassName") {
 		t.Fatalf("stored-only fields must warn on create: %q", w)
 	}
 	if strings.Contains(w, "dnsPolicy") {
@@ -260,8 +262,8 @@ func TestStoredOnlyWarnings(t *testing.T) {
 		t.Fatalf("an unrelated patch repeated the warnings: %v", w)
 	}
 	c.want(c.do("POST", deploys, twoDeploy), 201)
-	r = c.want(c.patch(deploys+"/web", smpType, `{"spec":{"minReadySeconds":5,"template":{"spec":{"nodeSelector":{"disk":"ssd"}}}}}`), 200)
-	if w := r.header.Values("Warning"); len(w) != 2 {
-		t.Fatalf("expected warnings for minReadySeconds and nodeSelector: %v", w)
+	r = c.want(c.patch(deploys+"/web", smpType, `{"spec":{"minReadySeconds":5,"template":{"spec":{"nodeSelector":{"disk":"ssd"},"securityContext":{"runAsUser":1000}}}}}`), 200)
+	if w := r.header.Values("Warning"); len(w) != 2 || strings.Contains(strings.Join(w, " "), "nodeSelector") {
+		t.Fatalf("expected warnings for minReadySeconds and securityContext, not for the node selector the scheduler uses: %v", w)
 	}
 }
