@@ -1,4 +1,5 @@
-// Package controller reconciles the single-node scheduler, workload owners and EndpointSlices.
+// Package controller reconciles the scheduler, node lifecycle, workload
+// owners and EndpointSlices. It runs on the control plane only.
 package controller
 
 import (
@@ -15,9 +16,17 @@ import (
 )
 
 type Manager struct {
-	Store    *store.Store
+	Store *store.Store
+	// NodeName is the control plane's own node ("" when it runs no
+	// workloads). It is always alive while this process runs.
 	NodeName string
 	Drain    *drain.State
+	// Silence says how long a worker node has not been heard from (the node
+	// API's liveness). Nil: no workers, node lifecycle is not checked.
+	Silence func(node string) time.Duration
+	// VolumeFilter is the scheduler's volume check (nil: none). It returns
+	// "" when node can take the Pod's volumes, otherwise the reason.
+	VolumeFilter func(p *apis.Pod, n *apis.Node) string
 }
 
 // Run rechecks the current state when the store changes and periodically.
@@ -41,6 +50,9 @@ func (m Manager) Run(ctx context.Context) {
 		}
 		if m.Drain != nil && m.Drain.Pending() {
 			wait = min(wait, 200*time.Millisecond)
+		}
+		if m.Silence != nil {
+			wait = min(wait, LifecycleEvery) // node liveness changes without a store write
 		}
 		timer := time.NewTimer(wait)
 		select {
@@ -72,12 +84,14 @@ type view struct {
 	services, endpointSlices     []*item
 	byUID                        map[string]*item
 	rolloutSlots                 map[string]*rolloutSlots // ReplicaSet UID -> shared Deployment capacity
-	node                         *apis.Node
+	nodes                        []*apis.Node
+	nodeItems                    map[string]*item
 }
 
-func load(tx *store.Tx, nodeName string) (view, error) {
+func load(tx *store.Tx) (view, error) {
 	var v view
 	v.byUID = make(map[string]*item)
+	v.nodeItems = make(map[string]*item)
 	v.rolloutSlots = make(map[string]*rolloutSlots)
 	records, err := tx.Objects()
 	if err != nil {
@@ -107,9 +121,8 @@ func load(tx *store.Tx, nodeName string) (view, error) {
 		case *apis.EndpointSlice:
 			v.endpointSlices = append(v.endpointSlices, i)
 		case *apis.Node:
-			if o.Metadata.Name == nodeName {
-				v.node = o
-			}
+			v.nodes = append(v.nodes, o)
+			v.nodeItems[o.Metadata.Name] = i
 		}
 	}
 	return v, nil
@@ -119,11 +132,20 @@ func load(tx *store.Tx, nodeName string) (view, error) {
 // endpoint selection and the ownership checks for GC share a consistent view.
 func (m Manager) Sync() error {
 	return m.Store.Write(false, func(tx *store.Tx) error {
-		v, err := load(tx, m.NodeName)
+		v, err := load(tx)
 		if err != nil {
 			return err
 		}
 		now := time.Now().UTC().Truncate(time.Second)
+		// Node lifecycle first: garbage collection may end a pass early, and
+		// a silent node must still be noticed.
+		if lc, err := m.nodeLifecycle(tx, v, now); err != nil {
+			return err
+		} else if lc {
+			if v, err = load(tx); err != nil {
+				return err
+			}
+		}
 		changed, err := m.collect(tx, v, now)
 		if err != nil {
 			return err
@@ -134,7 +156,7 @@ func (m Manager) Sync() error {
 			}
 			// GC can start a Pod deletion. Reload so that its endpoint can
 			// be withdrawn in the transaction that marks the Pod terminating.
-			v, err = load(tx, m.NodeName)
+			v, err = load(tx)
 			if err != nil {
 				return err
 			}
