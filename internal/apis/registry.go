@@ -130,6 +130,17 @@ var Resources = []*Resource{
 	},
 }
 
+// Register adds a resource from a feature's own file, from an init function,
+// so features do not all edit the list above. Registered resources come after
+// the built-in ones, in file-name order. A second resource with the same
+// group, version and plural is a programming error.
+func Register(r *Resource) {
+	if Lookup(r.Group, r.Version, r.Plural) != nil {
+		panic("apis: " + r.APIVersion() + " " + r.Plural + " is registered twice")
+	}
+	Resources = append(Resources, r)
+}
+
 func Lookup(group, version, plural string) *Resource {
 	for _, r := range Resources {
 		if r.Group == group && r.Version == version && r.Plural == plural {

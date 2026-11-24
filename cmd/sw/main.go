@@ -13,11 +13,14 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
+	"shearwater/internal/admission"
 	"shearwater/internal/api"
 	"shearwater/internal/apis"
+	"shearwater/internal/auth"
 	"shearwater/internal/controller"
 	"shearwater/internal/drain"
 	"shearwater/internal/node"
@@ -253,7 +256,20 @@ func runServer(args []string) error {
 			return err
 		}
 	}
-	srv := &api.Server{Store: st, Token: mat.Token}
+	if err := st.InitCredentials(); err != nil {
+		return err
+	}
+	adminMux := http.NewServeMux()
+	srv := &api.Server{Store: st, Token: mat.Token, Admin: adminMux,
+		Auth: &auth.Authenticator{AdminToken: mat.Token, Credentials: st}}
+	type loop struct {
+		name string
+		fn   func(context.Context)
+	}
+	var loops []loop
+	wired := &wiring{Server: srv, Store: st, Admin: adminMux, ConfigDir: *configDir, DataDir: *dataDir,
+		Go: func(name string, fn func(context.Context)) { loops = append(loops, loop{name, fn}) }}
+	srv.Admit = admission.Chain(append(wireAccess(wired), wireNetworkServices(wired)...)...)
 	if *trace != "" {
 		f, err := os.OpenFile(*trace, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 		if err != nil {
@@ -278,6 +294,16 @@ func runServer(args []string) error {
 	defer ln.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// Feature loops (wiring.Go) and node services end before the store closes.
+	var background sync.WaitGroup
+	defer func() { stop(); background.Wait() }()
+	goBackground := func(fn func(context.Context)) {
+		background.Add(1)
+		go func() { defer background.Done(); fn(ctx) }()
+	}
+	for _, l := range loops {
+		goBackground(l.fn)
+	}
 	hs := &http.Server{
 		Handler:           srv,
 		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{mat.Server}, MinVersion: tls.VersionTLS12},
@@ -347,6 +373,12 @@ func runServer(args []string) error {
 			forwarding.Run(ctx)
 		}()
 		go runPreparedEdge(ctx, public, edgeDone)
+		gateway := n.Gateway()
+		goBackground(func(ctx context.Context) {
+			runNodeNetworkServices(ctx, st, gateway, func(format string, args ...any) {
+				fmt.Fprintf(os.Stderr, "network services: "+format+"\n", args...)
+			})
+		})
 	} else {
 		close(agentDone)
 		close(controllerDone)

@@ -1,0 +1,23 @@
+package main
+
+import (
+	"context"
+	"net/http"
+
+	"shearwater/internal/api"
+	"shearwater/internal/store"
+)
+
+// wiring is what a feature gets to attach itself to `sw server`
+// (docs/design-multinode-tenancy.md 1.3). Each feature owns one wire_*.go
+// file and does its setup there, so features do not all edit runServer.
+type wiring struct {
+	Server    *api.Server
+	Store     *store.Store
+	Admin     *http.ServeMux // served under api.AdminPrefix, administrators only
+	ConfigDir string
+	DataDir   string
+	// Go runs fn in the background for the life of the server. The server
+	// waits for every fn to return before it closes the store.
+	Go func(name string, fn func(ctx context.Context))
+}
