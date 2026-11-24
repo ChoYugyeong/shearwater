@@ -96,7 +96,7 @@ WSL처럼 커널을 다른 배포판과 같이 쓰는 환경에서는 `--no-kern
 
 `--tool-dir`에는 워크플로가 받는 것과 같은 파일(Docker 정적 묶음 전체(`dockerd`·`containerd`·`containerd-shim-runc-v2`·`ctr`·`runc`·`docker`·`docker-proxy` 등), `docker-compose`, `k3s`, `minikube`, `kubectl`)을 두면 돼. 없으면 PATH에서 찾아. 받은 파일의 버전과 체크섬은 워크플로의 `env`에 고정돼 있어. minikube가 실행 중에 받는 노드 이미지와 Kubernetes v1.37.0은 버전만 고정이고, nginx 이미지 digest는 스크립트에 고정돼 있어.
 
-한 도구가 실패해도 `--keep-going`이면 나머지는 계속 재고, 실패 기록(`failure-*.txt`)은 결과 폴더에 남아. 실패한 도구를 몰래 다시 돌리지 않아. 실패가 하나라도 있으면 명령은 0이 아닌 값으로 끝나.
+한 도구가 실패해도 `--keep-going`이면 나머지는 계속 재고, 실패 기록(`failure-*.txt`)은 결과 폴더에 남아. 실패한 도구를 몰래 다시 돌리지 않아. 예외는 측정 시간 밖의 이미지 받기 하나야. 공유 러너 주소가 레지스트리 요청 한도에 걸릴 수 있어서 간격을 두고 최대 5번까지 다시 받고, 실패한 시도는 `prepared.json`에 남겨. 실패가 하나라도 있으면 명령은 0이 아닌 값으로 끝나.
 
 ## 이 측정이 말하지 않는 것
 

@@ -746,20 +746,37 @@ class Engine:
             # Reach Service IPs from the namespace the same way `minikube tunnel`
             # does: route the service range to the node, whose kube-proxy DNATs.
             self.cmd(['ip', 'route', 'replace', service_range(cidr), 'via', node])
-            self.minikube('image', 'pull', image, timeout=600)
+            pull = lambda: self.minikube('image', 'pull', image, timeout=600)
         elif self.tool == 'compose':
-            self.docker('pull', image, timeout=600)
+            pull = lambda: self.docker('pull', image, timeout=600)
         elif self.tool == 'shearwater':
-            self.cmd([find_tool('ctr', self.a.tool_dir), f'--address={RUN}/containerd.sock', '--namespace=shearwater',
-                      'images', 'pull', '--platform=linux/amd64', image], timeout=600)
+            pull = lambda: self.cmd([find_tool('ctr', self.a.tool_dir), f'--address={RUN}/containerd.sock',
+                                     '--namespace=shearwater', 'images', 'pull', '--platform=linux/amd64', image],
+                                    timeout=600)
         else:
             # `k3s crictl` looks for its config under the default data dir;
             # ctr in the CRI namespace needs only the socket.
-            self.cmd([find_tool('k3s', self.a.tool_dir), 'ctr', '--address=/run/k3s/containerd/containerd.sock',
-                      '--namespace=k8s.io', 'images', 'pull', '--platform=linux/amd64', image], timeout=600)
+            pull = lambda: self.cmd([find_tool('k3s', self.a.tool_dir), 'ctr', '--address=/run/k3s/containerd/containerd.sock',
+                                     '--namespace=k8s.io', 'images', 'pull', '--platform=linux/amd64', image],
+                                    timeout=600)
+        # Pulling is preparation, outside every timed phase. A registry rate
+        # limit on a shared runner address is retried with a pause; each failed
+        # attempt is kept in prepared.json. Measurements are never retried.
+        attempts = []
+        for attempt in range(1, 6):
+            try:
+                pull()
+                break
+            except RuntimeError as e:
+                attempts.append(str(e)[-500:])
+                if attempt == 5:
+                    raise
+                log(f'{self.trial} image pull failed (attempt {attempt}), retrying in {30 * attempt}s')
+                time.sleep(30 * attempt)
         if self.tool in ('k3s', 'minikube'):
             self.wait_system()
-        (self.out / 'prepared.json').write_text(json.dumps({'time': time.time(), 'image': image}))
+        (self.out / 'prepared.json').write_text(json.dumps({'time': time.time(), 'image': image,
+                                                            'failed_pull_attempts': attempts}))
 
     def node_ready(self):
         nodes = json.loads(self.kube('get', 'nodes', '-o', 'json', timeout=10).stdout)['items']
