@@ -215,8 +215,8 @@ func TestCreateFromProtobuf(t *testing.T) {
 		t.Fatalf("service ports: %v", p)
 	}
 	r = c.want(c.protobuf(services, "create-service-clusterip-headless"), 201)
-	if w := r.header.Values("Warning"); len(w) != 1 || !strings.Contains(w[0], "spec.clusterIP") {
-		t.Fatalf("a headless service must carry the stored-only warning: %v", w)
+	if w := r.header.Values("Warning"); len(w) != 0 {
+		t.Fatalf("a headless service is answered by cluster DNS and must not warn: %v", w)
 	}
 	if r := c.want(c.protobuf(services, "create-service-nodeport"), 422); !strings.Contains(r.raw, "Not supported by Shearwater") {
 		t.Fatalf("NodePort must be refused with the reason: %s", r.raw)

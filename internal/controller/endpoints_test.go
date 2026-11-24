@@ -129,8 +129,11 @@ func TestEndpointSliceEligibilityAndProxyMetadata(t *testing.T) {
 	svc := endpointService("web", apis.ServicePort{Port: 80})
 	svc.Spec.Selector["enabled"] = ""
 	create(t, m, testServiceResource, svc)
+	// A headless Service gets EndpointSlices too (cluster DNS answers with
+	// them); it selects nothing here so this test keeps looking at one slice.
 	headless := endpointService("headless", apis.ServicePort{Port: 80})
 	headless.Spec.ClusterIP = "None"
+	headless.Spec.Selector = map[string]string{"app": "nothing-here"}
 	create(t, m, testServiceResource, headless)
 	selectorless := endpointService("selectorless", apis.ServicePort{Port: 80})
 	selectorless.Spec.Selector = map[string]string{}
@@ -164,7 +167,12 @@ func TestEndpointSliceEligibilityAndProxyMetadata(t *testing.T) {
 		writeEndpointTestObject(t, m, podResource, p)
 	}
 	sync(t, m, 1)
-	got := listEndpointSlices(t, m)
+	var got []apis.EndpointSlice
+	for _, s := range listEndpointSlices(t, m) {
+		if s.Metadata.Labels["kubernetes.io/service-name"] == "web" {
+			got = append(got, s) // the headless Service has its own, empty slice
+		}
+	}
 	if len(got) != 1 || len(got[0].Endpoints) != 1 || len(got[0].Ports) != 1 {
 		t.Fatalf("want one slice with one endpoint and port, got %+v", got)
 	}

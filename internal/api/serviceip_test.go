@@ -77,8 +77,8 @@ func TestServiceIPAllocationInAPIOnlyMode(t *testing.T) {
 	checkServiceIP(t, c.want(c.do("GET", services+"/auto", ""), 200), secondIP)
 	r = c.want(c.do("POST", services, serviceBody("headless", "None")), 201)
 	checkServiceIP(t, r, "None")
-	if !strings.Contains(r.header.Get("Warning"), "spec.clusterIP") {
-		t.Fatalf("headless Service should still carry a stored-only warning, got %v", r.header)
+	if w := r.header.Get("Warning"); w != "" {
+		t.Fatalf("a headless Service is answered by cluster DNS and must not warn, got %q", w)
 	}
 	checkServiceIPOwner(t, st, "None", "")
 

@@ -33,9 +33,6 @@ func StoredOnly(o Object) []StoredField {
 		out = append(out, StoredField{Field: field, Value: string(b), Note: note})
 	}
 	podSpec := func(s *PodSpec, path string) {
-		if s.DNSPolicy != "" && s.DNSPolicy != "ClusterFirst" {
-			add(path+".dnsPolicy", s.DNSPolicy, "there is no cluster DNS in stage 1")
-		}
 		if a := s.Affinity; a != nil {
 			if !rawEmpty(a.PodAffinity) {
 				add(path+".affinity.podAffinity", a.PodAffinity, noteScheduling)
@@ -77,9 +74,6 @@ func StoredOnly(o Object) []StoredField {
 	case *Service:
 		if a := v.Spec.SessionAffinity; a != "" && a != "None" {
 			add("spec.sessionAffinity", a, "the service proxy does not pin a client to one pod")
-		}
-		if v.Spec.ClusterIP == "None" {
-			add("spec.clusterIP", "None", "a headless service needs cluster DNS, which stage 1 does not have")
 		}
 	}
 	return out

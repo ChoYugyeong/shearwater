@@ -32,7 +32,7 @@ func reconcileEndpointSlices(tx *store.Tx, v view) error {
 	}
 	for _, owner := range v.services {
 		svc := owner.obj.(*apis.Service)
-		if owner.rec.Deleting || svc.Spec.Type != "ClusterIP" || svc.Spec.ClusterIP == "None" || len(svc.Spec.Selector) == 0 {
+		if owner.rec.Deleting || svc.Spec.Type != "ClusterIP" || len(svc.Spec.Selector) == 0 {
 			continue
 		}
 		groups := desiredEndpointSlices(svc, podsByNamespace[owner.rec.Key.Namespace])
