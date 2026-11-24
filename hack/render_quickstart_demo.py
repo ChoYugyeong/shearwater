@@ -74,7 +74,7 @@ def frame(n, total, label, title, who, rows, note=''):
 
 
 def main():
-    run, prefix = Path(sys.argv[1]), Path(sys.argv[2])
+    run, prefix = Path(sys.argv[1]).resolve(), Path(sys.argv[2]).resolve()
     t = json.loads((run / 'transcript.json').read_text())
     summary = json.loads((run / 'summary.json').read_text())
 
