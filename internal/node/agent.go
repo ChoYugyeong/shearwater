@@ -185,6 +185,9 @@ func (a *Agent) observe(c store.Change) {
 // every uid that still has a container, a namespace or an address. It returns
 // the revision the pod list was read at.
 func (a *Agent) resync(ctx context.Context) int64 {
+	if err := a.collectVolumes(); err != nil {
+		a.Logf("collecting persistent volumes: %v", err)
+	}
 	if err := a.Runtime.SweepSnapshots(ctx); err != nil {
 		a.Logf("checking for orphan snapshots: %v", err)
 	}
