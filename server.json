@@ -3,7 +3,7 @@
   "name": "io.github.ChoYugyeong/shearwater",
   "title": "Shearwater",
   "description": "Approved, verified deploys for AI agents: one delegated app, one approved plan, HTTP proof.",
-  "version": "0.1.0-alpha.14",
+  "version": "0.1.0-alpha.15",
   "websiteUrl": "https://github.com/ChoYugyeong/shearwater",
   "repository": {
     "url": "https://github.com/ChoYugyeong/shearwater",
@@ -13,7 +13,7 @@
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.14/shearwater-mcp-v0.1.0-alpha.14-linux-amd64.mcpb",
+      "identifier": "https://github.com/ChoYugyeong/shearwater/releases/download/v0.1.0-alpha.15/shearwater-mcp-v0.1.0-alpha.15-linux-amd64.mcpb",
       "fileSha256": "FILLED_BY_WORKFLOW_0000000000000000000000000000000000000000000000",
       "transport": {
         "type": "stdio"

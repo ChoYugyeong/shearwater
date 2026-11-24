@@ -264,7 +264,7 @@ def fetch_release(version, archive, sums):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', required=True, help='exact published version, e.g. v0.1.0-alpha.14')
+    parser.add_argument('--version', required=True, help='exact published version, e.g. v0.1.0-alpha.15')
     parser.add_argument('--destination', type=Path, help='new version directory; never overwritten')
     parser.add_argument('--apply', action='store_true', help='download and install after reviewing the default preview')
     parser.add_argument('--host', action='store_true',

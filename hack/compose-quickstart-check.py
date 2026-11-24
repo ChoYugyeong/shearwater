@@ -25,7 +25,7 @@ every image has an immutable digest, as with a real registry. Results go to
 --out: timings.json, transcript.json (the MCP calls, for the demo), and
 summary.md. Exit status is non-zero on the first broken guarantee.
 
-    python3 hack/compose-quickstart-check.py --release v0.1.0-alpha.14 --out /tmp/qs
+    python3 hack/compose-quickstart-check.py --release v0.1.0-alpha.15 --out /tmp/qs
     python3 hack/compose-quickstart-check.py --sw dist/sw --out /tmp/qs
 """
 import argparse
@@ -201,7 +201,7 @@ def build_images(work):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     src = ap.add_mutually_exclusive_group(required=True)
-    src.add_argument('--release', help='install this release with the README installer, e.g. v0.1.0-alpha.14')
+    src.add_argument('--release', help='install this release with the README installer, e.g. v0.1.0-alpha.15')
     src.add_argument('--sw', help='use this sw binary instead of installing')
     ap.add_argument('--out', required=True)
     ap.add_argument('--work', default='', help='scratch directory (default: a new temporary one)')
