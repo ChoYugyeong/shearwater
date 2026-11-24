@@ -197,7 +197,14 @@ sw task evidence --id=OPERATION_ID
 ```
 
 최근 기록에는 검사 시각, Pod/컨테이너/이미지 신원, 경로, HTTP 상태, 본문 크기·해시가 있어.
-AI에게 반환한 근거 번호와 이 기록의 번호가 같아야 해. 이후 검증으로 최근 기록이 바뀔 수
+AI에게 반환한 근거 번호와 이 기록의 번호가 같아야 해. `evidence`의 `http`는 저장된 기록의
+결과(`passed`/`failed`, `retained: true`, `checkedAt`)야. 맨 위 `state`는 지금 상태를 다시
+확인하기 전까지 `needs_verification`으로 남아. 저장된 기록은 실시간 검사가 아니기 때문이야.
+
+검사가 실패하면(`http_failed`) AI에게 돌아가는 `facts`에 어느 검사가 몇 개 사본에서 왜
+실패했는지 적혀. 예: `check GET / failed on 1 of 1 replicas: HTTP 200, expected text missing`.
+기대한 문구 자체는 비공개 검사 파일에서 올 수 있어서 적지 않아. `diagnose`도 같은 목표의 마지막
+실패 검사를 시각과 함께 보여 줘. 이후 검증으로 최근 기록이 바뀔 수
 있으므로 장기 감사가 필요하면 해당 결과를 별도 파일에 저장해. 모델의 자연어 설명 자체를
 실행 증거로 사용하지 마.
 

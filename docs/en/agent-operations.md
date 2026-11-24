@@ -146,7 +146,9 @@ The server returns a small summary to the AI: status, facts, unverified items, n
 sw task evidence --id=OPERATION_ID
 ```
 
-The latest record includes the check timestamp, Pod/container/image identities, paths, HTTP status codes, and body sizes and hashes. Its ID must match the evidence ID returned to the AI. Later verifications can overwrite the latest record, so save the output to a separate file if you need long-term auditing. Do not use the model's natural-language explanation itself as execution proof.
+The latest record includes the check timestamp, Pod/container/image identities, paths, HTTP status codes, and body sizes and hashes. Its ID must match the evidence ID returned to the AI. In `evidence`, `http` describes that stored record (`passed`/`failed`, `retained: true`, `checkedAt`). The top-level `state` stays `needs_verification` until the current state is checked again, because a stored record is not a live check.
+
+When a check fails (`http_failed`), the `facts` returned to the AI say which check failed, on how many replicas, and why, for example `check GET / failed on 1 of 1 replicas: HTTP 200, expected text missing`. The expected text itself is never repeated, because it can come from a private checks file. `diagnose` also reports the last failed check of the current goal, with its time. Later verifications can overwrite the latest record, so save the output to a separate file if you need long-term auditing. Do not use the model's natural-language explanation itself as execution proof.
 
 ## Handling Failures and Interruptions
 
