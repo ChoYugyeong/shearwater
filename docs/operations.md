@@ -8,7 +8,7 @@ alpha.4의 후속 명령은 [자동 시작과 오류 복구](automatic-start.md)
 [백업과 복원](backup-restore.md), [프로브](health-probes.md), [MCP·계획 배포](agent-mcp.md)에
 초보자용 예제와 제한을 정리했어. alpha.3에는 이 후속 명령이 없어.
 
-- 명령은 WSL Ubuntu-24.04에서 실행해. 바이너리는 일반 사용자로 [README의 명령](../README.md#처음-시작하기)을 따라 빌드해.
+- 명령은 WSL Ubuntu-24.04에서 실행해. 바이너리는 일반 사용자로 [README의 명령](../README.ko.md#자체-런타임으로-시작하기)을 따라 빌드해.
 - Pod를 실행하려면 기존 containerd 소켓과 `runc`, `iptables`, IPv4 전달, cgroup v2가 필요해. Shearwater는 containerd에서 전용 이름표 `shearwater`를 사용해. Docker가 같은 containerd를 사용해도 설정 파일은 변경하지 않아.
 - 명령 예제의 `sw`는 빌드한 파일의 경로로 바꿔. 기본 위치에 실제 Pod를 실행하는 예제는 WSL의 root에서 실행해. Windows PowerShell에서 `wsl.exe -d Ubuntu-24.04 -u root`로 들어갈 수 있어.
 
