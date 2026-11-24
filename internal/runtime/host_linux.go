@@ -95,8 +95,9 @@ func (n *Net) CheckHostRanges(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	overlay := s.overlayIndex() // carries this node's network address
 	for _, a := range addresses {
-		if (n.PodCIDR.Contains(a.prefix.Addr()) && a.index != br.index) ||
+		if (n.PodCIDR.Contains(a.prefix.Addr()) && a.index != br.index && (overlay == 0 || a.index != overlay)) ||
 			(n.ServiceCIDR.Contains(a.prefix.Addr()) && a.index != svc.index) {
 			return fmt.Errorf("host interface %d already has address %s in a Shearwater range", a.index, a.prefix)
 		}
@@ -158,7 +159,7 @@ func (n *Net) TeardownHost(ctx context.Context) error {
 			}
 		}
 	}
-	return nil
+	return TeardownOverlay()
 }
 
 func iptablesOutput(ctx context.Context, args ...string) (string, error) {
@@ -183,17 +184,27 @@ type chainState struct {
 
 func (n *Net) chainSpecs() []chainSpec {
 	br, pods, svcs := n.Bridge, n.PodCIDR.String(), n.ServiceCIDR.String()
+	forward := [][]string{
+		{"-i", br, "-o", br, "-j", "ACCEPT"},
+		{"-i", br, "!", "-o", br, "-j", "ACCEPT"},
+		{"-o", br, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"},
+	}
+	nat := [][]string{
+		{"-d", pods, "-j", "RETURN"},
+		{"-d", svcs, "-j", "RETURN"},
+	}
+	if n.Overlay {
+		// Rules are only ever added to these chains, never rewritten, so a
+		// node that existed before it joined a cluster keeps its chains.
+		// Pods of other nodes arrive through the overlay device.
+		forward = append(forward, []string{"-i", OverlayName, "-o", br, "-j", "ACCEPT"})
+		// Traffic to other nodes' Pods keeps its source address.
+		nat = append(nat, []string{"-d", n.ClusterCIDR.String(), "-j", "RETURN"})
+	}
+	nat = append(nat, []string{"!", "-o", br, "-j", "MASQUERADE"})
 	return []chainSpec{
-		{"filter", forwardChain, [][]string{
-			{"-i", br, "-o", br, "-j", "ACCEPT"},
-			{"-i", br, "!", "-o", br, "-j", "ACCEPT"},
-			{"-o", br, "-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "ACCEPT"},
-		}},
-		{"nat", postroutingName, [][]string{
-			{"-d", pods, "-j", "RETURN"},
-			{"-d", svcs, "-j", "RETURN"},
-			{"!", "-o", br, "-j", "MASQUERADE"},
-		}},
+		{"filter", forwardChain, forward},
+		{"nat", postroutingName, nat},
 	}
 }
 

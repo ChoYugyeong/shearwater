@@ -36,8 +36,11 @@ type ServiceRoute struct {
 // retiring Pod's address must not be released until both have succeeded.
 type KernelServices struct {
 	PodCIDR, ServiceCIDR netip.Prefix
-	last                 string
-	checked              time.Time
+	// ClusterCIDR holds the backends of every node when there are several
+	// (zero: only this node's PodCIDR).
+	ClusterCIDR netip.Prefix
+	last        string
+	checked     time.Time
 }
 
 func (k *KernelServices) validate(routes []ServiceRoute) error {
@@ -47,8 +50,12 @@ func (k *KernelServices) validate(routes []ServiceRoute) error {
 			return fmt.Errorf("invalid or duplicate Service route %s", r.Address)
 		}
 		seen[r.Address] = true
+		backends := k.PodCIDR
+		if k.ClusterCIDR.IsValid() {
+			backends = k.ClusterCIDR
+		}
 		for _, b := range r.Backends {
-			if !IsUID(b.UID) || !b.Address.Addr().Is4() || !k.PodCIDR.Contains(b.Address.Addr()) || b.Address.Port() == 0 {
+			if !IsUID(b.UID) || !b.Address.Addr().Is4() || !backends.Contains(b.Address.Addr()) || b.Address.Port() == 0 {
 				return fmt.Errorf("invalid Service backend %s", b.Address)
 			}
 		}
