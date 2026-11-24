@@ -657,7 +657,7 @@ func (a *Agent) containerConfig(pod *apis.Pod, c *apis.Container, attempt int, v
 		if !ok {
 			return cfg, fmt.Errorf("volume %q is not prepared", vm.Name)
 		}
-		cfg.Mounts = append(cfg.Mounts, runtime.Mount{Source: src, Destination: vm.MountPath, ReadOnly: vm.ReadOnly})
+		cfg.Mounts = append(cfg.Mounts, runtime.Mount{Source: src, Destination: vm.MountPath, ReadOnly: vm.ReadOnly || claimReadOnly(pod, vm.Name)})
 	}
 	if q, ok := c.Resources.Limits["cpu"]; ok {
 		milli, err := q.MilliValue()

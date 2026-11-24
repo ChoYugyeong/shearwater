@@ -81,6 +81,12 @@ func (a *Agent) ensurePodFiles(pod *apis.Pod, ip string) (volumes map[string]str
 	volumes = map[string]string{}
 	for _, v := range pod.Spec.Volumes {
 		switch {
+		case v.PersistentVolumeClaim != nil:
+			p, err := a.claimDirectory(pod.Metadata.Namespace, v.PersistentVolumeClaim.ClaimName)
+			if err != nil {
+				return nil, fmt.Errorf("volume %q: %w", v.Name, err)
+			}
+			volumes[v.Name] = p
 		case v.EmptyDir != nil:
 			p := filepath.Join(dir, "volumes", v.Name)
 			if !exists(p) {

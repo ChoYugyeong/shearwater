@@ -159,10 +159,12 @@ func validatePodSpec(s *PodSpec, path string, errs *ErrorList) {
 		}
 		volumes[v.Name] = true
 		switch {
-		case v.EmptyDir != nil && v.HostPath != nil:
-			errs.forbidden(f, "a volume has exactly one source; both emptyDir and hostPath are set")
-		case v.EmptyDir == nil && v.HostPath == nil:
-			errs.unsupported(f, "only emptyDir and hostPath volumes are implemented (no configMap, secret or persistentVolumeClaim)")
+		case v.EmptyDir != nil && v.HostPath != nil || v.PersistentVolumeClaim != nil && (v.EmptyDir != nil || v.HostPath != nil):
+			errs.forbidden(f, "a volume must have exactly one source")
+		case v.EmptyDir == nil && v.HostPath == nil && v.PersistentVolumeClaim == nil:
+			errs.unsupported(f, "only emptyDir, hostPath and persistentVolumeClaim volumes are implemented")
+		case v.PersistentVolumeClaim != nil && !IsDNS1123Subdomain(v.PersistentVolumeClaim.ClaimName):
+			errs.invalid(f+".persistentVolumeClaim.claimName", v.PersistentVolumeClaim.ClaimName, nameSubdomain)
 		case v.HostPath != nil && !strings.HasPrefix(v.HostPath.Path, "/"):
 			errs.invalid(f+".hostPath.path", v.HostPath.Path, "must be an absolute path")
 		}
