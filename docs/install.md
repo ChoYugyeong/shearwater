@@ -1,5 +1,7 @@
 # Shearwater v0.1.0-alpha.14 설치와 첫 웹 앱
 
+[English](en/install.md) · **한국어**
+
 설치 도우미로 시작하려면 [설치·인증·AI 연결 순서](onboarding.md)를 따라 해.
 아래는 준비물 확인, 수동 설치, 기존 서버 업데이트 방법이야.
 

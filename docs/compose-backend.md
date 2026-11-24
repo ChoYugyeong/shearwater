@@ -1,5 +1,7 @@
 # 기존 Docker Compose 앱을 AI에게 맡기기 — `sw compose serve`
 
+[English](en/compose-backend.md) · **한국어**
+
 > alpha.14부터 제공해. 위임 경로(`sw task`)만 지원해. 실제 Docker에서 확인한 것:
 > - Claude·DeepSeek·Qwen이 이 흐름으로 7단계(배포·업데이트·장애 진단·복구)를 끝냈어. Qwen은 2회 중 1회 통과야.
 > - docker 그룹의 일반 사용자 운영자와, docker 권한이 없는 별도 AI 계정 조합으로도 돌려 봤어.

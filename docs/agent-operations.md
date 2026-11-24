@@ -1,5 +1,7 @@
 # 앱 하나의 운영을 AI에게 위임하기
 
+[English](en/agent-operations.md) · **한국어**
+
 이 문서는 **alpha.12부터 제공하는** 서버 작업 기능을 설명해. alpha.11에는 `sw task`가 없어.
 [설치 안내](install.md)의 예제를 따라 서버와 클라이언트를 모두 alpha.14으로 준비해.
 구현은 [internal/operation](../internal/operation), 명령 연결은
