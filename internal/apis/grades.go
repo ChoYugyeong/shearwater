@@ -59,6 +59,14 @@ func StoredOnly(o Object) []StoredField {
 		}
 	}
 	switch v := o.(type) {
+	case *PersistentVolume:
+		add("spec.capacity.storage", v.Spec.Capacity["storage"], "used to match claims; the directory has no filesystem quota")
+	case *PersistentVolumeClaim:
+		add("spec.resources.requests.storage", v.Spec.Resources.Requests["storage"], "used for binding and namespace accounting; the directory has no filesystem quota")
+	case *StorageClass:
+		if v.AllowVolumeExpansion != nil && *v.AllowVolumeExpansion {
+			add("allowVolumeExpansion", true, "volume expansion is not implemented")
+		}
 	case *Pod:
 		podSpec(&v.Spec, "spec")
 	case *Deployment:

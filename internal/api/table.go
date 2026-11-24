@@ -94,6 +94,17 @@ var (
 )
 
 var tableColumns = map[string][]tableColumn{
+	"PersistentVolume": {nameCol, col("Capacity", "string", 0, "Declared storage capacity"),
+		col("Access Modes", "string", 0, "Supported access modes"), col("Reclaim Policy", "string", 0, "Action after claim deletion"),
+		col("Status", "string", 0, "Volume phase"), col("Claim", "string", 0, "Namespace and name of the claim"),
+		col("StorageClass", "string", 0, "Storage class"), col("VolumeAttributesClass", "string", 0, "Volume attributes class"),
+		col("Reason", "string", 0, "Reason for the current phase"), ageCol, col("VolumeMode", "string", 1, "Volume mode")},
+	"PersistentVolumeClaim": {nameCol, col("Status", "string", 0, "Claim phase"), col("Volume", "string", 0, "Bound volume"),
+		col("Capacity", "string", 0, "Bound storage capacity"), col("Access Modes", "string", 0, "Bound access modes"),
+		col("StorageClass", "string", 0, "Storage class"), col("VolumeAttributesClass", "string", 0, "Volume attributes class"),
+		ageCol, col("VolumeMode", "string", 1, "Volume mode")},
+	"StorageClass": {nameCol, col("Provisioner", "string", 0, "Volume provisioner"), col("ReclaimPolicy", "string", 0, "Default reclaim policy"),
+		col("VolumeBindingMode", "string", 0, "When volumes bind"), col("AllowVolumeExpansion", "boolean", 0, "Requested expansion support"), ageCol},
 	"Pod": {nameCol,
 		col("Ready", "string", 0, "Containers that are running, out of all containers. In stage 1 there are no probes, so ready means running."),
 		col("Status", "string", 0, "Phase of the pod, or the reason a container is waiting or has terminated"),
@@ -363,6 +374,29 @@ func cells(obj apis.Object, now time.Time) []any {
 	m := obj.Meta()
 	age := since(m.CreationTimestamp, now)
 	switch o := obj.(type) {
+	case *apis.PersistentVolume:
+		claim, phase := "", string(o.Status.Phase)
+		if ref := o.Spec.ClaimRef; ref != nil {
+			claim = ref.Namespace + "/" + ref.Name
+		}
+		if m.DeletionTimestamp != nil {
+			phase = "Terminating"
+		}
+		return []any{m.Name, string(o.Spec.Capacity["storage"]), accessModes(o.Spec.AccessModes), o.Spec.PersistentVolumeReclaimPolicy,
+			phase, claim, o.Spec.StorageClassName, "<unset>", "", age, o.Spec.VolumeMode}
+	case *apis.PersistentVolumeClaim:
+		phase := string(o.Status.Phase)
+		if m.DeletionTimestamp != nil {
+			phase = "Terminating"
+		}
+		return []any{m.Name, phase, o.Spec.VolumeName, string(o.Status.Capacity["storage"]), accessModes(o.Status.AccessModes),
+			o.ClassName(), "<unset>", age, o.Spec.VolumeMode}
+	case *apis.StorageClass:
+		name := m.Name
+		if m.Annotations[apis.DefaultClassAnnotation] == "true" {
+			name += " (default)"
+		}
+		return []any{name, o.Provisioner, o.ReclaimPolicy, o.VolumeBindingMode, o.AllowVolumeExpansion != nil && *o.AllowVolumeExpansion, age}
 	case *apis.Pod:
 		return podCells(o, now)
 	case *apis.Deployment:
@@ -404,6 +438,21 @@ func cells(obj apis.Object, now time.Time) []any {
 		return ingressClassCells(o, now)
 	}
 	return []any{m.Name, age}
+}
+
+func accessModes(modes []string) string {
+	var out []string
+	for _, m := range modes {
+		switch m {
+		case "ReadWriteOnce":
+			out = append(out, "RWO")
+		case "ReadOnlyMany":
+			out = append(out, "ROX")
+		case "ReadWriteMany":
+			out = append(out, "RWX")
+		}
+	}
+	return strings.Join(out, ",")
 }
 
 func ingressCells(ing *apis.Ingress, now time.Time) []any {

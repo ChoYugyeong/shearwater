@@ -209,7 +209,7 @@ var volume = &message{"Volume", map[int]field{1: str("name"), 2: {name: "volumeS
 var volumeSource = &message{"VolumeSource", map[int]field{
 	1: msgPtr("hostPath", hostPathVolumeSource), 2: msgPtr("emptyDir", emptyDirVolumeSource),
 	3: nonePtr("gcePersistentDisk"), 4: nonePtr("awsElasticBlockStore"), 5: nonePtr("gitRepo"), 6: nonePtr("secret"),
-	7: nonePtr("nfs"), 8: nonePtr("iscsi"), 9: nonePtr("glusterfs"), 10: nonePtr("persistentVolumeClaim"),
+	7: nonePtr("nfs"), 8: nonePtr("iscsi"), 9: nonePtr("glusterfs"), 10: msgPtr("persistentVolumeClaim", claimVolumeSource),
 	11: nonePtr("rbd"), 12: nonePtr("flexVolume"), 13: nonePtr("cinder"), 14: nonePtr("cephfs"), 15: nonePtr("flocker"),
 	16: nonePtr("downwardAPI"), 17: nonePtr("fc"), 18: nonePtr("azureFile"), 19: nonePtr("configMap"),
 	20: nonePtr("vsphereVolume"), 21: nonePtr("quobyte"), 22: nonePtr("azureDisk"), 23: nonePtr("photonPersistentDisk"),

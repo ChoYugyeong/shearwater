@@ -164,6 +164,8 @@ type Volume struct {
 	Name     string                `json:"name"`
 	EmptyDir *EmptyDirVolumeSource `json:"emptyDir,omitempty"`
 	HostPath *HostPathVolumeSource `json:"hostPath,omitempty"`
+
+	PersistentVolumeClaim *PersistentVolumeClaimVolumeSource `json:"persistentVolumeClaim,omitempty"`
 }
 
 type EmptyDirVolumeSource struct{}
