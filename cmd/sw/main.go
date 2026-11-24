@@ -46,6 +46,7 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw capabilities show supported agent operations and their limits
   sw server      run the API server in the foreground
   sw kubeconfig  print a kubeconfig for kubectl
+  sw user        add, list, remove users or rotate their tokens
   sw version     print the version
   sw service     render/install/manage an automatic systemd service
   sw backup      snapshot the database and credentials, optionally cold volumes
@@ -130,6 +131,8 @@ func main() {
 		err = runServer(args)
 	case "kubeconfig":
 		err = runKubeconfig(args)
+	case "user":
+		err = runUser(args)
 	case "version", "--version":
 		fmt.Println("sw " + api.Version + " (Kubernetes API " + api.GitVersion + ")")
 	case "help", "-h", "--help":
