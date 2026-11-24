@@ -2,18 +2,58 @@ package main
 
 import (
 	"context"
+	"errors"
+	"log"
 	"net/netip"
 
 	"shearwater/internal/admission"
+	"shearwater/internal/apis"
+	"shearwater/internal/dns"
+	"shearwater/internal/edge"
+	"shearwater/internal/objects"
 	"shearwater/internal/store"
 )
 
 // wireNetworkServices attaches the control-plane side of DNS and Ingress:
-// the admission check that keeps a host name with the namespace that claimed
-// it first (docs/design-multinode-tenancy.md 4). Owned by the
-// network-services work.
+// bootstrapping the default "shearwater" IngressClass and registering the
+// host-ownership admission check that keeps a host name with the namespace
+// that claimed it first (docs/design-multinode-tenancy.md 4).
 func wireNetworkServices(w *wiring) []admission.Func {
-	return nil
+	if w != nil && w.Store != nil {
+		if err := ensureDefaultIngressClass(w.Store); err != nil {
+			log.Printf("network services: ensure default IngressClass: %v", err)
+		}
+	}
+	return []admission.Func{edge.HostOwnershipAdmission()}
+}
+
+func ensureDefaultIngressClass(st *store.Store) error {
+	res := apis.Lookup("networking.k8s.io", "v1", "ingressclasses")
+	if res == nil {
+		return nil
+	}
+	return st.Write(false, func(tx *store.Tx) error {
+		key := objects.Key(res, "", apis.DefaultIngressClassName)
+		if _, err := tx.Get(key); err == nil {
+			return nil
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
+		ic := &apis.IngressClass{
+			Metadata: apis.ObjectMeta{
+				Name: apis.DefaultIngressClassName,
+				Annotations: map[string]string{
+					apis.DefaultIngressClassAnnotation: "true",
+				},
+			},
+			Spec: apis.IngressClassSpec{
+				Controller: apis.IngressClassController,
+			},
+		}
+		objects.Stamp(res, ic)
+		_, err := tx.Create(objects.Put(res, ic))
+		return err
+	})
 }
 
 // runNodeNetworkServices runs this node's network services (the cluster DNS
@@ -22,5 +62,19 @@ func wireNetworkServices(w *wiring) []admission.Func {
 // store on the control plane, the node API on a worker); gateway is this node's
 // pod gateway address, the first address of its pod CIDR, where pods find DNS.
 func runNodeNetworkServices(ctx context.Context, r store.Reader, gateway netip.Addr, logf func(string, ...any)) {
-	<-ctx.Done()
+	if !gateway.IsValid() {
+		if logf != nil {
+			logf("cluster DNS not started: invalid gateway address")
+		}
+		<-ctx.Done()
+		return
+	}
+	srv := &dns.Server{
+		Store: r,
+		Addr:  netip.AddrPortFrom(gateway, 53),
+		Logf:  logf,
+	}
+	if err := srv.Run(ctx); err != nil && ctx.Err() == nil && logf != nil {
+		logf("cluster DNS stopped: %v", err)
+	}
 }

@@ -29,8 +29,11 @@ type PodSpec struct {
 	Affinity     *Affinity         `json:"affinity,omitempty"`
 	Tolerations  []Toleration      `json:"tolerations,omitempty"`
 
+	// cluster DNS (docs/dns.md)
+	DNSPolicy string        `json:"dnsPolicy,omitempty"`
+	DNSConfig *PodDNSConfig `json:"dnsConfig,omitempty"`
+
 	// stored only
-	DNSPolicy         string          `json:"dnsPolicy,omitempty"`
 	PriorityClassName string          `json:"priorityClassName,omitempty"`
 	SecurityContext   json.RawMessage `json:"securityContext,omitempty"`
 

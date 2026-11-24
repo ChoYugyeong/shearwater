@@ -8,8 +8,8 @@ Shearwater는 Kubernetes API의 일부를 구현한 단일 노드 오케스트�
 |---|---|---|
 | Pod | containerd 실행, IPv4, 로그·직전 로그, 재시작 정책, 유예 삭제 | 단일 노드, CNI/CRI 미사용 |
 | Deployment / ReplicaSet | 복제본 유지, RollingUpdate/Recreate, `/scale`, 이력·되돌리기 | `minReadySeconds`, `progressDeadlineSeconds`는 저장만 함 |
-| Service / EndpointSlice | IPv4 ClusterIP 예약, Ready Pod 선택, 이름 포트, Linux 커널 TCP 전달 | DNS·UDP·NodePort·LoadBalancer 미구현, headless DNS 미제공 |
-| 공개 진입점 | Service 주석의 호스트 이름으로 80·443 요청 전달, ACME HTTP-01 인증서 자동 발급·갱신 | Ingress 자원·경로별 연결·와일드카드 미지원. 격리 QA 엔진에서 Pebble로 확인, 실제 Let's Encrypt 서버에서는 미검증. [공개 진입점](public-entry.md) |
+| Service / EndpointSlice | IPv4 ClusterIP 예약, Ready Pod 선택, 이름 포트, Linux 커널 TCP 전달, 내장 클러스터 DNS(`cluster.local` A·SRV·PTR·headless, Pod `resolv.conf`와 `dnsPolicy`/`dnsConfig`) | UDP·NodePort·LoadBalancer·ExternalName 미구현. [클러스터 DNS](dns.md) |
+| 공개 진입점 / Ingress | `networking.k8s.io/v1` Ingress·IngressClass(`shearwater`), 경로별 연결(`Exact`/`Prefix`/`ImplementationSpecific`, `defaultBackend`), TLS Secret과 ACME HTTP-01 자동 발급·갱신, 네임스페이스 간 호스트 소유권 거절(409), 기존 Service 주석 방식 호환 | 와일드카드 호스트·`resource` 백엔드·커스텀 리라이트 미지원. 격리 QA 엔진에서 Pebble로 확인, 실제 Let's Encrypt 서버에서는 미검증. [공개 진입점](public-entry.md), [Ingress](ingress.md) |
 | 리소스 | CPU/메모리 limits 적용 | requests는 저장만 하고 배치에 쓰지 않음 |
 | 볼륨 | emptyDir, hostPath와 type 검사·OrCreate 생성 | PVC/CSI 같은 영속 볼륨 체계 미구현 |
 | Secret | `data`·`stringData`(쓰기 전용, `data`로 합침)·`type`·`immutable`, 키·1MiB 크기 검사, `kubernetes.io/tls`의 `tls.crt`·`tls.key` 확인. 컨테이너 `env[].valueFrom.secretKeyRef`와 `envFrom[].secretRef`(prefix·optional 포함)를 컨테이너를 만들 때 읽음 | **암호화하지 않음**(Kubernetes 기본값처럼 base64로 저장) — DB는 root만 읽게 둬. Secret 볼륨·ConfigMap·downward API 미구현. 값이 바뀌어도 이미 실행 중인 컨테이너는 다시 만들어질 때 새 값을 읽어. 표 출력과 개발용 trace에는 값이 나오지 않아 |
