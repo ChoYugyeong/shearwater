@@ -110,7 +110,7 @@ def main():
         names = {item['name'] for item in read.call('tools/list')['tools']}
         check('read-only mode exposes diagnostics and agent observation tools', names == {
             'sw_status', 'sw_tree', 'sw_get', 'sw_logs', 'sw_events', 'sw_why',
-            'sw_capabilities', 'sw_observe', 'sw_verify', 'sw_verify_plan', 'sw_receipt'})
+            'sw_capabilities', 'sw_observe', 'sw_verify', 'sw_verify_plan', 'sw_receipt', 'sw_changes'})
         check('capabilities explicitly distinguish readiness from HTTP',
               json.loads(read.tool('sw_capabilities'))['observation']['reachability'] == 'not checked')
         read.tool('sw_apply', {'plan': '0' * 64}, failure=True)
