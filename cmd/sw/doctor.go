@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -74,14 +75,41 @@ func hostChecks(ctx context.Context, o opsOptions) []hostCheck {
 	}
 	add("cgroup v2", "/sys/fs/cgroup", "use the WSL Ubuntu-24.04 Linux runtime with cgroup v2 enabled", err)
 	add("IPv4 forwarding", "enabled", "enable net.ipv4.ip_forward on the host before starting Pod networking", runtime.CheckIPv4Forwarding())
-	n := runtime.NewNet(o.RunDir, apis.PodCIDR, apis.ServiceCIDR)
-	add("network ranges", apis.PodCIDR.String()+" and "+apis.ServiceCIDR.String(),
+	n := hostNet(o)
+	add("network ranges", n.PodCIDR.String()+" and "+apis.ServiceCIDR.String(),
 		"inspect ip -4 route show table all; resolve the overlap before starting Shearwater", n.CheckHostRanges(ctx))
 	if os.Geteuid() == 0 {
 		add("iptables tables", "filter/FORWARD and nat/POSTROUTING available",
 			"check the host's iptables and permissions; keep Shearwater's chains dedicated to Shearwater", n.CheckFirewall(ctx))
 	}
 	return out
+}
+
+// hostNet describes this node's pod network as its server will set it up, so
+// the checks recognise what an earlier run of it left behind (a server that
+// was killed keeps its bridge, routes and chains): a worker's own pod range
+// and the overlay of a node in a cluster (a joined worker or standby, or a
+// control plane that advertises an address).
+func hostNet(o opsOptions) *runtime.Net {
+	pods, cluster, overlay := apis.PodCIDR, apis.ClusterCIDR, false
+	var cfg nodeConfig
+	if err := readPrivateJSON(filepath.Join(standbyDir(o.ConfigDir), nodeConfigFile), &cfg); err == nil {
+		if p, err := netip.ParsePrefix(cfg.PodCIDR); err == nil {
+			pods = p
+		}
+		if c, err := netip.ParsePrefix(cfg.ClusterCIDR); err == nil {
+			cluster = c
+		}
+		overlay = true
+	}
+	if readClusterConfig(o.ConfigDir).AdvertiseAddress != "" {
+		overlay = true
+	}
+	n := runtime.NewNet(o.RunDir, pods, apis.ServiceCIDR)
+	if overlay {
+		n.Overlay, n.ClusterCIDR = true, cluster
+	}
+	return n
 }
 
 func runDoctor(args []string) error {

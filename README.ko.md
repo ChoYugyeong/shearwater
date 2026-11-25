@@ -2,13 +2,20 @@
 
 [English](README.md) · **한국어**
 
-*AI 에이전트에게 서버 배포를 맡겨도 돼요. 단, 승인한 변경만, 딱 한 번, 실제로 응답할 때까지는 "완료"가 아니에요.*
+*AI 에이전트가 배포할 수 있는 Docker Compose 서버 — 단, HTTP 증거 없이는 절대 "완료"라고 보고할 수 없어요.*
 
-이제 AI 에이전트가 MCP로 서버를 바꿀 수 있어요. Shearwater는 에이전트와 Linux 서버 한 대 사이에 들어가요. 에이전트는 맡긴 앱 하나만 건드릴 수 있고, 사람이 정확한 계획을 승인해요. 그 계획은 모델이 바뀌거나 서버가 재시작돼도 딱 한 번만 실행돼요. 그리고 새 사본 하나하나가 기대한 응답을 HTTP로 돌려주기 전에는 에이전트가 성공을 보고할 수 없어요.
+AI 에이전트가 MCP로 서버를 바꿀 수 있게 됐지만, Docker 소켓이나 플랫폼 API 키를 그대로 넘기면 무엇이 바뀌었고 실제로 잘 뜨는지 알기 어려워요. Shearwater는 에이전트와 Linux 서버 사이에 들어가요. **이미 쓰고 있는 Docker Compose 프로젝트** 앞에 붙이거나(root 불필요, compose 파일은 고치지 않아요), Kubernetes API 일부를 직접 구현한 **자체 런타임**으로 돌릴 수 있어요.
 
-**이미 쓰고 있는 Docker Compose 프로젝트** 앞에 붙일 수 있어요(root 불필요, compose 파일은 고치지 않아요). Kubernetes API 일부를 직접 구현한 **자체 런타임**으로도 돌릴 수 있어요.
+**AI 에이전트(와 운영자)가 얻는 것:**
+- **전용 제한 신원과 MCP 설정을 한 번에:** `sw agent add` 한 줄로 네임스페이스 제한 kubeconfig, 에이전트 전용 토큰(관리자 토큰 제외), Claude·Codex·Gemini·Qwen MCP 설정, 운영 스킬, `AGENT.md`를 만들어요(자체 런타임).
+- **계획 해시 승인과 정확히 한 번 실행:** 에이전트가 계획을 세우면 사람이 정확한 해시를 승인해요(`sw task approve`). 변경과 적용 기록을 SQLite에 함께 저장해 재시도·모델 교체·서버 재시작에도 두 번 적용하지 않아요.
+- **완료 전 HTTP 증거:** 새 사본 하나하나와 Service/호스트 포트가 HTTP 200과 기대한 문구를 돌려주기 전에는 `healthy`가 되지 않아요. 실패하면 `http_failed`와 저장된 증거를 남겨요(`sw task evidence`).
+- **에이전트 사이 앱 임대(Lease):** 계획을 저장하면 보유자·의도·만료가 담긴 임대(`shearwater-app-<앱>`)를 잡아요. 다른 에이전트는 중간에 덮어쓰지 못하고 `APP_LEASED retry=safe`를 받아요(`sw lease`).
+- **마지막 검증 이미지로 자동 되돌리기:** `--auto-recover`를 켜면 승인된 업데이트의 검증이 확정 실패할 때 마지막으로 HTTP 검증을 통과한 고정 이미지로 한 번 자동으로 돌아가고 다시 검증해요.
+- **"리비전 N 이후 바뀐 것과 누가 바꿨는지":** `sw changes --since N`과 MCP `sw_changes`가 바뀐 필드 요약(Secret 값은 숨김), 행위자(사람·에이전트·노드·작업), 접힌 status/하트비트 건수를 돌려줘요(자체 런타임).
+- **재시도 여부를 말하는 오류:** `CODE retry=safe|unsafe|never`와 힌트로 에이전트가 다시 시도할지, 먼저 확인할지, 멈출지 바로 판단해요.
 
-[Docker Compose로 시작하기](#docker-compose로-시작하기) · [자체 런타임으로 시작하기](#자체-런타임으로-시작하기) · [측정 결과](#측정-결과)
+[Docker Compose로 시작하기](#docker-compose로-시작하기) · [자체 런타임으로 시작하기](#자체-런타임으로-시작하기) · [alpha.16 이후 추가](#alpha16-이후-추가된-것-아직-미출시) · [측정 결과](#측정-결과)
 
 <p align="center">
   <img src="docs/media/broken-update-caught.gif" width="576" alt="에이전트의 v2 업데이트가 승인을 기다렸다가 승인 뒤 검증을 통과해요. 다음 이미지는 HTTP 200을 돌려주지만 기대한 문구가 없어서 서버가 healthy 대신 http_failed로 보고하고, 복구는 마지막으로 검증된 이미지로 돌아가요.">
@@ -92,7 +99,7 @@ Compose는 업데이트할 때 컨테이너를 새로 만들어서 짧게 끊길
 
 ## 자체 런타임으로 시작하기
 
-Shearwater에는 서버 한 대나 여러 대(컨트롤 플레인 한 대와 워커)에서 도는 작은 런타임도 있어요. Kubernetes API 일부(Pod, Deployment, Service, Secret, RBAC, Ingress, 볼륨, NetworkPolicy)를 직접 구현해서 `kubectl`을 그대로 쓸 수 있고, `k8s.io` 패키지는 하나도 가져오지 않아요. 들어오면 CI가 빌드를 실패시켜요. 롤링 업데이트(아래 측정에서 실패 요청 0건)와 내장 공개 HTTPS 진입점이 더해져요. containerd, runc, 네트워크 도구, 관리자 권한이 필요해요. [설치 준비](docs/install.md)
+Shearwater에는 서버 한 대나 여러 대(컨트롤 플레인과 워커)에서 도는 작은 런타임도 있어요. Kubernetes API 일부(Pod, Deployment, Service, Secret, RBAC, Ingress, 볼륨, NetworkPolicy)를 직접 구현해서 `kubectl`을 그대로 쓸 수 있고, `k8s.io` 패키지는 하나도 가져오지 않아요. 들어오면 CI가 빌드를 실패시켜요. 롤링 업데이트(아래 측정에서 실패 요청 0건)와 내장 공개 HTTPS 진입점이 더해져요. containerd, runc, 네트워크 도구, 관리자 권한이 필요해요. [설치 준비](docs/install.md)
 
 새 Ubuntu·Debian 서버라면 `sudo python3 install.py --version v0.1.0-alpha.16 --host --apply`가 containerd·runc가 없을 때 설치하고 systemd 서비스를 시작해요. 그다음 `sw setup`으로 인증 정보를 준비하고 첫 앱 안내를 따라가세요. [인증 정보 준비](docs/onboarding.md) · [첫 웹 앱 실행](docs/first-try.md)
 
@@ -106,34 +113,17 @@ Shearwater에는 서버 한 대나 여러 대(컨트롤 플레인 한 대와 워
 2. **정확한 계획을 승인해요.** 운영자 터미널의 `sw task review`에서 대상, 변경 전후 이미지, 검사 조건을 읽어요. `sw task approve`에 그 계획의 해시를 지정해야 AI가 적용할 수 있어요.
 3. **결과를 확인하고 이어가요.** 서버는 앱 변경과 적용 기록을 SQLite에 함께 저장해요. 모델이 바뀌거나 서버가 재시작돼도 `continue`는 같은 변경을 한 번만 적용해요. 새 Pod 각각과 내부 Service가 HTTP 200 및 지정한 본문 조건을 통과했는지 `sw task evidence`로 확인할 수 있어요.
 
-복구할 때는 이전에 HTTP 검사까지 통과한 이미지로 새 계획을 만들고 다시 승인해요. [위임·승인·복구 명령 예제](docs/agent-operations.md)
+복구할 때는 이전에 HTTP 검사까지 통과한 이미지로 새 계획을 만들고 다시 승인해요(아래 미출시 변경의 `--auto-recover`로 자동 복구를 미리 허용할 수도 있어요). [위임·승인·복구 명령 예제](docs/agent-operations.md)
 
-## alpha.16에서 새로 생긴 것
+## alpha.16 이후 추가된 것 (아직 미출시)
 
-- **여러 서버로 써요.** 컨트롤 플레인을 `sw up --advertise-address IP`로 시작하고, `sw node token`이 출력하는 명령을 각 워커에서 실행해요(`sw join`). Pod는 여러 노드에 나뉘어 배치되고(nodeSelector, node affinity, taint, 요청 자원), VXLAN Pod 네트워크로 서로 닿고, 서버가 응답하지 않으면 컨트롤러가 다른 노드에 다시 만들어요. 컨트롤 플레인은 한 대예요(고가용성은 아직 없어요). [여러 서버](docs/multi-node.md)
-- **여러 사람과 에이전트가 나눠 써요.** RBAC(Role, ClusterRole, 바인딩, `kubectl auth can-i`·`whoami`), 네임스페이스 하나만 다루는 kubeconfig를 만드는 `sw user add NAME --namespace NS`, ResourceQuota와 Pod Security를 지원해요. 쿼터와 Pod Security는 Deployment가 만드는 Pod에도 적용돼요. [접근 제어](docs/access-control.md)
-- **클러스터 DNS와 Ingress.** 모든 노드에서 `sw`가 `<service>.<namespace>.svc.cluster.local`에 답해요. Ingress는 공개 진입점에서 호스트와 경로로 연결하고, 호스트는 먼저 차지한 네임스페이스의 것으로 남아요. [DNS](docs/dns.md) · [Ingress](docs/ingress.md)
-- **영속 볼륨과 NetworkPolicy.** 기본 `local-path` StorageClass로 PVC를 쓰면 Pod가 데이터가 있는 노드에 배치돼요. NetworkPolicy는 모든 노드에서 적용돼요.
+아래 기능은 개발 브랜치에 있으며 공개 `v0.1.0-alpha.16` 내려받기에는 아직 들어 있지 않아요.
 
-서버 세 대를 흉내 낸 환경(서버마다 별도 network namespace·containerd·cgroup)에서 워커 장애를 포함한 9단계로 확인했어요. 실제로 서로 다른 서버와 클라우드 네트워크에서는 아직 확인하지 않았어요. VXLAN은 암호화하지 않으니 사설망이나 VPN 위에서 써요. [릴리스 기록](docs/releases.md)
-
-### alpha.15에서 추가된 것
-
-- **실패한 검사가 어디서 왜 실패했는지 알려 줘요.** 배포가 HTTP 검사를 통과하지 못하면(`http_failed`) 에이전트는 어느 검사가 몇 개 사본에서 왜 실패했는지 받아요. 예: `HTTP 200, expected text missing`. 기대한 문구 자체는 적지 않아요. `diagnose`도 마지막 실패 검사를 시각과 함께 보여 줘요.
-- **증거가 무엇을 보여 줬는지 말해요.** `sw task evidence`가 저장된 증거의 결과(`passed`/`failed`), 확인 시각, 목표 세대를 보여 줘서, 방금 검증된 앱이 미확인처럼 읽히지 않아요.
-- **공개 진입점 인증서 갱신이 더 안정적이에요.** 갱신 시기가 되면 바로 깨어나고, 새 인증서가 안전하게 유효해질 때까지 이전 인증서를 계속 써요. `sw edge status`가 만료를 표시하고, 백업에 진입점 설정·ACME 계정 키·인증서가 들어가요.
-- **시작·검증 출력이 더 분명해요.** 시작이 실패하면 `sw up`이 서버 로그의 마지막 줄을 보여 주고, verify의 사실 문구가 백엔드마다 실제로 검사한 대상(Pod와 Service, 또는 컨테이너와 호스트 포트)을 적어요.
-
-실패 설명은 새 GitHub 호스팅 VM의 실제 Docker에서 확인해요. README대로 설치한 공개 릴리스와 현재 소스로 빌드한 실행 파일, 두 경우 모두 확인해요(빠른 시작 검사). 인증서 변경은 ACME 시험 서버 Pebble로 확인했어요. [릴리스 기록](docs/releases.md)
-
-### alpha.14에서 추가된 것
-
-- **기존 Docker Compose 앱.** `sw compose serve`를 Compose 프로젝트 앞에 띄우면 서비스 하나를 같은 위임·승인·HTTP 증거 흐름으로 맡길 수 있어요. compose 파일은 고치지 않아요. [Compose 안내](docs/compose-backend.md)
-- **공개 HTTPS 진입점.** Service에 `shearwater.io/public-host` 주석을 달고 `sw edge enable`을 켜면 80·443 포트로 내보내요. 인증서는 ACME(HTTP-01)로 받아요. [공개 진입점 안내](docs/public-entry.md)
-- **Secret.** 컨테이너가 `env[].valueFrom.secretKeyRef`와 `envFrom[].secretRef`로 값을 읽어요. 값은 base64로 저장할 뿐 암호화하지 않아요.
-- **새 서버를 한 번에.** 새 Ubuntu·Debian 서버에서 `sudo python3 install.py --version v0.1.0-alpha.16 --host --apply`를 실행하면, containerd가 없을 때만 containerd·runc를 설치하고 IPv4 전달을 켠 뒤 systemd 서비스를 시작해요. [설치 안내 0절](docs/install.md)
-
-이 기능들은 이 PC의 격리된 시험 환경과 새로 만든 로컬 Ubuntu VM에서 확인했어요. 실제 kubectl, 실제 Docker Compose, ACME 시험용 서버 Pebble을 썼어요. 공인 서버와 실제 Let's Encrypt 인증서로는 아직 확인하지 않았어요. [릴리스 기록](docs/releases.md)
+- **에이전트 신원 한 번에 만들기 (`sw agent`).** `sw agent add NAME --namespace NS [--client claude|codex|gemini|qwen|all]`로 네임스페이스 제한 kubeconfig, 에이전트 전용 `sw/` 연결 폴더(`admin.token` 제외), MCP 설정, 내장 `skills/shearwater-ops/` 사본, `AGENT.md`를 한 번에 만들고 클라이언트 연결 명령을 출력해요. 네임스페이스 제한 토큰으로 조회·진단·변경 요약·단일 네임스페이스 검증/적용 MCP 도구가 관리자 토큰 폴백 없이 동작해요. [에이전트 신원 안내](docs/agent-identity.md)
+- **리비전 N 이후 변경과 행위자 (`sw changes`, MCP `sw_changes`).** API·노드·작업 쓰기마다 같은 트랜잭션에 행위자(`admin`, 사용자·에이전트 이름, `system:node:NAME`, `task:ID`)와 경로(`kubectl`, `api`, `node`, `task`)를 남겨요. `sw changes --since N`과 `sw_changes`는 바뀐 필드 요약(Secret 값 제외), 접힌 status/하트비트 건수, 다음 커서(`next`)를 돌려줘요.
+- **에이전트 사이 앱 임대 (`sw lease`, `coordination.k8s.io/v1` Lease).** 위임 계획을 저장하면 보유자·의도·만료(최대 15분)가 담긴 `shearwater-app-<앱>` 임대를 잡아요. 다른 작업이 같은 앱을 계획하려 하면 `APP_LEASED retry=safe`와 보유자·만료·의도를 돌려주고, 운영자는 `sw lease list` / `sw lease release`나 `kubectl get leases`로 확인·해제해요. [에이전트 운영 안내](docs/agent-operations.md)
+- **검증 실패 시 자동 복구 (`--auto-recover`).** `sw task create ... --allow update,recover --auto-recover`로 만든 작업은 승인된 업데이트의 첫 확정 검증 실패 시 마지막으로 HTTP 검증을 통과한 고정 이미지로 한 번 자동 복구하고 다시 검증해요. 원래 실패와 복구 결과가 모두 `sw task evidence`에 남아요.
+- **대기 컨트롤 플레인과 증인 (작업 중).** 세미싱크 SQLite 복제 로그, 능동/대기 + 증인 프로토콜, 제자리 리더/대기 역할 전환으로 컨트롤 플레인 한 대가 죽어도 확인받은 쓰기를 유지하는 구성을 작업 중이에요(CLI 연결과 QA 전환 시간: TBD). [컨트롤 플레인 두 대 안내](docs/ha.md)
 
 ## 측정 결과
 
@@ -158,8 +148,37 @@ Shearwater에는 서버 한 대나 여러 대(컨트롤 플레인 한 대와 워
 
 ## 어떤 환경에 맞나요?
 
-신뢰하는 작은 HTTP 앱을 서버 한 대나 몇 대에서 맡기는 **실험적 알파**예요. IPv4·TCP ClusterIP를 지원하고, 컨트롤 플레인은 한 대(고가용성 없음)예요. 선택 기능인 공개 진입점이 주석을 단 Service의 TLS를 맡지만, 공개 도메인 연결과 로그인은 따로 확인해야 하고, 이미지 복구에는 DB 데이터 복원이 포함되지 않아요. `securityContext`는 Pod Security로 검사할 수 있지만 컨테이너는 런타임 기본 보안 설정으로 돌아요. RBAC·쿼터·NetworkPolicy로 사용자를 나누지만, 악의적인 사용자를 막도록 단단히 검증하지는 않았어요. [호환표](docs/compatibility.md)
+신뢰하는 작은 HTTP 앱을 서버 한 대나 몇 대에서 맡기는 **실험적 알파**예요. 공개된 `v0.1.0-alpha.16`은 IPv4·TCP ClusterIP를 지원하고 컨트롤 플레인은 한 대(고가용성 없음)예요(대기 컨트롤 플레인 + 증인은 개발 브랜치에서 작업 중, 전환 시간 TBD). 선택 기능인 공개 진입점이 주석을 단 Service의 TLS를 맡지만, 공개 도메인 연결과 로그인은 따로 확인해야 하고, 이미지 복구에는 DB 데이터 복원이 포함되지 않아요. `securityContext`는 Pod Security로 검사할 수 있지만 컨테이너는 런타임 기본 보안 설정으로 돌아요. RBAC·쿼터·NetworkPolicy로 사용자를 나누지만, 악의적인 사용자를 막도록 단단히 검증하지는 않았어요. [호환표](docs/compatibility.md)
 
-이미 Docker Compose로 앱 몇 개를 돌리고 있다면 Compose는 그대로 두고 그 앞에 Shearwater를 붙이세요. 고가용성 컨트롤 플레인, 네트워크 스토리지, Helm, 전체 Kubernetes API가 필요하면 Kubernetes나 K3s를 살펴보세요. [도구별 용도 비교](docs/choosing-shearwater.md)
+이미 Docker Compose로 앱 몇 개를 돌리고 있다면 Compose는 그대로 두고 그 앞에 Shearwater를 붙이세요. 검증된 고가용성 컨트롤 플레인, 네트워크 스토리지, Helm, 전체 Kubernetes API가 필요하면 Kubernetes나 K3s를 살펴보세요. [도구별 용도 비교](docs/choosing-shearwater.md)
+
+## 릴리스 기록
+
+### alpha.16에서 새로 생긴 것
+
+- **여러 서버로 써요.** 컨트롤 플레인을 `sw up --advertise-address IP`로 시작하고, `sw node token`이 출력하는 명령을 각 워커에서 실행해요(`sw join`). Pod는 여러 노드에 나뉘어 배치되고(nodeSelector, node affinity, taint, 요청 자원), VXLAN Pod 네트워크로 서로 닿고, 서버가 응답하지 않으면 컨트롤러가 다른 노드에 다시 만들어요. alpha.16에서는 컨트롤 플레인이 한 대예요(고가용성은 아직 없어요). [여러 서버](docs/multi-node.md)
+- **여러 사람과 에이전트가 나눠 써요.** RBAC(Role, ClusterRole, 바인딩, `kubectl auth can-i`·`whoami`), 네임스페이스 하나만 다루는 kubeconfig를 만드는 `sw user add NAME --namespace NS`, ResourceQuota와 Pod Security를 지원해요. 쿼터와 Pod Security는 Deployment가 만드는 Pod에도 적용돼요. [접근 제어](docs/access-control.md)
+- **클러스터 DNS와 Ingress.** 모든 노드에서 `sw`가 `<service>.<namespace>.svc.cluster.local`에 답해요. Ingress는 공개 진입점에서 호스트와 경로로 연결하고, 호스트는 먼저 차지한 네임스페이스의 것으로 남아요. [DNS](docs/dns.md) · [Ingress](docs/ingress.md)
+- **영속 볼륨과 NetworkPolicy.** 기본 `local-path` StorageClass로 PVC를 쓰면 Pod가 데이터가 있는 노드에 배치돼요. NetworkPolicy는 모든 노드에서 적용돼요.
+
+서버 세 대를 흉내 낸 환경(서버마다 별도 network namespace·containerd·cgroup)에서 워커 장애를 포함한 9단계로 확인했어요. 실제로 서로 다른 서버와 클라우드 네트워크에서는 아직 확인하지 않았어요. VXLAN은 암호화하지 않으니 사설망이나 VPN 위에서 써요. [릴리스 기록](docs/releases.md)
+
+### alpha.15에서 추가된 것
+
+- **실패한 검사가 어디서 왜 실패했는지 알려 줘요.** 배포가 HTTP 검사를 통과하지 못하면(`http_failed`) 에이전트는 어느 검사가 몇 개 사본에서 왜 실패했는지 받아요. 예: `HTTP 200, expected text missing`. 기대한 문구 자체는 적지 않아요. `diagnose`도 마지막 실패 검사를 시각과 함께 보여 줘요.
+- **증거가 무엇을 보여 줬는지 말해요.** `sw task evidence`가 저장된 증거의 결과(`passed`/`failed`), 확인 시각, 목표 세대를 보여 줘서, 방금 검증된 앱이 미확인처럼 읽히지 않아요.
+- **공개 진입점 인증서 갱신이 더 안정적이에요.** 갱신 시기가 되면 바로 깨어나고, 새 인증서가 안전하게 유효해질 때까지 이전 인증서를 계속 써요. `sw edge status`가 만료를 표시하고, 백업에 진입점 설정·ACME 계정 키·인증서가 들어가요.
+- **시작·검증 출력이 더 분명해요.** 시작이 실패하면 `sw up`이 서버 로그의 마지막 줄을 보여 주고, verify의 사실 문구가 백엔드마다 실제로 검사한 대상(Pod와 Service, 또는 컨테이너와 호스트 포트)을 적어요.
+
+실패 설명은 새 GitHub 호스팅 VM의 실제 Docker에서 확인해요. README대로 설치한 공개 릴리스와 현재 소스로 빌드한 실행 파일, 두 경우 모두 확인해요(빠른 시작 검사). 인증서 변경은 ACME 시험 서버 Pebble로 확인했어요. [릴리스 기록](docs/releases.md)
+
+### alpha.14에서 추가된 것
+
+- **기존 Docker Compose 앱.** `sw compose serve`를 Compose 프로젝트 앞에 띄우면 서비스 하나를 같은 위임·승인·HTTP 증거 흐름으로 맡길 수 있어요. compose 파일은 고치지 않아요. [Compose 안내](docs/compose-backend.md)
+- **공개 HTTPS 진입점.** Service에 `shearwater.io/public-host` 주석을 달고 `sw edge enable`을 켜면 80·443 포트로 내보내요. 인증서는 ACME(HTTP-01)로 받아요. [공개 진입점 안내](docs/public-entry.md)
+- **Secret.** 컨테이너가 `env[].valueFrom.secretKeyRef`와 `envFrom[].secretRef`로 값을 읽어요. 값은 base64로 저장할 뿐 암호화하지 않아요.
+- **새 서버를 한 번에.** 새 Ubuntu·Debian 서버에서 `sudo python3 install.py --version v0.1.0-alpha.16 --host --apply`를 실행하면, containerd가 없을 때만 containerd·runc를 설치하고 IPv4 전달을 켠 뒤 systemd 서비스를 시작해요. [설치 안내 0절](docs/install.md)
+
+이 기능들은 이 PC의 격리된 시험 환경과 새로 만든 로컬 Ubuntu VM에서 확인했어요. 실제 kubectl, 실제 Docker Compose, ACME 시험용 서버 Pebble을 썼어요. 공인 서버와 실제 Let's Encrypt 인증서로는 아직 확인하지 않았어요. [릴리스 기록](docs/releases.md)
 
 [문제 진단하기](docs/troubleshooting.md) · [체험 결과 남기기](docs/first-try-feedback.md) · [기여하기](CONTRIBUTING.md) · [보안 제보](SECURITY.md) · [Apache 2.0 라이선스](LICENSE) · [출처 고지](NOTICE)
