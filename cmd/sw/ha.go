@@ -146,15 +146,20 @@ func runWitness(ctx context.Context, dir string, out io.Writer) error {
 
 // Only public status fields belong here. Config also contains cluster secrets.
 type haStatusReport struct {
-	Self         string           `json:"self"`
-	Role         string           `json:"role"`
-	Leader       string           `json:"leader,omitempty"`
-	Epoch        int64            `json:"epoch"`
-	Members      []ha.Member      `json:"members,omitempty"`
-	Seq          *int64           `json:"seq,omitempty"`
-	InSync       *bool            `json:"inSync,omitempty"`
-	Witness      string           `json:"witness,omitempty"`
-	WitnessState *ha.WitnessState `json:"witnessState,omitempty"`
+	Self    string      `json:"self"`
+	Role    string      `json:"role"`
+	Leader  string      `json:"leader,omitempty"`
+	Epoch   int64       `json:"epoch"`
+	Members []ha.Member `json:"members,omitempty"`
+	Seq     *int64      `json:"seq,omitempty"`
+	InSync  *bool       `json:"inSync,omitempty"`
+	// From the leader: its standby, the last batch that standby confirmed
+	// and how long ago it last asked for batches.
+	Standby        string           `json:"standby,omitempty"`
+	Confirmed      *int64           `json:"confirmed,omitempty"`
+	StandbySeenAgo string           `json:"standbySeenAgo,omitempty"`
+	Witness        string           `json:"witness,omitempty"`
+	WitnessState   *ha.WitnessState `json:"witnessState,omitempty"`
 }
 
 func showHAStatus(dir, listen string, jsonOut bool, out io.Writer) error {
@@ -213,6 +218,7 @@ func showHAStatus(dir, listen string, jsonOut bool, out io.Writer) error {
 				problems = append(problems, err)
 			} else {
 				st.Leader, st.Epoch, st.Seq, st.InSync = snap.Self, snap.Epoch, &snap.Seq, &snap.InSync
+				st.Standby, st.Confirmed, st.StandbySeenAgo = snap.Standby, &snap.Confirmed, snap.SeenAgo
 			}
 		}
 		if cfg.Witness != "" {
