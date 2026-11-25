@@ -9,6 +9,7 @@ Shearwater는 Kubernetes API의 일부를 구현한 경량 오케스트레이터
 | Pod | containerd 실행, IPv4, 로그·직전 로그(다른 노드의 Pod는 컨트롤 플레인이 중계), 재시작 정책, 유예 삭제, 노드 사이 VXLAN Pod 네트워크 | CNI/CRI 미사용. 컨트롤 플레인은 한 대(고가용성 없음) |
 | Deployment / ReplicaSet | 복제본 유지, RollingUpdate/Recreate, `/scale`, 이력·되돌리기 | `minReadySeconds`, `progressDeadlineSeconds`는 저장만 함 |
 | Service / EndpointSlice | IPv4 ClusterIP 예약, Ready Pod 선택, 이름 포트, Linux 커널 TCP 전달, 내장 클러스터 DNS(`cluster.local` A·SRV·PTR·headless, Pod `resolv.conf`와 `dnsPolicy`/`dnsConfig`) | UDP·NodePort·LoadBalancer·ExternalName 미구현. [클러스터 DNS](dns.md) |
+| 앱 임대 / Lease | `coordination.k8s.io/v1` 네임스페이스 자원. `holderIdentity`, `leaseDurationSeconds`, `acquireTime`, `renewTime`, `leaseTransitions`를 저장해. JSON apply·조회·설명·삭제와 `NAME HOLDER AGE` 표를 제공해 | 위임 작업 사이의 협조용 임대야. kubectl로 직접 변경할 수 있어. |
 | 공개 진입점 / Ingress | `networking.k8s.io/v1` Ingress·IngressClass(`shearwater`), 경로별 연결(`Exact`/`Prefix`/`ImplementationSpecific`, `defaultBackend`), TLS Secret과 ACME HTTP-01 자동 발급·갱신, 네임스페이스 간 호스트 소유권 거절(409), 기존 Service 주석 방식 호환 | 와일드카드 호스트·`resource` 백엔드·커스텀 리라이트 미지원. 격리 QA 엔진에서 Pebble로 확인, 실제 Let's Encrypt 서버에서는 미검증. [공개 진입점](public-entry.md), [Ingress](ingress.md) |
 | 네트워크 정책 | `networking.k8s.io/v1` NetworkPolicy(Ingress·Egress, `podSelector`·`namespaceSelector`·`ipBlock`과 `except`, TCP/UDP 번호·이름·`endPort` 범위). 노드별 `FORWARD` 체인에서 적용하고 정책이 있을 때 `br_netfilter`와 `bridge-nf-call-iptables=1`을 켠다. 호스트 트래픽(edge·프로브·게이트웨이 DNS)은 영향 없음 | IPv4 전용, SCTP 미지원 |
 | 리소스 | CPU/메모리 limits 적용, requests(없으면 limits)로 노드 배치 | 노드의 실제 사용량이 아니라 요청 합계로 판단해 |

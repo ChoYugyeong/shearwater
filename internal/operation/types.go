@@ -32,14 +32,15 @@ type Check struct {
 // A new app may be created from our fixed one-container template; the agent
 // cannot provide host mounts, commands, environment variables, or raw manifests.
 type Spec struct {
-	Name      string    `json:"name"`
-	Namespace string    `json:"namespace"`
-	Image     string    `json:"image,omitempty"`
-	Service   string    `json:"service,omitempty"`
-	Port      int32     `json:"port,omitempty"`
-	Checks    []Check   `json:"checks"`
-	Allow     []string  `json:"allow"`
-	Expires   time.Time `json:"expires"`
+	Name        string    `json:"name"`
+	Namespace   string    `json:"namespace"`
+	Image       string    `json:"image,omitempty"`
+	Service     string    `json:"service,omitempty"`
+	Port        int32     `json:"port,omitempty"`
+	Checks      []Check   `json:"checks"`
+	Allow       []string  `json:"allow"`
+	Expires     time.Time `json:"expires"`
+	AutoRecover bool      `json:"autoRecover,omitempty"`
 }
 
 type Route struct {
@@ -69,6 +70,12 @@ type Plan struct {
 	Applied        bool      `json:"applied"`
 	Discarded      bool      `json:"discarded,omitempty"`
 	Generation     int64     `json:"generation,omitempty"`
+	// Lease identifies the object acquired with this plan. Older plans can
+	// acquire their first lease when continued.
+	Lease         string    `json:"leaseUID,omitempty"`
+	Verification  string    `json:"verification,omitempty"`
+	AutoRecoverOf string    `json:"autoRecoverOf,omitempty"`
+	Recovery      *Recovery `json:"recovery,omitempty"`
 	// Started marks an approved plan whose execution began outside the ledger
 	// database. It may be resumed after expiry: the backend applies one plan
 	// hash at most once. Failure is the last bounded execution error. Failed
@@ -128,7 +135,25 @@ type Request struct {
 	Checks []Check `json:"checks,omitempty"` // operator stage only
 }
 
+// Recovery retains the original failure even after LastCheck describes the
+// recovery generation. Facts contain the failed paths and reasons, no bodies.
+type Recovery struct {
+	UpdatePlan  string   `json:"updatePlan"`
+	UpdateImage string   `json:"updateImage"`
+	UpdateState string   `json:"updateState"`
+	UpdateProof string   `json:"updateProofID,omitempty"`
+	UpdateFacts []string `json:"updateFacts"`
+	Plan        string   `json:"plan,omitempty"`
+	Image       string   `json:"image,omitempty"`
+	State       string   `json:"state"`
+	Facts       []string `json:"facts,omitempty"`
+	ProofID     string   `json:"proofID,omitempty"`
+}
+
 type Result struct {
+	Lease         *LeaseInfo `json:"lease,omitempty"`
+	AutoRecover   bool       `json:"autoRecover"`
+	Recovery      *Recovery  `json:"recovery,omitempty"`
 	ProofID       string     `json:"proofID,omitempty"`
 	VerifiedPods  int        `json:"verifiedPods,omitempty"`
 	CheckedAt     *time.Time `json:"checkedAt,omitempty"`
@@ -160,7 +185,14 @@ type Error struct {
 	Message string
 }
 
-func (e *Error) Error() string        { return e.Code + ": " + e.Message }
+func (e *Error) Retry() string {
+	if e.Code == "APP_LEASED" {
+		return "safe"
+	}
+	return "never"
+}
+
+func (e *Error) Error() string        { return e.Code + " retry=" + e.Retry() + ": " + e.Message }
 func fail(code, message string) error { return &Error{code, message} }
 
 type Manager struct {

@@ -152,6 +152,15 @@ func (Engine) Observe(tx *store.Tx, r Record) (Observation, error) {
 		o.External = true
 		return o, nil
 	}
+	if d.Status.ObservedGeneration == r.Generation {
+		for _, c := range d.Status.Conditions {
+			if c.Type == "Progressing" && c.Status == "False" && c.Reason == "ProgressDeadlineExceeded" {
+				o.Failed = true
+				o.Facts = []string{"Deployment reported ProgressDeadlineExceeded for the goal generation"}
+				return o, nil
+			}
+		}
+	}
 	service, e := checkRoute(tx, r, d)
 	if e != nil {
 		return o, e

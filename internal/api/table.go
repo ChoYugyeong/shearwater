@@ -94,6 +94,7 @@ var (
 )
 
 var tableColumns = map[string][]tableColumn{
+	"Lease": {nameCol, col("Holder", "string", 0, "Identity of the lease holder"), ageCol},
 	"PersistentVolume": {nameCol, col("Capacity", "string", 0, "Declared storage capacity"),
 		col("Access Modes", "string", 0, "Supported access modes"), col("Reclaim Policy", "string", 0, "Action after claim deletion"),
 		col("Status", "string", 0, "Volume phase"), col("Claim", "string", 0, "Namespace and name of the claim"),
@@ -377,6 +378,8 @@ func cells(obj apis.Object, now time.Time) []any {
 	m := obj.Meta()
 	age := since(m.CreationTimestamp, now)
 	switch o := obj.(type) {
+	case *apis.Lease:
+		return []any{m.Name, orNone(o.Spec.HolderIdentity), age}
 	case *apis.PersistentVolume:
 		claim, phase := "", string(o.Status.Phase)
 		if ref := o.Spec.ClaimRef; ref != nil {

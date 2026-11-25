@@ -18,6 +18,9 @@ server identity, pending plan, original write goals and last HTTP-verified image
   should honor `handoff: local_approval`; it is not permission to approve or apply.
 - After that exact approval, call `continue`. It applies once and waits briefly for
   the original goal and actual internal Service HTTP. Use `verify` to wait longer.
+- On delegated tasks, report the failed update from `recovery.updateFacts`, the recovery image, and its own verification state.
+  `auto_recovered` means the recovery image passed. For `auto_recovery_failed` or a skipped recovery, report the reason and stop.
+  If the app is leased, report the holder, intent and expiry before retrying.
 - A fresh `healthy` tool result is the completion evidence. Do not replace UID or
   generation with newer observations or infer HTTP success from ready containers.
 - For stale, uncertain or partial writes, report the evidence and stop automatic

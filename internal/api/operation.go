@@ -116,7 +116,7 @@ func (s *Server) serveOperation(w http.ResponseWriter, r *http.Request) {
 			} else if oe.Code == "INVALID" || oe.Code == "UNSUPPORTED" || oe.Code == "AMBIGUOUS" {
 				code = 400
 			}
-			writeErr(w, newErr(code, "OperationRejected", oe.Code, "never", "%s", oe.Message))
+			writeErr(w, newErr(code, "OperationRejected", oe.Code, oe.Retry(), "%s", oe.Message))
 		case errors.Is(err, store.ErrNotFound):
 			writeErr(w, errPath(r.URL.Path))
 		case errors.Is(err, store.ErrConflict), errors.Is(err, store.ErrExists):

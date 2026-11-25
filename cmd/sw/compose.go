@@ -137,10 +137,30 @@ func runCompose(args []string, out io.Writer) error {
 
 // operationsOnly exposes the operation API and health checks. This server
 // has no Kubernetes objects, so every other path is refused.
+// composeLeasePath lets sw lease list and release reach the app leases that
+// delegated operations keep in the Compose ledger: listing a namespace's
+// leases, and reading or replacing one app lease. Nothing else of the
+// Kubernetes API is served.
+func composeLeasePath(method, p string) bool {
+	rest, ok := strings.CutPrefix(p, "/apis/coordination.k8s.io/v1/namespaces/")
+	if !ok {
+		return false
+	}
+	parts := strings.Split(rest, "/")
+	switch {
+	case len(parts) == 2 && parts[0] != "" && parts[1] == "leases":
+		return method == http.MethodGet
+	case len(parts) == 3 && parts[0] != "" && parts[1] == "leases" && strings.HasPrefix(parts[2], "shearwater-app-"):
+		return method == http.MethodGet || method == http.MethodPut
+	}
+	return false
+}
+
 func operationsOnly(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
-		if p == "/healthz" || p == "/readyz" || p == "/livez" || p == operation.Prefix || strings.HasPrefix(p, operation.Prefix+"/") {
+		if p == "/healthz" || p == "/readyz" || p == "/livez" || p == operation.Prefix || strings.HasPrefix(p, operation.Prefix+"/") ||
+			composeLeasePath(r.Method, p) {
 			next.ServeHTTP(w, r)
 			return
 		}

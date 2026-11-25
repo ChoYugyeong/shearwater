@@ -154,7 +154,7 @@ When a check fails (`http_failed`), the `facts` returned to the AI say which che
 
 If an image is missing and containers fail to start, `diagnose` shows the actual waiting reason, restart count, and related details for owned Pods. It separates observed errors from inferred root causes. If you ask the AI to "diagnose and create a recovery plan," it can inspect the failure and use `recover` to create a new plan for the last healthy image.
 
-The recovery image is the **exact runtime digest that previously passed both direct Pod and Service checks**. The new plan still requires a new approval. Rolling back an image does not undo database migrations or data the app has already written. You must trust the approved image itself, and data changes require separate backup procedures.
+The recovery image is the **exact runtime digest that previously passed both direct Pod and Service checks**. A manual recovery plan requires fresh operator approval. Rolling back an image does not undo database migrations or data the app has already written. You must trust the approved image itself, and data changes require separate backup procedures.
 
 The app change and the apply record are saved in the same SQLite transaction. Even if the response is lost right after the server saves the change, the record remains. The next `continue` call reads the existing plan's apply record and checks readiness. A DB commit does not mean the app is already running. The node agent and controller start the actual containers, and completion requires live HTTP checks afterward.
 If another plan is created between apply and verification, the server does not attach the new plan's success evidence to the earlier request; it returns `superseded`, meaning you must re-read the current state.
@@ -170,6 +170,24 @@ sw task revoke --id=OPERATION_ID
 `resume` keeps the same task and permission scope, issues a new token, and invalidates the old one.
 `revoke` rejects all subsequent requests using the current token. It does not cancel an already committed deployment.
 If you rotate a token shared by multiple AI clients, all of them must switch to the new connection.
+
+## When multiple tasks change one app
+
+Saving a plan acquires the namespaced Lease `shearwater-app-<app>`. Read `lease.holder`, `intent`, and `expires` in `sw task status --id=ID`, `sw task review --id=ID`, or the agent's `status` result. An `APP_LEASED` response names the holder, intent, and time to retry. The lease lasts until plan expiry, up to 15 minutes, and clears on final verification, discard, or revocation. Direct kubectl users can see the lease and can still change the app.
+
+```bash
+sw lease list -n shop
+sw lease release web -n shop
+kubectl describe lease shearwater-app-web -n shop
+```
+
+Forced release prints the previous holder. An execution already in progress can still finish. Compose stores the same lease and plan in the project's `ledger.db`. On a Compose connection, use task `status` to see the holder. Operators can release it with task `discard` or `revoke`.
+
+## Automatic recovery after update verification fails
+
+Create the task with `--allow=update,recover --auto-recover` to pre-authorize one recovery when an approved update first reaches a definitive verification failure. The server uses the same immutable image and checks as manual `recover`, from the last successful HTTP verification in this task. It waits during rollout and records why it skipped recovery if the task has no verified image or the target changed externally.
+
+In `sw task evidence --id=ID`, `recovery.updateFacts` and `updateProofID` retain the original failure. The recovery's `image`, `state`, and `proofID` describe its outcome. `auto_recovered` means the recovery image passed verification. `auto_recovery_failed` ends automatic recovery. After a lost connection, continuing the same plan hash resumes the recorded work.
 
 ## Permission Boundaries and Current Limitations
 

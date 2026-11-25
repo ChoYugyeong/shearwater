@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -34,21 +35,43 @@ func (m *Manager) snapshot(tx *store.Tx, id, token string, admin bool) (snapshot
 	}
 	s.record = r
 	s.result = summary(r)
+	s.result.Lease, e = m.refreshLease(tx, r)
+	if e != nil {
+		return s, e
+	}
 	if r.Pending != "" || r.UID == "" {
 		return s, nil
 	}
+	// A recovery report's retained facts are attached after the observation.
+	// Keep the fresh facts separate when recording the recovery's own proof.
+	if s.result.Recovery != nil {
+		s.result.Facts = nil
+	}
 	o, e := m.backend().Observe(tx, r)
+	var invalid *Error
+	if errors.Is(e, store.ErrNotFound) || errors.As(e, &invalid) && (invalid.Code == "STALE" || invalid.Code == "FOREIGN_BACKEND" || invalid.Code == "UNSUPPORTED" || invalid.Code == "INVALID") {
+		o.External = true
+		o.Facts = append(o.Facts, bounded(e.Error()))
+		e = nil
+	}
 	if e != nil {
 		return s, e
 	}
 	if o.External {
 		s.result.State = "stale"
+		s.result.Facts = append(s.result.Facts, o.Facts...)
+		s.result.Facts = append(s.result.Facts, "the bound release or route changed outside this operation")
 		s.result.Next = "operator must review the external change; this operation cannot adopt it"
 		return s, nil
 	}
 	s.result.State = "not_met"
 	s.result.Next = "verify again while starting, or diagnose failure; never repeat application to wait"
 	s.result.Facts = append(s.result.Facts, o.Facts...)
+	if o.Failed {
+		s.result.State = "rollout_failed"
+		s.result.Next = "inspect the terminal rollout failure and recovery evidence"
+		return s, nil
+	}
 	if !o.Ready {
 		return s, nil
 	}
@@ -58,11 +81,38 @@ func (m *Manager) snapshot(tx *store.Tx, id, token string, admin bool) (snapshot
 	return s, nil
 }
 
-func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Result, error) {
+func (m *Manager) verify(ctx context.Context, id, token string, admin bool, expected string) (Result, error) {
 	var before snapshot
-	err := m.Store.Write(false, func(tx *store.Tx) error { var e error; before, e = m.snapshot(tx, id, token, admin); return e })
-	if err != nil || before.result.State != "ready_to_probe" {
-		return before.result, err
+	var child string
+	err := m.Store.WriteAs(actorFor(id, admin), false, func(tx *store.Tx) error {
+		var e error
+		before, e = m.snapshot(tx, id, token, admin)
+		if e != nil {
+			return e
+		}
+		if expected != "" && before.result.LastPlan != expected {
+			before.result.State = "superseded"
+			return nil
+		}
+		if p := before.result.Review; p != nil && p.AutoRecoverOf != "" && p.Approved && p.Failure == "" && !before.record.Revoked && m.now().Before(before.record.Spec.Expires) {
+			child = p.Hash
+		}
+		switch before.result.State {
+		case "rollout_failed", "stale":
+			return m.recordVerification(tx, &before, &before.result, &child)
+		case "not_met":
+			attachRecovery(before.record, &before.result)
+		}
+		return nil
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	if child != "" {
+		return m.runRecovery(ctx, id, token, admin, child)
+	}
+	if before.result.State != "ready_to_probe" {
+		return before.result, nil
 	}
 	probe := m.Probe
 	if probe == nil {
@@ -90,6 +140,9 @@ func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Res
 			passed = passed && hp.Passed
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
+	}
 	// Never let an empty replica set pass vacuously.
 	passed = passed && len(proof.Pods) > 0
 	// Each backend names what its proof covered (Pods and a Service for the
@@ -100,12 +153,12 @@ func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Res
 		scope = "every ready replica directly"
 	}
 	result := before.result
-	err = m.Store.Write(false, func(tx *store.Tx) error {
+	err = m.Store.WriteAs(actorFor(id, admin), false, func(tx *store.Tx) error {
 		after, e := m.snapshot(tx, id, token, admin)
 		if e != nil {
 			return e
 		}
-		if after.result.State != "ready_to_probe" || after.fingerprint != before.fingerprint {
+		if after.result.State != "ready_to_probe" || after.fingerprint != before.fingerprint || after.record.Generation != before.record.Generation || after.result.LastPlan != before.result.LastPlan {
 			result = after.result
 			result.State = "stale"
 			result.Next = "state changed during HTTP checks; verify again without applying"
@@ -157,16 +210,45 @@ func (m *Manager) verify(ctx context.Context, id, token string, admin bool) (Res
 				good.Image = resolved
 				good.ImagePinned = true
 				after.record.LastGood = &good
-				if e = save(tx, after.record, false); e != nil {
-					return e
-				}
 			} else {
 				result.Unknown = append(result.Unknown, "no uniform immutable image digest available for recovery")
 			}
 		}
-		return save(tx, after.record, false)
+		return m.recordVerification(tx, &after, &result, &child)
 	})
+	if err == nil && child != "" {
+		return m.runRecovery(ctx, id, token, admin, child)
+	}
 	return result, err
+}
+
+func (m *Manager) recordVerification(tx *store.Tx, s *snapshot, result *Result, child *string) error {
+	if err := m.finishVerification(tx, &s.record, result); err != nil {
+		return err
+	}
+	if err := save(tx, s.record, false); err != nil {
+		return err
+	}
+	attachRecovery(s.record, result)
+	if report := result.Recovery; report != nil {
+		switch {
+		case report.State == "planned" && s.record.Pending == report.Plan:
+			*child = report.Plan
+		case report.State == "skipped":
+			result.Next = "automatic recovery skipped; inspect the update failure and the recorded reason"
+		case report.State == "healthy" && result.State == "healthy":
+			result.State = "auto_recovered"
+			result.Next = "report the failed update and the verified recovery image"
+		case report.State == "http_failed" || report.State == "rollout_failed" || report.State == "stale":
+			result.Next = "report the failed update and recovery verification; automatic recovery has stopped"
+			if result.State == report.State {
+				result.State = "auto_recovery_failed"
+			}
+		}
+	}
+	var err error
+	result.Lease, err = m.refreshLease(tx, s.record)
+	return err
 }
 
 // reasonText turns a probe reason code into words a person or model can act on.

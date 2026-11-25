@@ -390,7 +390,8 @@ func (b *Backend) base(ctx context.Context, r operation.Record) (service, state,
 	if st.mixed {
 		return s, st, "", errMixed
 	}
-	if len(st.containers) == 0 || st.generation != r.Generation {
+	marker, own := expectedMarker(r)
+	if len(st.containers) == 0 || st.generation != r.Generation || own && st.marker != marker {
 		return s, st, "", fail("STALE", "app was changed outside this operation; operator must reconnect")
 	}
 	route, err := b.route(s, r.Spec.Name, r.Spec.Port)
@@ -467,7 +468,13 @@ func (b *Backend) Execute(ctx context.Context, r operation.Record, p operation.P
 	// The override file is written just before `up`, so it records that an
 	// earlier attempt of this plan may have removed containers already.
 	attempted := b.attempted(r, p.Hash)
-	if !before.carries(p.Hash) && !attempted {
+	carries := before.carries(p.Hash)
+	if carries && before.mixed && !attempted {
+		// Another operation replaced the override and started its rollout.
+		// A delayed retry must not recreate the earlier release over it.
+		return operation.Target{}, errMixed
+	}
+	if !carries && (!attempted || len(before.containers) != 0) {
 		// Nothing of this plan exists yet: it may only start from its base.
 		if p.Action == "deploy" {
 			if len(before.containers) > 0 {
@@ -478,7 +485,7 @@ func (b *Backend) Execute(ctx context.Context, r operation.Record, p operation.P
 		} else if spec != p.BaseSpec {
 			return operation.Target{}, operation.Unchanged(fail("STALE", "app specification changed after plan approval"))
 		}
-	} else if !before.mixed && len(before.containers) == int(s.replicas()) {
+	} else if carries && !before.mixed && len(before.containers) == int(s.replicas()) {
 		// Already applied, for example before a lost response: report only.
 		return target, nil
 	}
@@ -572,6 +579,11 @@ func (b *Backend) Observe(_ *store.Tx, r operation.Record) (operation.Observatio
 	var ready []operation.Replica
 	var identities []any
 	for _, c := range st.containers {
+		if c.State.Status == "dead" {
+			o.Failed = true
+			o.Facts = []string{"Docker reports a dead container for this release"}
+			return o, nil
+		}
 		healthy := c.State.Running && !c.State.Restarting && (c.State.Health == nil || c.State.Health.Status == "healthy")
 		if !healthy || c.Config.Image != image {
 			continue

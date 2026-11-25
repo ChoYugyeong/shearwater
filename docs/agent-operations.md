@@ -215,7 +215,7 @@ AI에게 반환한 근거 번호와 이 기록의 번호가 같아야 해. `evid
 AI는 확인 후 `recover`로 마지막 정상 이미지의 새 계획을 만들 수 있어.
 
 복구 이미지는 이전에 **직접 Pod와 Service 검사까지 통과한 동일한 실행 digest**야.
-새 계획은 새 승인을 받아야 해. DB 마이그레이션이나 앱이 이미 쓴 데이터를 이미지 복귀가
+수동 복구 계획은 운영자가 새로 승인해야 해. DB 마이그레이션이나 앱이 이미 쓴 데이터를 이미지 복귀가
 되돌려 주지는 않아. 승인한 이미지 자체를 신뢰해야 하고, 데이터 이전은 별도 백업 절차가 필요해.
 
 앱 변경과 적용 기록은 같은 SQLite 트랜잭션에 저장해. 서버가 변경을 저장한 직후 응답이
@@ -238,6 +238,24 @@ sw task revoke --id=OPERATION_ID
 `resume`은 같은 작업과 권한 범위를 유지하면서 새 토큰을 발급하고 이전 토큰을 무효화해.
 `revoke`는 현재 토큰의 다음 요청부터 거부해. 이미 커밋한 배포를 취소하는 명령은 아니야.
 여러 AI가 함께 사용하는 토큰을 교체하면 모두 새 연결로 바꿔야 해.
+
+## 여러 작업이 같은 앱을 바꿀 때
+
+계획을 저장하면 앱 네임스페이스에 `shearwater-app-<앱>` Lease가 생겨. `sw task status --id=ID`, `sw task review --id=ID`, 에이전트의 `status`에서 `lease.holder`, `intent`, `expires`를 확인해. 다른 작업이 임대 중이면 `APP_LEASED` 응답에 표시된 시각 이후 다시 계획할 수 있어. 임대는 계획 만료까지 최대 15분이고, 검증이 끝나거나 계획을 버리거나 토큰을 철회하면 풀려. kubectl로 앱을 직접 바꾸는 사람도 이 Lease를 볼 수 있어.
+
+```bash
+sw lease list -n shop
+sw lease release web -n shop
+kubectl describe lease shearwater-app-web -n shop
+```
+
+강제 해제는 이전 보유자를 출력해. 이미 시작한 실행은 계속될 수 있어. Compose는 프로젝트의 `ledger.db`에 같은 Lease와 계획을 저장해. Compose 연결에서는 작업의 `status`로 확인하고, 운영자는 `discard` 또는 `revoke`로 임대를 해제할 수 있어.
+
+## 업데이트 검증 실패 시 자동 복구
+
+작업 생성 시 `--allow=update,recover --auto-recover`를 지정하면, 승인된 업데이트의 첫 확정 검증 실패에 한해 서버가 복구 계획 하나를 미리 승인받은 것으로 처리해. 일반 `recover`와 같은 기준으로 이 작업에서 HTTP 검사를 통과한 마지막 고정 이미지와 당시 검사 조건을 사용해. 준비 중에는 기다리고, 복구할 이미지가 없거나 외부에서 대상이 바뀌었으면 건너뛴 이유를 기록해.
+
+`sw task evidence --id=ID`의 `recovery.updateFacts`와 `updateProofID`는 원래 실패를 보존해. `recovery.image`, `state`, `proofID`는 복구 결과야. `auto_recovered`는 복구 이미지가 검증을 통과했다는 뜻이고, `auto_recovery_failed`이면 자동 복구가 멈춰. 클라이언트 연결이 끊겨도 같은 계획 해시의 `continue`로 원장에 기록된 결과를 이어받아.
 
 ## 권한 경계와 현재 제한
 

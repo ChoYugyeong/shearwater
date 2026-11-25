@@ -402,3 +402,56 @@ func (x *harness) plan(hash string) operation.Plan {
 	x.t.Fatal("plan not found")
 	return operation.Plan{}
 }
+
+func TestComposeAppLeaseAndAutomaticRecovery(t *testing.T) {
+	h := newHost(t)
+	h.add(pinnedV1, nil)
+	x := newHarness(t, h, operation.Spec{Port: 80, Allow: []string{"update", "recover"}, AutoRecover: true})
+	spec := x.stored().Spec
+	other, token, err := x.m.Create(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x.call(false, operation.Request{Action: "verify"})
+	update := x.approved("update", pinnedV2)
+	if update.Lease == nil || update.Lease.Holder != "task:"+x.id {
+		t.Fatal("missing Compose lease", update)
+	}
+	_, err = x.m.Act(context.Background(), other.Operation, token, false, operation.Request{Action: "update", Image: pinnedV2})
+	var conflict *operation.Error
+	if !errors.As(err, &conflict) || conflict.Code != "APP_LEASED" || conflict.Retry() != "safe" {
+		t.Fatal("Compose did not enforce the app lease", err)
+	}
+	x.m.Probe = func(_ context.Context, _ string, _ int32, c operation.Check) operation.HTTPProof {
+		if h.conts[0].Config.Image == pinnedV2 {
+			return operation.HTTPProof{Path: c.Path, Status: 500, Reason: "unexpected_status"}
+		}
+		return operation.HTTPProof{Path: c.Path, Status: 200, Passed: true}
+	}
+	r := x.call(false, operation.Request{Action: "continue", Plan: update.Plan})
+	if r.State != "auto_recovered" || r.Lease != nil || r.Recovery == nil || r.Recovery.State != "healthy" || r.Recovery.Image != pinnedV1 || h.ups != 2 {
+		t.Fatal("Compose did not recover exactly once", r, h.ups)
+	}
+	x.m = &operation.Manager{Store: x.m.Store, Backend: x.b, Now: x.m.Now, Probe: x.m.Probe}
+	r = x.call(false, operation.Request{Action: "continue", Plan: update.Plan})
+	if r.State != "auto_recovered" || h.ups != 2 || !strings.Contains(strings.Join(r.Recovery.UpdateFacts, " "), "HTTP 500") {
+		t.Fatal("lost outcome or repeated compose up", r)
+	}
+}
+
+func TestComposeOverrideBeforeUpIsNotAnExecutionReceipt(t *testing.T) {
+	h := newHost(t)
+	h.add(pinnedV1, nil)
+	x := newHarness(t, h, operation.Spec{Port: 80, Allow: []string{"update"}})
+	p := x.approved("update", pinnedV2)
+	plan := x.plan(p.Plan)
+	if _, err := x.b.override(x.stored(), plan, plan.BaseGeneration+1); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		r := x.call(false, operation.Request{Action: "continue", Plan: p.Plan})
+		if h.ups != 1 || !r.Applied || r.VerifiedImage != pinnedV2 {
+			t.Fatal("the override file proved neither application nor health", r, h.ups)
+		}
+	}
+}

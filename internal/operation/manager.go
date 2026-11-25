@@ -11,8 +11,19 @@ import (
 	"unicode"
 
 	"shearwater/internal/apis"
+	"shearwater/internal/auth"
 	"shearwater/internal/store"
 )
+
+// actorFor names who makes an operation's changes in the change log
+// (sw changes): the administrator, or the delegated task acting with its
+// bounded token.
+func actorFor(id string, admin bool) store.Actor {
+	if admin {
+		return store.Actor{Name: auth.AdminName, Via: "task"}
+	}
+	return store.Actor{Name: "task:" + id, Via: "task"}
+}
 
 func (m *Manager) authorize(r Record, token string, admin bool) error {
 	if admin {
@@ -45,9 +56,12 @@ func (m *Manager) Create(spec Spec) (Result, string, error) {
 		}
 		seen[a] = true
 	}
+	if spec.AutoRecover && !seen["recover"] {
+		return result, "", fail("INVALID", "auto-recover requires recover permission")
+	}
 	token := "swop_" + randomID(32)
 	r := Record{ID: randomID(16), TokenHash: digest(token), Spec: spec, GoalChecks: spec.Checks}
-	err := m.Store.Write(false, func(tx *store.Tx) error {
+	err := m.Store.WriteAs(store.Actor{Name: auth.AdminName, Via: "task"}, false, func(tx *store.Tx) error {
 		found, e := m.backend().Bind(tx, &r)
 		if e != nil {
 			return e
@@ -78,7 +92,7 @@ func (m *Manager) Renew(id string, expires time.Time) (Result, string, error) {
 		return result, "", fail("INVALID", "expiry must be within 24 hours")
 	}
 	token := "swop_" + randomID(32)
-	e := m.Store.Write(false, func(tx *store.Tx) error {
+	e := m.Store.WriteAs(store.Actor{Name: auth.AdminName, Via: "task"}, false, func(tx *store.Tx) error {
 		r, e := load(tx, id)
 		if e != nil {
 			return e
@@ -88,7 +102,8 @@ func (m *Manager) Renew(id string, expires time.Time) (Result, string, error) {
 			return e
 		}
 		result = summary(r)
-		return nil
+		result.Lease, e = m.refreshLease(tx, r)
+		return e
 	})
 	return result, token, e
 }
@@ -99,6 +114,7 @@ func summary(r Record) Result {
 		state = "not_deployed"
 	}
 	result := Result{Format: "shearwater.workflow-result/v1", Operation: r.ID, App: r.Spec.Namespace + "/" + r.Spec.Name, UID: r.UID, Generation: r.Generation, State: state, Allowed: r.Spec.Allow, Expires: r.Spec.Expires, HTTP: "not_checked", Facts: []string{}, Unknown: []string{"public URL, authentication and data migrations are not checked"}, Next: "verify the selected app; status alone is not proof of health"}
+	result.AutoRecover = r.Spec.AutoRecover
 	result.StagedImage = r.StagedImage
 	if r.StagedImage != "" {
 		result.Next = "an update image is staged, not planned or applied; if update was requested, call update to SAVE its plan before asking for approval"
@@ -139,6 +155,7 @@ func summary(r Record) Result {
 			result.Next = "diagnose; the failed plan cannot be continued, so make a new plan if a change is still wanted"
 		}
 	}
+	attachRecovery(r, &result)
 	if r.Revoked {
 		result.State = "revoked"
 	}
@@ -160,13 +177,13 @@ func (m *Manager) Act(ctx context.Context, id, token string, admin bool, q Reque
 		return result, fail("INVALID", "unexpected plan hash")
 	}
 	if q.Action == "verify" {
-		return m.verify(ctx, id, token, admin)
+		return m.verify(ctx, id, token, admin, "")
 	}
 	if x, ok := m.backend().(Executor); ok && q.Action == "continue" {
 		result, err := m.continueExternal(ctx, x, id, token, admin, q)
 		return m.verifyApplied(ctx, id, token, admin, result, err)
 	}
-	err := m.Store.Write(false, func(tx *store.Tx) error {
+	err := m.Store.WriteAs(actorFor(id, admin), false, func(tx *store.Tx) error {
 		r, e := load(tx, id)
 		if e != nil {
 			return e
@@ -179,9 +196,22 @@ func (m *Manager) Act(ctx context.Context, id, token string, admin bool, q Reque
 		switch q.Action {
 		case "status", "diagnose", "review", "evidence":
 			result = summary(r)
+			result.Lease, e = m.refreshLease(tx, r)
+			if e != nil {
+				return e
+			}
 			if q.Action == "evidence" {
 				if !admin {
 					return fail("FORBIDDEN", "full retained proof is an operator action")
+				}
+				// Keep the last automatic recovery available after a later manual plan.
+				if result.Recovery == nil {
+					for i := len(r.Plans) - 1; i >= 0; i-- {
+						if report := r.Plans[i].Recovery; report != nil {
+							describeRecovery(report, &result)
+							break
+						}
+					}
 				}
 				result.Evidence = r.LastCheck
 				if c := r.LastCheck; c != nil {
@@ -228,8 +258,9 @@ func (m *Manager) Act(ctx context.Context, id, token string, admin bool, q Reque
 		}
 		switch q.Action {
 		case "deploy", "update", "recover":
-			e = m.plan(tx, &r, q)
+			e = m.plan(tx, &r, q, "")
 		case "continue":
+			q.Plan = continuationPlan(r, q.Plan)
 			e = m.apply(tx, &r, q.Plan)
 		case "approve", "discard":
 			if !ValidHash(q.Plan) || r.Pending != q.Plan {
@@ -246,8 +277,14 @@ func (m *Manager) Act(ctx context.Context, id, token string, admin bool, q Reque
 				if !m.now().Before(p.Expires) {
 					return fail("EXPIRED", "plan expired; discard and prepare a new one")
 				}
+				if e = m.executionLease(tx, r, p); e != nil {
+					return e
+				}
 				p.Approved = true
 			} else {
+				if report := linkedRecovery(r, p.AutoRecoverOf); report != nil {
+					report.State = "discarded"
+				}
 				p.Discarded = true
 				r.Pending = ""
 			}
@@ -277,9 +314,13 @@ func (m *Manager) Act(ctx context.Context, id, token string, admin bool, q Reque
 		if q.Action == "continue" {
 			result = continued(r, q.Plan)
 		}
-		return nil
+		result.Lease, e = m.refreshLease(tx, r)
+		return e
 	})
 	if q.Action == "continue" {
+		if err != nil {
+			return m.closeFailedApply(id, token, admin, q.Plan, err)
+		}
 		return m.verifyApplied(ctx, id, token, admin, result, err)
 	}
 	return result, err
@@ -298,6 +339,11 @@ func continued(r Record, hash string) Result {
 			break
 		}
 	}
+	if report := result.Recovery; report != nil && report.UpdatePlan == hash && (report.State == "discarded" || report.State == "execution_failed" || report.State == "expired") {
+		result.State = "auto_recovery_failed"
+		result.Next = "report the failed update and the recorded outcome of its automatic recovery"
+		return result
+	}
 	if result.Generation != r.Generation || r.Pending != "" {
 		result.State = "superseded"
 		result.Review = nil
@@ -311,8 +357,8 @@ func continued(r Record, hash string) Result {
 // additional app update, then observes that plan's goal. A later pending plan
 // cannot be substituted for it.
 func (m *Manager) verifyApplied(ctx context.Context, id, token string, admin bool, result Result, err error) (Result, error) {
-	if err == nil && result.Applied && result.State != "superseded" && result.Review == nil {
-		v, e := m.verify(ctx, id, token, admin)
+	if err == nil && result.Applied && result.State != "superseded" && result.State != "auto_recovery_failed" && result.Review == nil {
+		v, e := m.verify(ctx, id, token, admin, result.Plan)
 		if e == nil {
 			v = ContinuationResult(result, v)
 		}
@@ -330,7 +376,7 @@ func (m *Manager) continueExternal(ctx context.Context, x Executor, id, token st
 	var result Result
 	var run *Plan
 	var bound Record
-	err := m.Store.Write(false, func(tx *store.Tx) error {
+	err := m.Store.WriteAs(actorFor(id, admin), false, func(tx *store.Tx) error {
 		r, e := load(tx, id)
 		if e != nil {
 			return e
@@ -338,6 +384,7 @@ func (m *Manager) continueExternal(ctx context.Context, x Executor, id, token st
 		if e = m.authorize(r, token, admin); e != nil {
 			return e
 		}
+		q.Plan = continuationPlan(r, q.Plan)
 		p, e := m.admit(&r, q.Plan, true)
 		if e != nil {
 			return e
@@ -345,6 +392,9 @@ func (m *Manager) continueExternal(ctx context.Context, x Executor, id, token st
 		if p == nil {
 			result = continued(r, q.Plan)
 			return nil
+		}
+		if e = m.executionLease(tx, r, p); e != nil {
+			return e
 		}
 		if p.Started == nil {
 			at := m.now()
@@ -358,11 +408,14 @@ func (m *Manager) continueExternal(ctx context.Context, x Executor, id, token st
 		run, bound = &copy, r
 		return nil
 	})
-	if err != nil || run == nil {
-		return result, err
+	if err != nil {
+		return m.closeFailedApply(id, token, admin, q.Plan, err)
+	}
+	if run == nil {
+		return result, nil
 	}
 	target, failure := x.Execute(ctx, bound, *run)
-	err = m.Store.Write(false, func(tx *store.Tx) error {
+	err = m.Store.WriteAs(actorFor(id, admin), false, func(tx *store.Tx) error {
 		r, e := load(tx, id)
 		if e != nil {
 			return e
@@ -376,7 +429,9 @@ func (m *Manager) continueExternal(ctx context.Context, x Executor, id, token st
 		if p == nil || r.Pending != run.Hash && !p.Applied {
 			return fail("STALE", "plan record changed during execution")
 		}
-		if !p.Applied {
+		if p.Applied {
+			failure = nil // a concurrent execution already recorded the receipt
+		} else {
 			var u unchanged
 			switch {
 			case failure == nil:
@@ -384,17 +439,30 @@ func (m *Manager) continueExternal(ctx context.Context, x Executor, id, token st
 				m.settle(&r, p)
 			case errors.As(failure, &u):
 				p.Failure, p.Failed = bounded(failure.Error()), true
+				if report := linkedRecovery(r, p.AutoRecoverOf); report != nil {
+					report.State, report.Facts = "execution_failed", []string{p.Failure}
+				}
 				r.Pending = ""
 			default:
 				p.Failure = bounded(failure.Error())
+				if report := linkedRecovery(r, p.AutoRecoverOf); report != nil {
+					report.State, report.Facts = "execution_uncertain", []string{p.Failure}
+				}
 			}
 			if e = save(tx, r, false); e != nil {
 				return e
 			}
 		}
-		result = continued(r, run.Hash)
-		return nil
+		result = summary(r)
+		if p.Applied {
+			result = continued(r, run.Hash)
+		}
+		result.Lease, e = m.refreshLease(tx, r)
+		return e
 	})
+	if err != nil {
+		return Result{}, err
+	}
 	if failure != nil {
 		var u unchanged
 		if errors.As(failure, &u) {
@@ -425,6 +493,15 @@ func bounded(s string) string {
 // Another client may plan/apply between them. Never attach the old plan hash
 // to a newer deployment's proof (or replace a new pending plan's identity).
 func ContinuationResult(applied, observed Result) Result {
+	if report := observed.Recovery; report != nil && observed.UID == applied.UID && report.UpdatePlan == applied.Plan && report.Plan != "" {
+		if observed.LastPlan == report.Plan && observed.Review == nil {
+			observed.Plan, observed.Applied, observed.Approved = report.Plan, true, true
+			return observed
+		}
+		if observed.LastPlan == applied.Plan && (report.State == "execution_failed" || report.State == "execution_uncertain") {
+			return observed
+		}
+	}
 	if observed.UID != applied.UID || observed.Generation != applied.Generation || observed.LastPlan != applied.Plan || observed.Review != nil {
 		applied.State, applied.Review, applied.Handoff = "superseded", nil, ""
 		applied.ProofID, applied.VerifiedImage, applied.VerifiedPods = "", "", 0
@@ -436,14 +513,28 @@ func ContinuationResult(applied, observed Result) Result {
 	return observed
 }
 
-func (m *Manager) plan(tx *store.Tx, r *Record, q Request) error {
+func (m *Manager) plan(tx *store.Tx, r *Record, q Request, parent string) error {
+	l, err := appLease(tx, *r)
+	if err != nil {
+		return err
+	}
+	if err = checkAvailable(l, *r, m.now()); err != nil {
+		return err
+	}
 	if r.Pending != "" {
 		return fail("CONFLICT", "pending plan exists; continue it or ask operator to discard")
 	}
-	if len(r.Plans) >= 32 {
+	if len(r.Plans) >= 32 || q.Action == "update" && r.Spec.AutoRecover && len(r.Plans) >= 31 {
+		// An opted-in update also needs space for its one recovery receipt.
 		return fail("LIMIT", "32-plan history is full; retain it and create a new operation")
 	}
-	p := Plan{Action: q.Action, BaseUID: r.UID, BaseGeneration: r.Generation, RouteHash: digest(r.Route), Checks: r.GoalChecks, Created: m.now(), Expires: m.now().Add(15 * time.Minute)}
+	if parent == "" && r.Spec.AutoRecover && len(r.Plans) > 0 {
+		last := r.Plans[len(r.Plans)-1]
+		if last.Applied && last.Verification == "" && (last.Action == "update" || last.AutoRecoverOf != "") {
+			return fail("CONFLICT", "verify the current update or automatic recovery before planning another change")
+		}
+	}
+	p := Plan{Action: q.Action, AutoRecoverOf: parent, BaseUID: r.UID, BaseGeneration: r.Generation, RouteHash: digest(r.Route), Checks: r.GoalChecks, Created: m.now(), Expires: m.now().Add(15 * time.Minute)}
 	if r.Spec.Expires.Before(p.Expires) {
 		p.Expires = r.Spec.Expires
 	}
@@ -493,10 +584,15 @@ func (m *Manager) plan(tx *store.Tx, r *Record, q Request) error {
 	if !validImage(p.Image) {
 		return fail("INVALID", "update requires an image or an operator-staged build artifact")
 	}
+	if err = m.holdLease(tx, *r, &p, l, p.Expires); err != nil {
+		return err
+	}
 	p.Hash = digest(struct {
-		Task string
-		Plan Plan
-	}{r.ID, p})
+		Task   string
+		Number int
+		Plan   Plan
+	}{r.ID, len(r.Plans) + 1, p})
+	p.Approved = parent != ""
 	r.Pending = p.Hash
 	r.Plans = append(r.Plans, p)
 	return nil
@@ -506,6 +602,9 @@ func (m *Manager) apply(tx *store.Tx, r *Record, hash string) error {
 	p, e := m.admit(r, hash, false)
 	if e != nil || p == nil {
 		return e // a nil plan was already applied: the transaction is the receipt
+	}
+	if e = m.executionLease(tx, *r, p); e != nil {
+		return e
 	}
 	if e = m.backend().Apply(tx, r, *p); e != nil {
 		return e
@@ -537,6 +636,9 @@ func (m *Manager) admit(r *Record, hash string, resume bool) (*Plan, error) {
 	if p.Applied {
 		return nil, nil
 	}
+	if p.AutoRecoverOf != "" && (r.Revoked || !m.now().Before(r.Spec.Expires)) {
+		return nil, fail("FORBIDDEN", "automatic recovery delegation expired or was revoked")
+	}
 	if p.Failed {
 		return nil, fail("EXECUTION_FAILED", "this plan failed without changing the app; make a new plan")
 	}
@@ -558,8 +660,69 @@ func (m *Manager) admit(r *Record, hash string, resume bool) (*Plan, error) {
 // settle records an applied plan as the operation's new goal.
 func (m *Manager) settle(r *Record, p *Plan) {
 	p.Applied, p.Generation = true, r.Generation
+	if report := linkedRecovery(*r, p.AutoRecoverOf); report != nil {
+		report.State, report.Facts = "verifying", nil
+	}
 	r.GoalChecks = p.Checks
 	r.Pending = ""
 	r.StagedImage = ""
 	r.StagedChecks = nil
+}
+
+// Engine.Apply may have written several objects before an error. Its write
+// transaction must roll back first. Close a permanently rejected plan only
+// while it is still the same approved pending plan.
+func (m *Manager) closeFailedApply(id, token string, admin bool, hash string, cause error) (Result, error) {
+	var result Result
+	var rejected *Error
+	permanent := errors.Is(cause, store.ErrNotFound) || errors.Is(cause, store.ErrExists)
+	if errors.As(cause, &rejected) {
+		switch rejected.Code {
+		case "STALE", "UNSUPPORTED", "INVALID", "CONFLICT", "LEASE_LOST", "EXPIRED":
+			permanent = true
+		}
+	}
+	if !permanent || !ValidHash(hash) {
+		return result, cause
+	}
+	err := m.Store.WriteAs(actorFor(id, admin), false, func(tx *store.Tx) error {
+		r, e := load(tx, id)
+		if e != nil {
+			return e
+		}
+		if e = m.authorize(r, token, admin); e != nil {
+			return e
+		}
+		if r.Pending != hash || len(r.Plans) == 0 {
+			return nil
+		}
+		p := &r.Plans[len(r.Plans)-1]
+		if p.Hash != hash || !p.Approved || p.Applied || p.Started != nil {
+			return nil
+		}
+		expired := rejected != nil && rejected.Code == "EXPIRED"
+		if expired && p.AutoRecoverOf == "" {
+			// Keep the expired manual plan available for operator discard.
+			_, e = m.refreshLease(tx, r)
+			return e
+		}
+		p.Failed, p.Failure = true, bounded(cause.Error())
+		r.Pending = ""
+		if report := linkedRecovery(r, p.AutoRecoverOf); report != nil {
+			report.State, report.Facts = "execution_failed", []string{p.Failure}
+			if expired {
+				report.State = "expired"
+			}
+		}
+		if e = save(tx, r, false); e != nil {
+			return e
+		}
+		result = summary(r)
+		result.Lease, e = m.refreshLease(tx, r)
+		return e
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	return result, cause
 }

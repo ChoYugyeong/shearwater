@@ -56,6 +56,8 @@ type Observation struct {
 	// Ready is true when every goal replica is ready and the route reaches
 	// only those replicas. Only then are Image, Replicas and Front filled.
 	Ready bool
+	// Failed is a terminal rollout failure of the observed generation.
+	Failed bool
 	// Facts are short, model-readable observations in the order found.
 	Facts    []string
 	Image    string
