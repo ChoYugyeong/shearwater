@@ -43,7 +43,7 @@ sequenceDiagram
 ## Initial Setup
 
 See [Initial Setup and Authentication](../onboarding.md) first to set up the server and admin credentials for a regular user.
-You need a container image that is ready to run. This feature does not automatically prepare image builds, registries, public domains, HTTPS, or database migrations. It targets a small, trusted HTTP app on a single server.
+You need a container image that is ready to run. This feature does not automatically prepare image builds, registries, public domains, HTTPS, or database migrations. It targets a small, trusted HTTP app on one server or a few.
 
 Run these commands in an **operator terminal with admin credentials**. Replace the paths, names, and image below with your real values. `--out` must be an absolute path that does not exist yet. Existing credentials are not overwritten.
 
