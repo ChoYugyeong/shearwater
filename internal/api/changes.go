@@ -117,7 +117,7 @@ func (s *Server) changes(r *http.Request, id auth.Identity) (ChangeList, error) 
 	// Read more than limit: folded and invisible entries take no room in the
 	// answer, but scanning stays bounded.
 	scan := limit * 4
-	entries, next, err := s.Store.History(after, namespace, scan)
+	entries, next, err := s.Store.History(after, store.HistoryFilter{Namespace: namespace, Actor: actor}, scan)
 	if errors.Is(err, store.ErrCompacted) {
 		rev, _ := s.Store.Rev()
 		return ChangeList{}, newErr(http.StatusGone, "Expired", "COMPACTED", "never",

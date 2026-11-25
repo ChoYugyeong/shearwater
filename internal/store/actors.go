@@ -70,12 +70,20 @@ type Entry struct {
 	Actor Actor  // zero when unattributed
 }
 
+// HistoryFilter narrows History. Namespace "" means every namespace and the
+// cluster-scoped objects. Actor "" means anyone; "system" means changes no
+// caller was recorded for.
+type HistoryFilter struct {
+	Namespace string
+	Actor     string
+}
+
 // History returns change-log entries of every resource after revision after,
-// oldest first, at most limit. namespace "" means every namespace and the
-// cluster-scoped objects; otherwise only that namespace. next and
-// ErrCompacted work as in Changes. A negative after returns the newest limit
-// entries instead, still oldest first.
-func (s *Store) History(after int64, namespace string, limit int) (entries []Entry, next int64, err error) {
+// oldest first, at most limit, that match f. next and ErrCompacted work as in
+// Changes. A negative after returns the newest limit matching entries
+// instead, still oldest first.
+func (s *Store) History(after int64, f HistoryFilter, limit int) (entries []Entry, next int64, err error) {
+	namespace := f.Namespace
 	if limit <= 0 {
 		return nil, 0, fmt.Errorf("store: History needs a positive limit, got %d", limit)
 	}
@@ -116,6 +124,17 @@ func (s *Store) History(after int64, namespace string, limit int) (entries []Ent
 	if namespace != "" {
 		q += ` AND c.namespace = ?`
 		args = append(args, namespace)
+	}
+	switch {
+	case f.Actor == "":
+	case f.Actor == "system" && attributed:
+		q += ` AND a.actor IS NULL`
+	case f.Actor == "system":
+	case attributed:
+		q += ` AND a.actor = ?`
+		args = append(args, f.Actor)
+	default:
+		q += ` AND 0` // nothing was attributed yet
 	}
 	if after >= 0 {
 		q += ` ORDER BY c.rev LIMIT ?`

@@ -108,22 +108,30 @@ func TestHistoryAcrossResources(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	all, next, err := s.History(0, "", 10)
+	all, next, err := s.History(0, HistoryFilter{}, 10)
 	if err != nil || len(all) != 3 || next != 3 {
 		t.Fatalf("%v next=%d err=%v", all, next, err)
 	}
 	if all[0].Actor.Name != "alice" || all[1].Key.Group != "apps" || all[1].Actor.Via != "api" || all[2].Actor.Name != "" || all[0].At == "" {
 		t.Fatalf("%+v", all)
 	}
-	page, next, err := s.History(0, "", 2)
+	page, next, err := s.History(0, HistoryFilter{}, 2)
 	if err != nil || len(page) != 2 || next != 2 {
 		t.Fatalf("full page: %d next=%d %v", len(page), next, err)
 	}
-	ns, _, err := s.History(0, "b", 10)
+	ns, _, err := s.History(0, HistoryFilter{Namespace: "b"}, 10)
 	if err != nil || len(ns) != 1 || ns[0].Key.Name != "web" {
 		t.Fatalf("namespace b: %+v %v", ns, err)
 	}
-	tail, next, err := s.History(-1, "", 2)
+	bob, _, err := s.History(-1, HistoryFilter{Actor: "bob"}, 5)
+	if err != nil || len(bob) != 1 || bob[0].Key.Name != "web" {
+		t.Fatalf("by actor: %+v %v", bob, err)
+	}
+	sys, _, err := s.History(0, HistoryFilter{Actor: "system"}, 5)
+	if err != nil || len(sys) != 1 || sys[0].Key.Name != "c" {
+		t.Fatalf("unattributed: %+v %v", sys, err)
+	}
+	tail, next, err := s.History(-1, HistoryFilter{}, 2)
 	if err != nil || len(tail) != 2 || tail[0].Rev != 2 || tail[1].Rev != 3 || next != 3 {
 		t.Fatalf("tail: %+v next=%d %v", tail, next, err)
 	}
@@ -132,7 +140,7 @@ func TestHistoryAcrossResources(t *testing.T) {
 func TestHistoryWithoutActorsTableAndCompaction(t *testing.T) {
 	s := open(t)
 	putPod(t, s, Actor{Name: "alice"}, "a", "p1")
-	got, _, err := s.History(0, "", 10)
+	got, _, err := s.History(0, HistoryFilter{}, 10)
 	if err != nil || len(got) != 1 || got[0].Actor.Name != "" {
 		t.Fatalf("no table: %+v %v", got, err)
 	}
@@ -142,7 +150,7 @@ func TestHistoryWithoutActorsTableAndCompaction(t *testing.T) {
 	s.KeepChanges, s.KeepFor, s.CompactEvery = 1, -time.Hour, 0
 	putPod(t, s, Actor{Name: "alice"}, "a", "p2")
 	putPod(t, s, Actor{Name: "alice"}, "a", "p3")
-	if _, _, err := s.History(0, "", 10); !errors.Is(err, ErrCompacted) {
+	if _, _, err := s.History(0, HistoryFilter{}, 10); !errors.Is(err, ErrCompacted) {
 		t.Fatalf("want ErrCompacted, got %v", err)
 	}
 	var left int
