@@ -1,5 +1,7 @@
 # Give an agent a scoped kubeconfig
 
+> To create a scoped kubeconfig, MCP client configs, and the operations skill in one command, see [`sw agent`](agent-identity.md).
+
 *Translated from the [original guide](../access-control.md) (in Korean).*
 
 As an administrator, use the connection details saved on the server to create a kubeconfig for `alice` in the `team-a` namespace. Choose `view` for an agent that only needs to read resources. Choose `edit` for an agent that deploys workloads. An agent with `edit` can also read and change Secrets in the same namespace.

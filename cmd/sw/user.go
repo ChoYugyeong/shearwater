@@ -18,9 +18,14 @@ import (
 	"shearwater/internal/store"
 )
 
+// adminActor attributes the namespaces and bindings sw user and sw agent
+// create to the administrator in sw changes.
+var adminActor = store.Actor{Name: auth.AdminName, Via: "admin"}
+
 const (
 	usersPath     = api.AdminPrefix + "v1/users"
 	userLabel     = "shearwater.io/user"
+	agentLabel    = "shearwater.io/agent"
 	securityLabel = "pod-security.kubernetes.io/enforce"
 )
 
@@ -29,6 +34,8 @@ type userOptions struct {
 	Namespace   string `json:"namespace,omitempty"`
 	Role        string `json:"role,omitempty"`
 	ClusterRole string `json:"clusterRole,omitempty"`
+	Agent       bool   `json:"agent,omitempty"`
+	Created     string `json:"created,omitempty"`
 }
 
 type issuedUser struct {
@@ -167,6 +174,9 @@ func (u *userManager) list() ([]userOptions, error) {
 				return nil, err
 			}
 		}
+		if !c.Created.IsZero() {
+			o.Created = c.Created.UTC().Format(time.RFC3339)
+		}
 		items = append(items, o)
 	}
 	slices.SortFunc(items, func(a, b userOptions) int { return strings.Compare(a.Name, b.Name) })
@@ -184,6 +194,12 @@ func validUserName(name string) bool {
 func (u *userManager) add(o userOptions) (issuedUser, error) {
 	if !validUserName(o.Name) {
 		return issuedUser{}, badUser("invalid or reserved user name %q", o.Name)
+	}
+	if o.Created != "" {
+		return issuedUser{}, badUser("created is server-managed")
+	}
+	if o.Agent && o.Namespace == "" {
+		return issuedUser{}, badUser("agent requires a namespace")
 	}
 	if o.Namespace != "" && !apis.IsDNS1123Label(o.Namespace) {
 		return issuedUser{}, badUser("invalid namespace %q", o.Namespace)
@@ -213,17 +229,17 @@ func (u *userManager) add(o userOptions) (issuedUser, error) {
 	if err := u.st.PutCredential(c); err != nil {
 		return issuedUser{}, err
 	}
-	err = u.st.Write(false, func(tx *store.Tx) error {
+	err = u.st.WriteAs(adminActor, false, func(tx *store.Tx) error {
 		if o.Namespace != "" {
 			if err := ensureTenantNamespace(tx, o); err != nil {
 				return err
 			}
-			if err := createUserBinding(tx, o.Name, o.Namespace, o.Role); err != nil {
+			if err := createUserBinding(tx, o.Name, o.Namespace, o.Role, o.Agent); err != nil {
 				return err
 			}
 		}
 		if o.ClusterRole != "" {
-			return createUserBinding(tx, o.Name, "", o.ClusterRole)
+			return createUserBinding(tx, o.Name, "", o.ClusterRole, o.Agent)
 		}
 		return nil
 	})
@@ -243,6 +259,9 @@ func (u *userManager) issue(c store.Credential, o userOptions) (issuedUser, erro
 	if err := u.st.PutCredential(c); err != nil {
 		return issuedUser{}, err
 	}
+	if !c.Created.IsZero() {
+		o.Created = c.Created.UTC().Format(time.RFC3339)
+	}
 	return issuedUser{o, "swu_" + c.ID + "_" + secret}, nil
 }
 
@@ -253,6 +272,9 @@ func ensureTenantNamespace(tx *store.Tx, o userOptions) error {
 	if errors.Is(err, store.ErrNotFound) {
 		ns.Metadata.Name = o.Namespace
 		ns.Metadata.Labels = map[string]string{"shearwater.io/tenant": o.Name, securityLabel: "baseline"}
+		if o.Agent {
+			ns.Metadata.Labels[agentLabel] = o.Name
+		}
 		objects.Stamp(res, ns)
 		_, err := tx.Create(objects.Put(res, ns))
 		return err
@@ -281,7 +303,7 @@ func ensureTenantNamespace(tx *store.Tx, o userOptions) error {
 	}
 }
 
-func createUserBinding(tx *store.Tx, name, ns, role string) error {
+func createUserBinding(tx *store.Tx, name, ns, role string, agent bool) error {
 	if _, err := tx.Get(store.Key{Group: apis.RBACGroup, Resource: "clusterroles", Name: role}); err != nil {
 		return fmt.Errorf("clusterrole %q: %w", role, err)
 	}
@@ -294,7 +316,11 @@ func createUserBinding(tx *store.Tx, name, ns, role string) error {
 		resource = "clusterrolebindings"
 	}
 	res := apis.Lookup(apis.RBACGroup, "v1", resource)
-	*obj.Meta() = apis.ObjectMeta{Name: "sw-user." + name, Namespace: ns, Labels: map[string]string{userLabel: name}}
+	labels := map[string]string{userLabel: name}
+	if agent {
+		labels[agentLabel] = name
+	}
+	*obj.Meta() = apis.ObjectMeta{Name: "sw-user." + name, Namespace: ns, Labels: labels}
 	objects.Stamp(res, obj)
 	_, err := tx.Create(objects.Put(res, obj))
 	return err
@@ -315,7 +341,7 @@ func (u *userManager) remove(c store.Credential) error {
 		}
 		bindings = append(bindings, records...)
 	}
-	err := u.st.Write(false, func(tx *store.Tx) error {
+	err := u.st.WriteAs(adminActor, false, func(tx *store.Tx) error {
 		for _, candidate := range bindings {
 			rec, err := tx.Get(candidate.Key)
 			if errors.Is(err, store.ErrNotFound) {
@@ -329,7 +355,7 @@ func (u *userManager) remove(c store.Credential) error {
 			if err := json.Unmarshal(rec.Data, obj); err != nil {
 				return err
 			}
-			if obj.Meta().Labels[userLabel] == c.Name {
+			if obj.Meta().Labels[userLabel] == c.Name || obj.Meta().Labels[agentLabel] == c.Name {
 				if _, err := tx.Delete(rec.Key, rec.Rev, objects.Encoder(obj)); err != nil {
 					return err
 				}

@@ -51,6 +51,7 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw node        print a join command, list or remove the servers of this cluster
   sw join        make this server a worker of a cluster (run the command sw node token prints)
   sw user        add, list, remove users or rotate their tokens
+  sw agent       create, list or remove an AI agent identity with kubeconfig, MCP config and skill
   sw version     print the version
   sw service     render/install/manage an automatic systemd service
   sw backup      snapshot the database and credentials, optionally cold volumes
@@ -143,6 +144,8 @@ func main() {
 		err = runJoin(args)
 	case "user":
 		err = runUser(args)
+	case "agent":
+		err = runAgent(args, os.Stdout)
 	case "version", "--version":
 		fmt.Println("sw " + api.Version + " (Kubernetes API " + api.GitVersion + ")")
 	case "help", "-h", "--help":

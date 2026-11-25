@@ -108,6 +108,11 @@ type agentClient struct {
 }
 
 func localAPI(configDir, listen string) (*agentClient, error) {
+	if _, err := os.Stat(filepath.Join(configDir, "token")); err == nil {
+		return localAPIWithToken(configDir, listen, "token")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, localConfigError(configDir, err)
+	}
 	return localAPIWithToken(configDir, listen, "admin.token")
 }
 

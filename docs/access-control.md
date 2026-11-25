@@ -1,5 +1,7 @@
 # 에이전트에게 제한된 kubeconfig 주기
 
+> kubeconfig와 MCP 설정, 운영 스킬을 한 번에 만들려면 [`sw agent`](agent-identity.md)를 사용한다.
+
 관리자가 서버에 저장된 연결 정보로 다음 명령을 실행하면 `team-a`에서 쓸 `alice`의 kubeconfig가 생긴다. 조회만 하는 에이전트에는 `view`, 워크로드를 배포하는 에이전트에는 `edit`를 지정한다. `edit`는 같은 네임스페이스의 Secret도 읽고 변경할 수 있다.
 
 ```sh
