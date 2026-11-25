@@ -533,3 +533,77 @@ func TestWitnessAddedLaterLearnsTheStandbyIsInSync(t *testing.T) {
 		return err == nil && len(ws.State.InSync) == 2 && l.Status().InSync
 	})
 }
+
+func TestNoWitnessMeansManualTakeoverOnly(t *testing.T) {
+	fastTimers(t)
+	c := newCluster(t)
+	a, b := c.nodes["a"], c.nodes["b"]
+	st, err := store.Open(filepath.Join(a.dir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := c.config("a", RoleLeader, 1)
+	cfg.Witness = ""
+	l := &Leader{Store: st, Config: cfg, DataDir: a.dir, HTTP: http.DefaultClient, Logf: c.logf}
+	lctx, stopLeader := context.WithCancel(context.Background())
+	defer stopLeader()
+	if err := l.Start(lctx); err != nil {
+		t.Fatal(err)
+	}
+	srv := &httptest.Server{Listener: a.ln, Config: &http.Server{Handler: l}}
+	srv.Start()
+	promoted := make(chan int64, 1)
+	sbCfg := c.config("b", RoleStandby, 1)
+	sbCfg.Witness = ""
+	sb := &Standby{Config: sbCfg, ConfigDir: b.dir, DataDir: b.dir, Client: http.DefaultClient, Logf: c.logf,
+		Promote: func(e int64) error { promoted <- e; return errors.New("promoted") }}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go sb.Run(ctx)
+	if err := put(st, "first"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "sync without a witness", 5*time.Second, func() bool { return l.Status().InSync })
+	for i := 0; i < 5; i++ {
+		if err := put(st, fmt.Sprintf("confirmed-%d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The leader dies. Without a witness the standby cannot tell a dead
+	// leader from a cut link, so it does not take over on its own.
+	stopLeader()
+	srv.CloseClientConnections()
+	srv.Close()
+	st.Close()
+	select {
+	case e := <-promoted:
+		t.Fatalf("took over at epoch %d without a witness", e)
+	case <-time.After(3 * FailAfter):
+	}
+	// An operator decides (sw ha promote --force writes this file).
+	if err := os.WriteFile(filepath.Join(b.dir, PromoteFile), []byte("force\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case e := <-promoted:
+		if e != 2 {
+			t.Fatalf("forced promotion to epoch %d, want 2", e)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("no takeover after the operator's request\n%s", strings.Join(c.logs, "\n"))
+	}
+	if _, err := os.Stat(filepath.Join(b.dir, PromoteFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("the promotion request was not consumed")
+	}
+	// The replica it leads with holds every confirmed write.
+	replica, err := store.Open(filepath.Join(b.dir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer replica.Close()
+	for i := 0; i < 5; i++ {
+		if _, err := replica.Get(store.Key{Resource: "pods", Namespace: "default", Name: fmt.Sprintf("confirmed-%d", i)}); err != nil {
+			t.Fatalf("confirmed-%d missing on the standby: %v", i, err)
+		}
+	}
+}
