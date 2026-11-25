@@ -61,7 +61,7 @@ Running `sw node token --control-plane` the first time enables high availability
 
 | Situation | What happens |
 | --- | --- |
-| Leader dies | After 6 s of silence (`FailAfter`), the standby asks the witness for a vote. The witness grants the next epoch only after it has not heard a leader heartbeat for 7 s (`VoteAfter`) and confirms the standby is in sync. The standby re-execs in place (same PID) as the new leader. Measured QA time: TBD. |
+| Leader dies | After 6 s of silence (`FailAfter`), the standby asks the witness for a vote. The witness grants the next epoch only after it has not heard a leader heartbeat for 7 s (`VoteAfter`) and confirms the standby is in sync. The standby re-execs in place (same PID) as the new leader. Measured in QA: 7.4 s. |
 | Standby dies | The next write waits up to 2 s (`SyncTimeout`), then asks the witness to take the standby out of the sync set and continues writing in solo mode (one copy while the standby is away). |
 | Witness dies | Both control planes keep running in synchronous mode. If the leader also dies afterward, automatic takeover cannot happen. |
 | Leader loses contact with both standby and witness | While the standby is in sync, the leader loses its 5 s lease (`LeaseFor`), fences writes, and restarts as a standby to avoid split brain. (If the leader was already in solo mode after the witness desynced the standby, the witness will not elect the standby, so the leader continues writing alone.) |
@@ -80,6 +80,22 @@ When a cluster has two control planes and a witness, a restarting server starts 
 
 ## QA results
 
-On the QA distribution's three-server simulation (each node in its own network namespace, containerd instance, and cgroup), the leader process is killed with `SIGKILL` under continuous writes. The harness and results live in `maintenance/20261125-agent-first-ha/qa/`.
+In the QA distribution's three-server simulation (each node its own network namespace, containerd and
+cgroup; cp1 leads, cp2 is the standby, w1 is a worker that also runs the witness), one client kept writing
+Secrets through cp2's address and a probe asked the app's Service every 0.2 s while the leader process was
+killed with `SIGKILL` (2026-11-25, run `mnq-ha6`; harness and raw data in
+`maintenance/20261125-agent-first-ha/qa/`). This is one run; the times move by a few seconds with the
+heartbeat timing (the earlier run `mnq-ha5` had a 5.35 s write gap).
 
-(TBD — measurements will be filled in after QA completes.)
+| Check | Result |
+| --- | --- |
+| From killing the leader until cp2 led epoch 2 | 7.4 s |
+| Write attempts / success answers (201) / failures | 1,903 / 1,868 / 35 (connections cut during the switch) |
+| Writes answered with success but missing on the new leader | **0** |
+| Longest time without a successful write | 7.26 s (from the kill) |
+| kubectl (kubeconfig with cp2's address) and the worker | carried on; three nodes Ready |
+| App probe every 0.2 s | 160 successes, 0 failures |
+| Agent records (`sw changes --actor`, delegated task evidence) | intact on the new leader |
+| The old leader's `sw up` | came back as the standby from a snapshot and got back in sync |
+| Killing the standby | the next write succeeded after 2.1 s (alone, with the witness's consent) |
+| Then killing the witness | the leader kept writing |

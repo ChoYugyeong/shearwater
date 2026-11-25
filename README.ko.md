@@ -123,7 +123,7 @@ Shearwater에는 서버 한 대나 여러 대(컨트롤 플레인과 워커)에�
 - **리비전 N 이후 변경과 행위자 (`sw changes`, MCP `sw_changes`).** API·노드·작업 쓰기마다 같은 트랜잭션에 행위자(`admin`, 사용자·에이전트 이름, `system:node:NAME`, `task:ID`)와 경로(`kubectl`, `api`, `node`, `task`)를 남겨요. `sw changes --since N`과 `sw_changes`는 바뀐 필드 요약(Secret 값 제외), 접힌 status/하트비트 건수, 다음 커서(`next`)를 돌려줘요.
 - **에이전트 사이 앱 임대 (`sw lease`, `coordination.k8s.io/v1` Lease).** 위임 계획을 저장하면 보유자·의도·만료(최대 15분)가 담긴 `shearwater-app-<앱>` 임대를 잡아요. 다른 작업이 같은 앱을 계획하려 하면 `APP_LEASED retry=safe`와 보유자·만료·의도를 돌려주고, 운영자는 `sw lease list` / `sw lease release`나 `kubectl get leases`로 확인·해제해요. [에이전트 운영 안내](docs/agent-operations.md)
 - **검증 실패 시 자동 복구 (`--auto-recover`).** `sw task create ... --allow update,recover --auto-recover`로 만든 작업은 승인된 업데이트의 첫 확정 검증 실패 시 마지막으로 HTTP 검증을 통과한 고정 이미지로 한 번 자동 복구하고 다시 검증해요. 원래 실패와 복구 결과가 모두 `sw task evidence`에 남아요.
-- **대기 컨트롤 플레인과 증인 (작업 중).** 세미싱크 SQLite 복제 로그, 능동/대기 + 증인 프로토콜, 제자리 리더/대기 역할 전환으로 컨트롤 플레인 한 대가 죽어도 확인받은 쓰기를 유지하는 구성을 작업 중이에요(CLI 연결과 QA 전환 시간: TBD). [컨트롤 플레인 두 대 안내](docs/ha.md)
+- **두 번째 컨트롤 플레인과 증인.** `sw node token --control-plane` / `--witness`, `sw join --control-plane` / `--witness`, `sw ha status`. 리더는 동기 상태인 대기 서버가 커밋한 뒤에야 쓰기를 커밋하고, 증인(데이터 없음, 한 표, 워커여도 됨)이 대기 서버의 인계를 허락해요. 서버 세 대 흉내에서 쓰기를 계속 넣는 중에 리더를 SIGKILL로 죽인 QA 한 번에서, 7.4초 뒤 대기 서버가 리더가 됐고 성공 응답을 받은 쓰기 1,868건이 모두 있었고, 앱은 프로브 160번에 모두 답했어요. 서로 다른 실제 서버에서는 아직 확인하지 않았어요. [컨트롤 플레인 두 대 안내](docs/ha.md)
 
 ## 측정 결과
 
@@ -148,7 +148,7 @@ Shearwater에는 서버 한 대나 여러 대(컨트롤 플레인과 워커)에�
 
 ## 어떤 환경에 맞나요?
 
-신뢰하는 작은 HTTP 앱을 서버 한 대나 몇 대에서 맡기는 **실험적 알파**예요. 공개된 `v0.1.0-alpha.16`은 IPv4·TCP ClusterIP를 지원하고 컨트롤 플레인은 한 대(고가용성 없음)예요(대기 컨트롤 플레인 + 증인은 개발 브랜치에서 작업 중, 전환 시간 TBD). 선택 기능인 공개 진입점이 주석을 단 Service의 TLS를 맡지만, 공개 도메인 연결과 로그인은 따로 확인해야 하고, 이미지 복구에는 DB 데이터 복원이 포함되지 않아요. `securityContext`는 Pod Security로 검사할 수 있지만 컨테이너는 런타임 기본 보안 설정으로 돌아요. RBAC·쿼터·NetworkPolicy로 사용자를 나누지만, 악의적인 사용자를 막도록 단단히 검증하지는 않았어요. [호환표](docs/compatibility.md)
+신뢰하는 작은 HTTP 앱을 서버 한 대나 몇 대에서 맡기는 **실험적 알파**예요. 공개된 `v0.1.0-alpha.16`은 IPv4·TCP ClusterIP를 지원하고 컨트롤 플레인은 한 대(고가용성 없음)예요(개발 브랜치에 대기 컨트롤 플레인 + 증인이 있고, 지금까지는 서버 흉내에서만 확인했어요). 선택 기능인 공개 진입점이 주석을 단 Service의 TLS를 맡지만, 공개 도메인 연결과 로그인은 따로 확인해야 하고, 이미지 복구에는 DB 데이터 복원이 포함되지 않아요. `securityContext`는 Pod Security로 검사할 수 있지만 컨테이너는 런타임 기본 보안 설정으로 돌아요. RBAC·쿼터·NetworkPolicy로 사용자를 나누지만, 악의적인 사용자를 막도록 단단히 검증하지는 않았어요. [호환표](docs/compatibility.md)
 
 이미 Docker Compose로 앱 몇 개를 돌리고 있다면 Compose는 그대로 두고 그 앞에 Shearwater를 붙이세요. 검증된 고가용성 컨트롤 플레인, 네트워크 스토리지, Helm, 전체 Kubernetes API가 필요하면 Kubernetes나 K3s를 살펴보세요. [도구별 용도 비교](docs/choosing-shearwater.md)
 

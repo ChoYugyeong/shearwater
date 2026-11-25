@@ -21,7 +21,7 @@ You can run Shearwater on one server or add workers to a single control plane. A
 ```
 
 - The cluster has **one control-plane server**. It stores cluster state in SQLite. Workers have no database. Each worker uses its node credentials to read and write state through the control plane's node API. It can write only to resources assigned to its node.
-- If the control plane stops, the API, scheduling, and rescheduling stop. Apps already running on workers keep running, and workers continue forwarding Service traffic. A highly available control plane with multiple servers is not yet supported.
+- If the control plane stops, the API, scheduling, and rescheduling stop. Apps already running on workers keep running, and workers continue forwarding Service traffic. With a second control plane (a standby) and a witness, the standby takes over when the leader dies: [Two control planes](ha.md).
 - Each server runs a single long-lived Shearwater process, `sw`.
 
 ## Requirements
