@@ -248,7 +248,9 @@ func runServer(args []string) error {
 		return err
 	}
 	haEnabled := err == nil
-	if *worker {
+	// sw up passes --worker to a joined standby (its node.json); after it won
+	// an election the same arguments start it again, now as the leader.
+	if *worker && !haEnabled {
 		if !withAgent {
 			return fmt.Errorf("a worker runs containers: drop --runtime=none")
 		}
