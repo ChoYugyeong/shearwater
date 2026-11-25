@@ -41,6 +41,7 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw get         list resources or inspect TYPE/NAME (--full for JSON)
   sw logs        read current or previous Pod container logs
   sw events      show recent events, optionally for one object's UID
+  sw changes     show what changed since a revision and who changed it
   sw why         explain a Pod's state with events and bounded log excerpts
   sw observe     read bounded, structured workload facts for agents
   sw verify      check readiness of an exact resource UID and generation
@@ -126,6 +127,8 @@ func main() {
 		err = runTree(args)
 	case "doctor":
 		err = runDoctor(args)
+	case "changes":
+		err = runChanges(args, os.Stdout)
 	case "get", "logs", "events", "why":
 		err = runDiagnostic(cmd, args, os.Stdout)
 	case "observe", "verify", "capabilities":
@@ -295,6 +298,9 @@ func runServer(args []string) error {
 		}
 	}
 	if err := st.InitCredentials(); err != nil {
+		return err
+	}
+	if err := st.InitActors(); err != nil {
 		return err
 	}
 	adminMux := http.NewServeMux()

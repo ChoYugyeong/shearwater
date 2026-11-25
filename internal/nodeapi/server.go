@@ -257,7 +257,7 @@ var nodesRes = apis.Lookup("", "v1", "nodes")
 // of a node that joins again under the same name.
 func (s *Server) registerNode(name, ip string) (netip.Prefix, error) {
 	var podCIDR netip.Prefix
-	err := s.Store.Write(false, func(tx *store.Tx) error {
+	err := s.Store.WriteAs(store.Actor{Name: auth.NodePrefix + name, Via: "node"}, false, func(tx *store.Tx) error {
 		recs, err := tx.Objects()
 		if err != nil {
 			return err
@@ -580,7 +580,7 @@ func (s *Server) transact(w http.ResponseWriter, r *http.Request, node string) e
 		return err
 	}
 	var out []wireRecord
-	err := s.Store.Write(false, func(tx *store.Tx) error {
+	err := s.Store.WriteAs(store.Actor{Name: auth.NodePrefix + node, Via: "node"}, false, func(tx *store.Tx) error {
 		out = out[:0]
 		for _, rd := range req.Reads {
 			cur, err := tx.Get(rd.Key.key())

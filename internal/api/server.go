@@ -149,6 +149,8 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case p == ChangesPath:
+		s.serveChanges(w, r, id)
 	case p == "/api":
 		s.serveAPIVersions(w)
 	case p == "/apis":

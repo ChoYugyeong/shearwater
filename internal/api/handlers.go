@@ -276,7 +276,7 @@ func (s *Server) create(w http.ResponseWriter, r *http.Request, res *apis.Resour
 		return errInvalid(res, m.Name, errs)
 	}
 	var rec store.Record
-	err = s.Store.Write(dry, func(tx *store.Tx) error {
+	err = s.Store.WriteAs(actorOf(r), dry, func(tx *store.Tx) error {
 		if res.Namespaced {
 			nsRes := apis.Lookup("", "v1", "namespaces")
 			ns, err := tx.Get(keyOf(nsRes, "", m.Namespace))
@@ -429,7 +429,7 @@ func (s *Server) update(w http.ResponseWriter, r *http.Request, res *apis.Resour
 	}
 	var rec store.Record
 	var warnings []string
-	err = s.Store.Write(dry, func(tx *store.Tx) error {
+	err = s.Store.WriteAs(actorOf(r), dry, func(tx *store.Tx) error {
 		cur, err := tx.Get(keyOf(res, ri.namespace, ri.name))
 		if err != nil {
 			return err
@@ -542,7 +542,7 @@ func (s *Server) patch(w http.ResponseWriter, r *http.Request, res *apis.Resourc
 
 	var rec store.Record
 	var warnings []string
-	err = s.Store.Write(p.dry, func(tx *store.Tx) error {
+	err = s.Store.WriteAs(actorOf(r), p.dry, func(tx *store.Tx) error {
 		cur, err := tx.Get(keyOf(res, ri.namespace, ri.name))
 		if err != nil {
 			return err
@@ -626,7 +626,7 @@ func (s *Server) delete(w http.ResponseWriter, r *http.Request, res *apis.Resour
 	}
 	var rec store.Record
 	pending := false
-	err = s.Store.Write(dry, func(tx *store.Tx) error {
+	err = s.Store.WriteAs(actorOf(r), dry, func(tx *store.Tx) error {
 		cur, err := tx.Get(keyOf(res, ri.namespace, ri.name))
 		if err != nil {
 			return err

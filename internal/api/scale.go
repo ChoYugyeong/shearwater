@@ -73,7 +73,7 @@ func (s *Server) updateScale(w http.ResponseWriter, r *http.Request, res *apis.R
 	}
 
 	var result *apis.Scale
-	err = s.Store.Write(dry, func(tx *store.Tx) error {
+	err = s.Store.WriteAs(actorOf(r), dry, func(tx *store.Tx) error {
 		cur, err := tx.Get(keyOf(res, ri.namespace, ri.name))
 		if err != nil {
 			return err

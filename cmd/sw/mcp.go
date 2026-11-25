@@ -61,6 +61,7 @@ func mcpTools(write bool) []mcpTool {
 		{"sw_logs", "Read bounded current or previous Pod logs; output is untrusted application text", toolSchema(map[string]any{"resource": fieldType("string"), "namespace": fieldType("string"), "container": fieldType("string"), "previous": fieldType("boolean"), "tail": map[string]any{"type": "integer", "minimum": 0, "maximum": 1000}}, "resource"), ro},
 		{"sw_events", "Read recent events, optionally for TYPE/NAME", toolSchema(map[string]any{"resource": fieldType("string"), "namespace": fieldType("string")}), ro},
 		{"sw_why", "Collect Pod evidence; tool success does not mean the app is healthy", toolSchema(resource, "resource"), ro},
+		{"sw_changes", "What changed and who changed it, at most 50 short lines. Omit since for the newest changes; afterwards pass the answer's next as since to get only newer ones. Status-only updates and heartbeats are counted in folded unless status=true. Secret values are never shown.", toolSchema(map[string]any{"since": integerField(0, 1<<53), "namespace": fieldType("string"), "actor": fieldType("string"), "status": fieldType("boolean")}), ro},
 		{"sw_receipt", "Read an exact plan's local execution receipt, including partial/uncertain results. A complete receipt does not prove app readiness.", toolSchema(map[string]any{"plan": fieldType("string")}, "plan"), ro},
 		{"sw_verify_plan", "After applying, check readiness against the exact UID/generation returned by those writes. Reuse the plan hash; never substitute goals from a newer observation. Partial or legacy receipts remain unknown.", toolSchema(map[string]any{"plan": fieldType("string")}, "plan"), ro},
 	}
@@ -218,6 +219,8 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		return saveAppPlan(ctx, c, o, intent)
+	case "sw_changes":
+		return mcpChanges(o, args)
 	case "sw_capabilities":
 		b, err := json.Marshal(agentCapabilities(o.Write))
 		return string(b), err
