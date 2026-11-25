@@ -172,7 +172,8 @@ func (s *Store) Replicate(epoch int64, r Replicator) error {
 	if err := s.initReplog(); err != nil {
 		return err
 	}
-	s.replicating, s.epoch, s.replicator = true, epoch, r
+	s.replicating, s.replicator = true, r
+	s.epoch.Store(epoch)
 	return nil
 }
 
@@ -192,7 +193,7 @@ func (s *Store) initReplog() error {
 	if err != nil {
 		return err
 	}
-	s.seq = seq
+	s.seq.Store(seq)
 	return nil
 }
 
@@ -207,31 +208,28 @@ func (s *Store) Follow() error {
 	if err != nil {
 		return err
 	}
-	s.epoch, s.standby = epoch, true
+	s.standby = true
+	s.epoch.Store(epoch)
 	return nil
 }
 
 // Fence refuses every further write with ErrUnavailable (a leader that lost
-// its lease, or could not tell whether its standby applied a batch).
+// its lease, or could not tell whether its standby applied a batch). It does
+// not wait for the write lock, so a Replicator may call it from Replicate.
 func (s *Store) Fence(reason string) {
-	s.mu.Lock()
-	if s.fenced == "" {
-		s.fenced = reason
-	}
-	s.mu.Unlock()
+	s.fenced.CompareAndSwap(nil, &reason)
 }
 
-// ReplicationState is the last committed batch and its epoch.
+// ReplicationState is the last committed batch and its epoch. It does not
+// wait for the write lock: the Replicator calls it while a write waits.
 func (s *Store) ReplicationState() (seq, epoch int64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.seq, s.epoch
+	return s.seq.Load(), s.epoch.Load()
 }
 
 // logBatch adds the batch of t to the replication log inside t and returns it
 // (the leader's side of write).
 func (s *Store) logBatch(t *Tx) (Batch, error) {
-	b := Batch{Seq: s.seq + 1, Epoch: s.epoch, At: t.now, Stmts: t.stmts}
+	b := Batch{Seq: s.seq.Load() + 1, Epoch: s.epoch.Load(), At: t.now, Stmts: t.stmts}
 	data, err := json.Marshal(b.Stmts)
 	if err != nil {
 		return b, err
@@ -271,11 +269,11 @@ func (s *Store) Apply(b Batch) error {
 	if !s.standby {
 		return errors.New("store: Apply on a store that is not a standby")
 	}
-	if b.Seq != s.seq+1 {
-		return fmt.Errorf("%w: have %d, got %d", ErrGap, s.seq, b.Seq)
+	if b.Seq != s.seq.Load()+1 {
+		return fmt.Errorf("%w: have %d, got %d", ErrGap, s.seq.Load(), b.Seq)
 	}
-	if b.Epoch < s.epoch {
-		return fmt.Errorf("store: batch %d from epoch %d, already following epoch %d", b.Seq, b.Epoch, s.epoch)
+	if b.Epoch < s.epoch.Load() {
+		return fmt.Errorf("store: batch %d from epoch %d, already following epoch %d", b.Seq, b.Epoch, s.epoch.Load())
 	}
 	tx, err := s.w.Begin()
 	if err != nil {
@@ -303,7 +301,8 @@ func (s *Store) Apply(b Batch) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.seq, s.epoch = b.Seq, b.Epoch
+	s.seq.Store(b.Seq)
+	s.epoch.Store(b.Epoch)
 	s.hubMu.Lock()
 	close(s.wake)
 	s.wake = make(chan struct{})
@@ -366,5 +365,5 @@ func (s *Store) Snapshot(ctx context.Context, path string) (seq, epoch int64, er
 		os.Remove(path) // a partial copy of ours
 		return 0, 0, err
 	}
-	return s.seq, s.epoch, nil
+	return s.seq.Load(), s.epoch.Load(), nil
 }

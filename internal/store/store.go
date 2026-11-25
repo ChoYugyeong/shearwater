@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -153,8 +154,8 @@ type Store struct {
 	replicating bool
 	standby     bool
 	replicator  Replicator
-	seq, epoch  int64
-	fenced      string
+	seq, epoch  atomic.Int64           // read without the write lock
+	fenced      atomic.Pointer[string] // set without the write lock (Fence)
 
 	// The watch hub: wake is closed after every commit and replaced. It carries
 	// no data; watchers read the change log themselves.
@@ -325,8 +326,8 @@ func (s *Store) write(a Actor, dryRun bool, fn func(tx *Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
-	case s.fenced != "":
-		return fmt.Errorf("%w: %s", ErrUnavailable, s.fenced)
+	case s.fenced.Load() != nil:
+		return fmt.Errorf("%w: %s", ErrUnavailable, *s.fenced.Load())
 	case s.standby:
 		return fmt.Errorf("%w: this control plane is a standby; the leader takes writes", ErrUnavailable)
 	}
@@ -379,7 +380,7 @@ func (s *Store) write(a Actor, dryRun bool, fn func(tx *Tx) error) error {
 	if err := sqlTx.Commit(); err != nil {
 		if s.replicating && s.replicator != nil {
 			// The standby has a batch this file does not: never continue.
-			s.fenced = "a confirmed batch could not be committed locally: " + err.Error()
+			s.Fence("a confirmed batch could not be committed locally: " + err.Error())
 		}
 		return err
 	}
@@ -387,7 +388,7 @@ func (s *Store) write(a Actor, dryRun bool, fn func(tx *Tx) error) error {
 		s.lastCompact = compacted
 	}
 	if s.replicating {
-		s.seq = batch.Seq
+		s.seq.Store(batch.Seq)
 	}
 	if !objects {
 		return nil // Internal bookkeeping has no watch event.
