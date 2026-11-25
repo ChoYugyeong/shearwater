@@ -117,6 +117,10 @@ func toAPIError(err error, res *apis.Resource, name string) *apiError {
 		return errAlreadyExists(res, name)
 	case errors.Is(err, store.ErrConflict):
 		return errConflict(res, name, "the object has been modified")
+	case errors.Is(err, store.ErrUnavailable):
+		// Not committed here; a standby may still have applied it.
+		return newErr(http.StatusServiceUnavailable, "ServiceUnavailable", "NOT_LEADER", "unsafe", "%v", err).
+			withHint("the control planes are changing leader; check whether the change was applied, then retry")
 	}
 	return errInternal(err)
 }

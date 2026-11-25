@@ -64,22 +64,33 @@ func (h *haWiring) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	l.ServeHTTP(w, r)
 }
 
-// start runs a configured leader (ha.json with this process as leader).
-func (h *haWiring) start(ctx context.Context, cfg ha.Config) error {
+// start remembers the server's lifetime and, when ha.json makes this
+// process the leader, starts replicating.
+func (h *haWiring) start(ctx context.Context, cfg *ha.Config) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.ctx = ctx
-	return h.startLocked(cfg)
+	if cfg == nil {
+		return nil
+	}
+	if err := h.startLocked(*cfg); err != nil {
+		return err
+	}
+	if err := h.prepareSelfWorker(); err != nil {
+		h.logf("cannot prepare this node's worker credentials for a later step-down: %v", err)
+	}
+	h.logf("leading epoch %d with %d control plane(s)", cfg.Epoch, len(cfg.Members))
+	return nil
 }
 
 func (h *haWiring) startLocked(cfg ha.Config) error {
-	l := &ha.Leader{Store: h.w.Store, Config: cfg, DataDir: h.w.DataDir, Logf: h.logf,
+	c, err := h.client()
+	if err != nil {
+		return err
+	}
+	l := &ha.Leader{Store: h.w.Store, Config: cfg, DataDir: h.w.DataDir, Logf: h.logf, HTTP: c,
 		StepDown: func(reason string) { h.stepDown(reason) }}
 	if cfg.Witness != "" {
-		c, err := h.client()
-		if err != nil {
-			return err
-		}
 		l.Witness = &ha.WitnessClient{URL: cfg.Witness, Token: cfg.Token, Client: c}
 	}
 	if err := l.Start(h.ctx); err != nil {
@@ -126,6 +137,9 @@ func (h *haWiring) Enable() error {
 		return err
 	}
 	if err := h.startLocked(cfg); err != nil {
+		return err
+	}
+	if err := h.prepareSelfWorker(); err != nil {
 		return err
 	}
 	h.logf("high availability enabled: this control plane leads epoch 1")

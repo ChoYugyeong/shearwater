@@ -10,11 +10,13 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"shearwater/internal/auth"
 	"shearwater/internal/controller"
 	"shearwater/internal/drain"
+	"shearwater/internal/ha"
 	"shearwater/internal/node"
 	"shearwater/internal/pki"
 	"shearwater/internal/proxy"
@@ -212,12 +215,6 @@ func runServer(args []string) error {
 		}
 		*listen = o.Listen
 	}
-	if *worker {
-		if !withAgent {
-			return fmt.Errorf("a worker runs containers: drop --runtime=none")
-		}
-		return runWorker(o, *instance)
-	}
 	if *advertise == "" {
 		*advertise = readClusterConfig(*configDir).AdvertiseAddress
 	}
@@ -228,6 +225,31 @@ func runServer(args []string) error {
 			return err
 		}
 		advertiseIP = a
+	}
+	// A control plane with a second one (docs/design-agent-first-ha.md 3.6)
+	// starts as the standby unless it just won an election or is alone.
+	haCfg, err := ha.Load(*configDir)
+	switch {
+	case err == nil:
+		if !startsAsLeader(*configDir, haCfg) {
+			if !withAgent {
+				return fmt.Errorf("a standby control plane runs its node as a worker: drop --runtime=none")
+			}
+			return runStandby(o, *instance, haCfg, advertiseIP)
+		}
+		if !advertiseIP.IsValid() {
+			return fmt.Errorf("%s needs the advertised address in %s", ha.ConfigFile, clusterFile)
+		}
+	case errors.Is(err, os.ErrNotExist):
+	default:
+		return err
+	}
+	haEnabled := err == nil
+	if *worker {
+		if !withAgent {
+			return fmt.Errorf("a worker runs containers: drop --runtime=none")
+		}
+		return runWorker(o, *instance)
 	}
 	if *instance != "" {
 		if len(*instance) != 32 {
@@ -288,8 +310,17 @@ func runServer(args []string) error {
 		return err
 	}
 	if advertiseIP.IsValid() {
-		// Remote kubectl reaches the server by this address.
-		if err := pki.EnsureServerAddresses(*configDir, []net.IP{net.IP(advertiseIP.AsSlice())}); err != nil {
+		// Remote kubectl reaches the server by this address, and through the
+		// other control plane's address when that one is the standby.
+		ips := []net.IP{net.IP(advertiseIP.AsSlice())}
+		if p, ok := haCfg.Peer(); haEnabled && ok {
+			if u, err := url.Parse(p.URL); err == nil {
+				if ip := net.ParseIP(u.Hostname()); ip != nil {
+					ips = append(ips, ip)
+				}
+			}
+		}
+		if err := pki.EnsureServerAddresses(*configDir, ips); err != nil {
 			return err
 		}
 		if mat, err = pki.Load(*configDir); err != nil {
@@ -334,8 +365,33 @@ func runServer(args []string) error {
 	}
 	_, listenPort, _ := net.SplitHostPort(*listen)
 	joinURL := ""
+	// The serving certificate can change while running (a standby joins with
+	// a new address); the TLS listener always presents the current one.
+	var serving atomic.Pointer[tls.Certificate]
+	serving.Store(&mat.Server)
+	reloadTLS := func() error {
+		cert, err := tls.LoadX509KeyPair(filepath.Join(*configDir, "server.crt"), filepath.Join(*configDir, "server.key"))
+		if err == nil {
+			serving.Store(&cert)
+		}
+		return err
+	}
+	var haw *haWiring
 	if advertiseIP.IsValid() {
 		joinURL = "https://" + net.JoinHostPort(advertiseIP.String(), listenPort)
+		self := *nodeName
+		if haEnabled {
+			self = haCfg.Self
+		}
+		haw = &haWiring{w: wired, self: self, advertise: advertiseIP, port: listenPort, reloadTLS: reloadTLS,
+			logf: func(format string, a ...any) { fmt.Fprintf(os.Stderr, "ha: "+format+"\n", a...) },
+			restart: func(reason string) {
+				fmt.Fprintf(os.Stderr, "sw server: %s; starting again\n", reason)
+				err := reexec("")
+				fmt.Fprintf(os.Stderr, "sw server: cannot start again: %v\n", err)
+				os.Exit(1)
+			}}
+		wired.HA, srv.HA = haw, haw
 	}
 	nodeAPI := wireNodes(wired, joinURL)
 	clusterCIDR := netip.Prefix{} // zero: a single server
@@ -385,9 +441,26 @@ func runServer(args []string) error {
 	for _, l := range loops {
 		goBackground(l.fn)
 	}
+	if haw != nil {
+		var start *ha.Config
+		if haEnabled {
+			if haCfg.Nonce != "" {
+				// The won election is used up: a later start is a standby again.
+				haCfg.Nonce = ""
+				if err := haCfg.Save(*configDir); err != nil {
+					return err
+				}
+			}
+			start = &haCfg
+		}
+		if err := haw.start(ctx, start); err != nil {
+			return fmt.Errorf("start replication: %w", err)
+		}
+	}
 	hs := &http.Server{
-		Handler:           srv,
-		TLSConfig:         &tls.Config{Certificates: []tls.Certificate{mat.Server}, MinVersion: tls.VersionTLS12},
+		Handler: srv,
+		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12,
+			GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return serving.Load(), nil }},
 		ReadHeaderTimeout: 10 * time.Second,
 		// Requests inherit the signal context, so open watches end when the server is told to stop.
 		BaseContext: func(net.Listener) context.Context { return ctx },
@@ -399,7 +472,9 @@ func runServer(args []string) error {
 	if withAgent {
 		rt := runtime.NewContainerd(*socket)
 		defer rt.Close()
-		n := runtime.NewNet(*runDir, apis.PodCIDR, apis.ServiceCIDR)
+		// A control plane that took over keeps the pod range it had as a worker.
+		podCIDR := ownPodCIDR(st, *nodeName)
+		n := runtime.NewNet(*runDir, podCIDR, apis.ServiceCIDR)
 		if advertiseIP.IsValid() {
 			n.Overlay, n.ClusterCIDR = true, apis.ClusterCIDR
 		}
@@ -440,15 +515,15 @@ func runServer(args []string) error {
 		}
 		draining := &drain.State{}
 		forwarding := &proxy.KernelManager{Manager: proxy.Manager{Store: st},
-			DataPath: &runtime.KernelServices{PodCIDR: apis.PodCIDR, ServiceCIDR: apis.ServiceCIDR, ClusterCIDR: clusterCIDR}, Drain: draining}
+			DataPath: &runtime.KernelServices{PodCIDR: podCIDR, ServiceCIDR: apis.ServiceCIDR, ClusterCIDR: clusterCIDR}, Drain: draining}
 		agent := &node.Agent{
 			Store: st, Runtime: rt, Net: n,
 			RetirePod: forwarding.RetirePod,
-			NodeName:  *nodeName, DataDir: *dataDir, LogDir: *logDir, PodCIDR: apis.PodCIDR, Version: api.GitVersion,
+			NodeName:  *nodeName, DataDir: *dataDir, LogDir: *logDir, PodCIDR: podCIDR, Version: api.GitVersion,
 		}
 		if advertiseIP.IsValid() {
 			agent.NodeIP = advertiseIP.String()
-			overlay := &node.Overlay{Store: st, NodeName: *nodeName, NodeIP: advertiseIP, PodCIDR: apis.PodCIDR}
+			overlay := &node.Overlay{Store: st, NodeName: *nodeName, NodeIP: advertiseIP, PodCIDR: podCIDR}
 			goBackground(overlay.Run)
 		}
 		srv.NodeName, srv.LogDir = *nodeName, *logDir
@@ -469,7 +544,7 @@ func runServer(args []string) error {
 			})
 		})
 		goBackground(func(ctx context.Context) {
-			runNodeNetworkPolicy(ctx, st, apis.PodCIDR, func(format string, args ...any) {
+			runNodeNetworkPolicy(ctx, st, podCIDR, func(format string, args ...any) {
 				fmt.Fprintf(os.Stderr, "network policy: "+format+"\n", args...)
 			})
 		})

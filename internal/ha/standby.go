@@ -39,6 +39,10 @@ type Standby struct {
 	// before the call. An error ends Run.
 	Promote func(epoch int64) error
 	Logf    func(format string, a ...any)
+	// CampaignNow asks for the next epoch at once instead of following: a
+	// leader that restarted (its witness lets the current leader run again
+	// without waiting) keeps its own file when it wins.
+	CampaignNow bool
 
 	mu      sync.Mutex
 	st      *store.Store
@@ -77,6 +81,38 @@ func (s *Standby) Status() StandbyStatus {
 	return st
 }
 
+// LeaderAddr is host:port of the leader while this standby is following it
+// and heard from it within FailAfter, else "": a standby that is not sure
+// where the leader is refuses connections instead of passing them on (two
+// standbys would otherwise pass a connection back and forth).
+func (s *Standby) LeaderAddr() string {
+	s.mu.Lock()
+	following := s.st != nil && time.Since(s.contact) < FailAfter
+	s.mu.Unlock()
+	if !following {
+		return ""
+	}
+	u, err := url.Parse(s.LeaderURL())
+	if err != nil {
+		return ""
+	}
+	return u.Host
+}
+
+// WriteStatus keeps StatusFile in the config directory current until ctx ends.
+func (s *Standby) WriteStatus(ctx context.Context) {
+	for {
+		if b, err := json.MarshalIndent(s.Status(), "", "  "); err == nil {
+			writeFileSync(filepath.Join(s.ConfigDir, StatusFile), append(b, '\n'))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
 // LeaderURL is the API address of the control plane this standby follows.
 func (s *Standby) LeaderURL() string {
 	p, ok := s.Config.Peer()
@@ -93,6 +129,16 @@ func (s *Standby) Run(ctx context.Context) error {
 	s.mu.Lock()
 	s.contact = time.Now()
 	s.mu.Unlock()
+	if s.CampaignNow && s.Witness != nil {
+		ctx2, cancel := context.WithTimeout(ctx, CallTimeout)
+		reply, err := s.Witness.Call(ctx2, "vote", WitnessRequest{Epoch: s.Config.Epoch + 1, Candidate: s.Config.Self})
+		cancel()
+		if err == nil && reply.OK {
+			s.logf("the witness let this control plane lead again at epoch %d", s.Config.Epoch+1)
+			return s.Promote(s.Config.Epoch + 1)
+		}
+		s.logf("not leading again (%v %s); following the leader", err, reply.Reason)
+	}
 	for ctx.Err() == nil {
 		if s.promoteRequested() {
 			return s.takeOver(ctx, true)

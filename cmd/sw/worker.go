@@ -100,6 +100,9 @@ type workerExtras struct {
 	Local func(ctx context.Context, ln net.Listener) error
 	// Role is reported in the start line ("worker" when empty).
 	Role string
+	// FilesDir holds node.json and the node credentials (default
+	// o.ConfigDir; a control plane keeps its own in a subdirectory).
+	FilesDir string
 }
 
 func runWorker(o opsOptions, instance string) error {
@@ -107,7 +110,11 @@ func runWorker(o opsOptions, instance string) error {
 }
 
 func runWorkerWith(o opsOptions, instance string, x workerExtras) error {
-	f, err := readWorkerFiles(o.ConfigDir)
+	dir := o.ConfigDir
+	if x.FilesDir != "" {
+		dir = x.FilesDir
+	}
+	f, err := readWorkerFiles(dir)
 	if err != nil {
 		return fmt.Errorf("this server has not joined a cluster: %w", err)
 	}

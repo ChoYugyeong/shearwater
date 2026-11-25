@@ -32,6 +32,8 @@ const (
 	// NodePrefix serves worker nodes. Server.NodeAPI authenticates them itself
 	// because joining uses a join token, not an identity the API knows yet.
 	NodePrefix = "/shearwater/node/"
+	// HAPrefix is served to the standby control plane (internal/ha).
+	HAPrefix = "/shearwater/ha/"
 )
 
 // Version is the product release version, without the Git tag's leading "v".
@@ -75,8 +77,10 @@ type Server struct {
 	// Admit checks creates and updates after validation, inside the write
 	// transaction (quota, pod security, RBAC escalation, host claims).
 	Admit admission.Func
-	// Admin serves AdminPrefix for administrators; NodeAPI serves NodePrefix.
-	Admin, NodeAPI http.Handler
+	// Admin serves AdminPrefix for administrators; NodeAPI serves NodePrefix;
+	// HA serves HAPrefix to the standby control plane (it checks the
+	// cluster's HA token itself).
+	Admin, NodeAPI, HA http.Handler
 	// RemoteLogs streams the log of a container on another node (nil: only
 	// this server's own node has logs). The request is already checked.
 	RemoteLogs func(w http.ResponseWriter, r *http.Request, pod *apis.Pod, container string, attempt int, tail, limit int64, follow bool) error
@@ -112,6 +116,14 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) {
 	}
 	if p == operation.Prefix || strings.HasPrefix(p, operation.Prefix+"/") {
 		s.serveOperation(w, r)
+		return
+	}
+	if strings.HasPrefix(p, HAPrefix) {
+		if s.HA == nil {
+			writeErr(w, errPath(p))
+			return
+		}
+		s.HA.ServeHTTP(w, r)
 		return
 	}
 	if strings.HasPrefix(p, NodePrefix) {
