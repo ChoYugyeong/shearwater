@@ -90,7 +90,23 @@ func readWorkerFiles(dir string) (workerFiles, error) {
 // cluster DNS and the overlay, with the cluster state read from the control
 // plane. There is no database and no Kubernetes API here; the local listener
 // only answers health checks for sw up and sw status.
+// workerExtras lets a standby control plane run beside the node agent
+// (docs/design-agent-first-ha.md 3.2): it is a worker of the leader that also
+// keeps a replica and passes API connections to the leader.
+type workerExtras struct {
+	// Sidecar runs for the worker's lifetime with its control plane client.
+	Sidecar func(ctx context.Context, client *nodeapi.Client)
+	// Local serves o.Listen instead of the local health endpoints.
+	Local func(ctx context.Context, ln net.Listener) error
+	// Role is reported in the start line ("worker" when empty).
+	Role string
+}
+
 func runWorker(o opsOptions, instance string) error {
+	return runWorkerWith(o, instance, workerExtras{})
+}
+
+func runWorkerWith(o opsOptions, instance string, x workerExtras) error {
 	f, err := readWorkerFiles(o.ConfigDir)
 	if err != nil {
 		return fmt.Errorf("this server has not joined a cluster: %w", err)
@@ -181,6 +197,9 @@ func runWorker(o opsOptions, instance string) error {
 	gateway := n.Gateway()
 	start(func(ctx context.Context) { runNodeNetworkServices(ctx, client, gateway, logf("network services: ")) })
 	start(func(ctx context.Context) { runNodeNetworkPolicy(ctx, client, f.podCIDR, logf("network policy: ")) })
+	if x.Sidecar != nil {
+		start(func(ctx context.Context) { x.Sidecar(ctx, client) })
+	}
 
 	// Local health for sw up and sw status: ready while the control plane answers.
 	ln, err := net.Listen("tcp", o.Listen)
@@ -205,7 +224,11 @@ func runWorker(o opsOptions, instance string) error {
 	hs := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second,
 		TLSConfig: &tls.Config{Certificates: []tls.Certificate{f.cert}, MinVersion: tls.VersionTLS12}}
 	served := make(chan error, 1)
-	go func() { served <- hs.ServeTLS(ln, "", "") }()
+	if x.Local != nil {
+		go func() { served <- x.Local(ctx, ln) }()
+	} else {
+		go func() { served <- hs.ServeTLS(ln, "", "") }()
+	}
 	if instance != "" {
 		if err := writeState(o, instance); err != nil {
 			stop()
@@ -214,8 +237,12 @@ func runWorker(o opsOptions, instance string) error {
 			return err
 		}
 	}
-	fmt.Fprintf(os.Stderr, "sw worker %s: node %s (pods %s) of %s, local health on https://%s\n",
-		api.Version, f.cfg.NodeName, f.podCIDR, f.cfg.Server, ln.Addr())
+	role := x.Role
+	if role == "" {
+		role = "worker"
+	}
+	fmt.Fprintf(os.Stderr, "sw %s %s: node %s (pods %s) of %s, local address https://%s\n",
+		role, api.Version, f.cfg.NodeName, f.podCIDR, f.cfg.Server, ln.Addr())
 	select {
 	case err = <-served:
 	case <-ctx.Done():

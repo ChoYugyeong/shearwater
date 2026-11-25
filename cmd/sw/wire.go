@@ -21,4 +21,7 @@ type wiring struct {
 	// Go runs fn in the background for the life of the server. The server
 	// waits for every fn to return before it closes the store.
 	Go func(name string, fn func(ctx context.Context))
+	// HA is the control plane's high availability (wire_ha.go); nil when the
+	// server cannot have a second control plane (no advertised address).
+	HA *haWiring
 }

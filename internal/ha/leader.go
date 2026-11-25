@@ -38,11 +38,16 @@ type Leader struct {
 	Config  Config
 	DataDir string         // where snapshots are written before they are sent
 	Witness *WitnessClient // nil: no automatic takeover, so no lease either
+	HTTP    *http.Client   // reaches a witness added after Start
 	// StepDown is called once when this process must stop being the leader;
 	// the store is already fenced. It should start the process again as a
 	// standby.
 	StepDown func(reason string)
 	Logf     func(format string, a ...any)
+
+	cfgMu   sync.RWMutex // guards Config after Start (SetConfig)
+	ctx     context.Context
+	beating bool // heartbeats and the lease watch run
 
 	mu          sync.Mutex
 	acked       int64         // highest seq the standby confirmed
@@ -66,18 +71,58 @@ func (l *Leader) logf(format string, a ...any) {
 func (l *Leader) Start(ctx context.Context) error {
 	l.ackCh, l.batchCh = make(chan struct{}), make(chan struct{})
 	l.leaseUntil = time.Now().Add(LeaseFor)
-	if err := l.Store.Replicate(l.Config.Epoch, l); err != nil {
+	l.ctx = ctx
+	if err := l.Store.Replicate(l.conf().Epoch, l); err != nil {
 		return err
 	}
-	if l.Witness != nil {
-		go l.heartbeats(ctx)
-		go l.watchLease(ctx)
-	}
+	l.beat()
 	return nil
 }
 
+// beat starts the heartbeats and the lease watch once a witness is known.
+func (l *Leader) beat() {
+	l.cfgMu.Lock()
+	defer l.cfgMu.Unlock()
+	if l.Witness == nil || l.beating {
+		return
+	}
+	l.beating = true
+	go l.heartbeats(l.ctx)
+	go l.watchLease(l.ctx)
+}
+
+// conf is the current configuration.
+func (l *Leader) conf() Config {
+	l.cfgMu.RLock()
+	defer l.cfgMu.RUnlock()
+	return l.Config
+}
+
+// SetConfig takes a changed membership or witness (a control plane or
+// witness joined). The epoch and the token do not change.
+func (l *Leader) SetConfig(c Config, ctx context.Context) error {
+	l.cfgMu.Lock()
+	if c.Epoch != l.Config.Epoch || c.Token != l.Config.Token || c.Self != l.Config.Self {
+		l.cfgMu.Unlock()
+		return errors.New("ha: SetConfig may change only the members and the witness")
+	}
+	l.Config = c
+	if c.Witness != "" && (l.Witness == nil || l.Witness.URL != c.Witness) {
+		l.Witness = &WitnessClient{URL: c.Witness, Token: c.Token, Client: l.HTTP}
+	}
+	l.cfgMu.Unlock()
+	l.beat()
+	return nil
+}
+
+func (l *Leader) witness() *WitnessClient {
+	l.cfgMu.RLock()
+	defer l.cfgMu.RUnlock()
+	return l.Witness
+}
+
 func (l *Leader) peer() string {
-	p, _ := l.Config.Peer()
+	p, _ := l.conf().Peer()
 	return p.Name
 }
 
@@ -112,7 +157,7 @@ func (l *Leader) Replicate(b store.Batch) error {
 		if !l.waitAck(b.Seq-1, SyncTimeout) {
 			return nil
 		}
-		if l.Witness != nil {
+		if l.witness() != nil {
 			if err := l.witnessCall("resync"); err != nil {
 				l.logf("standby %s caught up but the witness did not take it back in sync: %v", l.peer(), err)
 				return nil
@@ -154,7 +199,7 @@ func (l *Leader) waitAck(seq int64, d time.Duration) bool {
 // goSolo commits without the standby, which must first be taken out of the
 // sync set by the witness: then it can never be elected with a stale copy.
 func (l *Leader) goSolo(b store.Batch) error {
-	if l.Witness != nil {
+	if l.witness() != nil {
 		if err := l.witnessCall("desync"); err != nil {
 			// Neither the standby nor the witness answers: the standby may
 			// hold this batch, so this file must not move on alone.
@@ -172,12 +217,12 @@ func (l *Leader) goSolo(b store.Batch) error {
 func (l *Leader) witnessCall(op string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), CallTimeout)
 	defer cancel()
-	reply, err := l.Witness.Call(ctx, op, WitnessRequest{Epoch: l.Config.Epoch, Leader: l.Config.Self, Member: l.peer()})
+	reply, err := l.witness().Call(ctx, op, WitnessRequest{Epoch: l.conf().Epoch, Leader: l.conf().Self, Member: l.peer()})
 	if err != nil {
 		return err
 	}
 	if !reply.OK {
-		if reply.State.Epoch > l.Config.Epoch {
+		if reply.State.Epoch > l.conf().Epoch {
 			l.stepDown(fmt.Sprintf("the witness says epoch %d belongs to %s", reply.State.Epoch, reply.State.Leader))
 		}
 		return errors.New(reply.Reason)
@@ -189,7 +234,7 @@ func (l *Leader) heartbeats(ctx context.Context) {
 	for ctx.Err() == nil && !l.Stepped() {
 		sent := time.Now()
 		ctx2, cancel := context.WithTimeout(ctx, CallTimeout)
-		reply, err := l.Witness.Call(ctx2, "heartbeat", WitnessRequest{Epoch: l.Config.Epoch, Leader: l.Config.Self})
+		reply, err := l.witness().Call(ctx2, "heartbeat", WitnessRequest{Epoch: l.conf().Epoch, Leader: l.conf().Self})
 		cancel()
 		switch {
 		case err != nil:
@@ -265,7 +310,7 @@ func (l *Leader) Stepped() bool {
 
 // ServeHTTP serves the standby: GET stream, GET snapshot, GET status.
 func (l *Leader) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if !bearer(r, l.Config.Token) {
+	if !bearer(r, l.conf().Token) {
 		http.Error(w, "UNAUTHORIZED retry=never: wrong or missing cluster HA token", http.StatusUnauthorized)
 		return
 	}
@@ -298,8 +343,8 @@ func (l *Leader) Status() Status {
 	seq, _ := l.Store.ReplicationState()
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	st := Status{Self: l.Config.Self, Role: RoleLeader, Epoch: l.Config.Epoch, Seq: seq, Standby: l.peer(),
-		InSync: l.sync, Confirmed: l.acked, Witness: l.Config.Witness}
+	st := Status{Self: l.conf().Self, Role: RoleLeader, Epoch: l.conf().Epoch, Seq: seq, Standby: l.peer(),
+		InSync: l.sync, Confirmed: l.acked, Witness: l.conf().Witness}
 	if !l.standbySeen.IsZero() {
 		st.SeenAgo = time.Since(l.standbySeen).Round(100 * time.Millisecond).String()
 	}
@@ -314,10 +359,10 @@ func (l *Leader) serveStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "INVALID retry=never: stream needs member, after and epoch", http.StatusBadRequest)
 		return
 	}
-	if epoch != l.Config.Epoch {
+	if epoch != l.conf().Epoch {
 		// A standby from another epoch starts again from a snapshot: it
 		// may hold a batch this leader never committed.
-		http.Error(w, fmt.Sprintf("NEW_EPOCH retry=safe: the leader is at epoch %d; take a snapshot", l.Config.Epoch), http.StatusConflict)
+		http.Error(w, fmt.Sprintf("NEW_EPOCH retry=safe: the leader is at epoch %d; take a snapshot", l.conf().Epoch), http.StatusConflict)
 		return
 	}
 	received := time.Now()
@@ -334,7 +379,7 @@ func (l *Leader) serveStream(w http.ResponseWriter, r *http.Request) {
 	}
 	l.standbySeen = received
 	l.mu.Unlock()
-	if l.Witness != nil {
+	if l.witness() != nil {
 		l.extend(received)
 	}
 
@@ -381,8 +426,8 @@ func (l *Leader) reply(w http.ResponseWriter, batches []store.Batch) {
 	if batches == nil {
 		batches = []store.Batch{}
 	}
-	writeJSON(w, http.StatusOK, StreamReply{Epoch: l.Config.Epoch, Leader: l.Config.Self, Seq: seq,
-		Members: l.Config.Members, Witness: l.Config.Witness, Batches: batches})
+	writeJSON(w, http.StatusOK, StreamReply{Epoch: l.conf().Epoch, Leader: l.conf().Self, Seq: seq,
+		Members: l.conf().Members, Witness: l.conf().Witness, Batches: batches})
 }
 
 func (l *Leader) serveSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -413,7 +458,7 @@ func (l *Leader) serveSnapshot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 	w.Header().Set("X-Shearwater-Seq", strconv.FormatInt(seq, 10))
 	w.Header().Set("X-Shearwater-Epoch", strconv.FormatInt(epoch, 10))
-	w.Header().Set("X-Shearwater-Leader-Epoch", strconv.FormatInt(l.Config.Epoch, 10))
+	w.Header().Set("X-Shearwater-Leader-Epoch", strconv.FormatInt(l.conf().Epoch, 10))
 	io.Copy(w, f)
 }
 
