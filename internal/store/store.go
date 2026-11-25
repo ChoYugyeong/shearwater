@@ -143,6 +143,10 @@ type Store struct {
 	CompactEvery time.Duration
 	lastCompact  time.Time
 
+	// actors: the change_actors table exists, so attributed writes record
+	// their maker and compaction trims it with the change log (actors.go).
+	actors bool
+
 	// The watch hub: wake is closed after every commit and replaced. It carries
 	// no data; watchers read the change log themselves.
 	hubMu sync.Mutex
@@ -166,6 +170,10 @@ func Open(path string) (*Store, error) {
 	r.SetMaxOpenConns(4)
 	s := &Store{w: w, r: r, KeepChanges: 10000, KeepFor: time.Hour, CompactEvery: time.Minute, wake: make(chan struct{})}
 	if err := s.init(); err != nil {
+		s.Close()
+		return nil, fmt.Errorf("open %s: %w", path, err)
+	}
+	if s.actors, err = hasTable(s.r, "change_actors"); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
@@ -291,12 +299,18 @@ type Tx struct {
 	start              int64
 	now                string
 	bookkeepingChanged bool
+	actor              Actor // recorded for each change when actors is set
+	actors             bool
 }
 
 // Write runs fn in one transaction. Errors, dry runs and no-ops roll back all
 // changes, including address reservations. Bookkeeping can commit on its own
 // without advancing the object revision or notifying watchers.
 func (s *Store) Write(dryRun bool, fn func(tx *Tx) error) error {
+	return s.write(Actor{}, dryRun, fn)
+}
+
+func (s *Store) write(a Actor, dryRun bool, fn func(tx *Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sqlTx, err := s.w.Begin()
@@ -308,7 +322,7 @@ func (s *Store) Write(dryRun bool, fn func(tx *Tx) error) error {
 	if err != nil {
 		return err
 	}
-	t := &Tx{tx: sqlTx, rev: rev, start: rev, now: time.Now().UTC().Format(time.RFC3339)}
+	t := &Tx{tx: sqlTx, rev: rev, start: rev, now: time.Now().UTC().Format(time.RFC3339), actor: a, actors: s.actors}
 	if err := fn(t); err != nil {
 		return err
 	}
@@ -369,6 +383,11 @@ func (t *Tx) compact(keep int64, cutoff time.Time) error {
 	}
 	if _, err := t.tx.Exec(`DELETE FROM changes WHERE rev <= ?`, to); err != nil {
 		return err
+	}
+	if t.actors {
+		if _, err := t.tx.Exec(`DELETE FROM change_actors WHERE rev <= ?`, to); err != nil {
+			return err
+		}
 	}
 	_, err = t.tx.Exec(`UPDATE meta SET value = ? WHERE key = 'compacted_rev'`, strconv.FormatInt(to, 10))
 	return err
@@ -486,8 +505,14 @@ func (t *Tx) NamespaceEmpty(ns string) (bool, error) {
 }
 
 func (t *Tx) logChange(k Key, rev int64, typ string, data, prev []byte) error {
-	_, err := t.tx.Exec(`INSERT INTO changes (rev, grp, resource, namespace, name, type, data, prev_data, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		rev, k.Group, k.Resource, k.Namespace, k.Name, typ, data, prev, t.now)
+	if _, err := t.tx.Exec(`INSERT INTO changes (rev, grp, resource, namespace, name, type, data, prev_data, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rev, k.Group, k.Resource, k.Namespace, k.Name, typ, data, prev, t.now); err != nil {
+		return err
+	}
+	if !t.actors || t.actor.Name == "" {
+		return nil
+	}
+	_, err := t.tx.Exec(`INSERT INTO change_actors (rev, actor, via) VALUES (?, ?, ?)`, rev, t.actor.Name, t.actor.Via)
 	return err
 }
 
