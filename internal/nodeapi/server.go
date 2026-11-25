@@ -15,10 +15,12 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"shearwater/internal/apis"
 	"shearwater/internal/auth"
+	"shearwater/internal/ha"
 	"shearwater/internal/objects"
 	"shearwater/internal/pki"
 	"shearwater/internal/store"
@@ -37,6 +39,10 @@ const maxBody = 4 << 20
 
 // Server is the control plane's side of the node API.
 type Server struct {
+	JoinHA        func(role, name, internalIP string) (*ha.Bundle, error)
+	ControlPlanes func() []string
+	joinMu        sync.Mutex // serialize redemption and node credential replacement
+
 	Store       *store.Store
 	Auth        *auth.Authenticator
 	ConfigDir   string       // where the cluster CA lives (signs node serving certificates)
@@ -92,6 +98,8 @@ var errReadChanged = &statusError{http: http.StatusConflict, code: codeConflict,
 func failErr(w http.ResponseWriter, err error) {
 	var se *statusError
 	switch {
+	case errors.Is(err, store.ErrUnavailable):
+		writeJSON(w, http.StatusServiceUnavailable, errorResponse{Code: codeNotLeader, Retry: "safe", Message: "try the next control plane"})
 	case errors.As(err, &se):
 		fail(w, se.http, se.code, "%s", se.msg)
 	case errors.Is(err, store.ErrNotFound):
@@ -121,7 +129,33 @@ func readJSON(r *http.Request, v any) error {
 	return nil
 }
 
+// Take the membership snapshot when sending headers. A long-poll may have
+// started before another node joined or before the membership changed.
+type memberWriter struct {
+	http.ResponseWriter
+	members func() []string
+	sent    bool
+}
+
+func (w *memberWriter) WriteHeader(status int) {
+	if !w.sent {
+		w.Header().Set(controlPlanesHeader, strings.Join(w.members(), ","))
+		w.sent = true
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *memberWriter) Write(p []byte) (int, error) {
+	if !w.sent {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(p)
+}
+
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.ControlPlanes != nil {
+		w = &memberWriter{ResponseWriter: w, members: s.ControlPlanes}
+	}
 	op, ok := strings.CutPrefix(r.URL.Path, Prefix)
 	if !ok {
 		fail(w, http.StatusNotFound, codeNotFound, "nothing at %s", r.URL.Path)
@@ -197,6 +231,7 @@ func (s *Server) nodeOf(r *http.Request) (string, bool) {
 // ---- join ----
 
 func (s *Server) join(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	tok, _ := auth.Bearer(r)
 	id, ok := s.Auth.Token(tok)
 	if !ok || id.Kind != auth.KindJoin {
@@ -208,6 +243,40 @@ func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 		failErr(w, err)
 		return
 	}
+	s.joinMu.Lock()
+	defer s.joinMu.Unlock()
+	cred, err := s.Store.Credential(id.CredentialID)
+	if errors.Is(err, store.ErrNotFound) {
+		fail(w, http.StatusUnauthorized, codeAuth, "join token has already been used or revoked")
+		return
+	}
+	if err != nil {
+		failErr(w, err)
+		return
+	}
+	var grant struct {
+		Role string `json:"role"`
+	}
+	if len(cred.Data) != 0 {
+		if err := json.Unmarshal(cred.Data, &grant); err != nil {
+			failErr(w, err)
+			return
+		}
+	}
+	if grant.Role == "" {
+		grant.Role = ha.RoleWorker
+	}
+	if req.Role == "" {
+		req.Role = ha.RoleWorker
+	}
+	if grant.Role != req.Role || (req.Role != ha.RoleWorker && req.Role != ha.RoleControlPlane && req.Role != ha.RoleWitness) {
+		fail(w, http.StatusForbidden, codeForbidden, "this join token does not grant the requested role")
+		return
+	}
+	if req.Role != ha.RoleWorker && s.JoinHA == nil {
+		fail(w, http.StatusConflict, codeConflict, "HA is unavailable; start the control plane with --advertise-address")
+		return
+	}
 	ip := net.ParseIP(req.InternalIP)
 	switch {
 	case !apis.IsDNS1123Subdomain(req.NodeName):
@@ -217,38 +286,68 @@ func (s *Server) join(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, codeInvalid, "internal IP %q is not an IPv4 address other nodes can reach", req.InternalIP)
 		return
 	}
-	if last, seen := s.Live.LastSeen(req.NodeName); seen && time.Since(last) < UnreachableAfter {
-		fail(w, http.StatusConflict, codeExists, "node %q is running and was heard from %s ago; pick another --node-name, or remove it first with `sw node remove %s`",
-			req.NodeName, time.Since(last).Round(time.Second), req.NodeName)
-		return
+	var resp JoinResponse
+	if req.Role != ha.RoleWitness {
+		if last, seen := s.Live.LastSeen(req.NodeName); seen && time.Since(last) < UnreachableAfter {
+			fail(w, http.StatusConflict, codeExists, "node %q is running; pick another --node-name or remove it first with sw node remove", req.NodeName)
+			return
+		}
+		cert, err := pki.SignNodeServing(s.ConfigDir, []byte(req.CSR), req.NodeName, []net.IP{ip, net.IPv4(127, 0, 0, 1)})
+		if err != nil {
+			fail(w, http.StatusBadRequest, codeInvalid, "node certificate request: %v", err)
+			return
+		}
+		resp.ServingCert = string(cert)
 	}
-	podCIDR, err := s.registerNode(req.NodeName, req.InternalIP)
-	if err != nil {
-		failErr(w, err)
-		return
+	if req.Role != ha.RoleWorker {
+		resp.HA, err = s.JoinHA(req.Role, req.NodeName, req.InternalIP)
+		if err != nil {
+			failErr(w, err)
+			return
+		}
+		if resp.HA == nil {
+			fail(w, http.StatusInternalServerError, codeInternal, "HA join returned no configuration")
+			return
+		}
 	}
-	cert, err := pki.SignNodeServing(s.ConfigDir, []byte(req.CSR), req.NodeName, []net.IP{ip, net.IPv4(127, 0, 0, 1)})
-	if err != nil {
-		fail(w, http.StatusBadRequest, codeInvalid, "node certificate request: %v", err)
-		return
+	if req.Role != ha.RoleWitness {
+		podCIDR, err := s.registerNode(req.NodeName, req.InternalIP)
+		if err != nil {
+			failErr(w, err)
+			return
+		}
+		// A node has one credential: joining again replaces the old one.
+		if _, err := s.Store.DeleteCredentials(auth.KindNode, req.NodeName); err != nil {
+			failErr(w, err)
+			return
+		}
+		tok, pub, hash, err := auth.NewToken(auth.KindNode)
+		if err == nil {
+			err = s.Store.PutCredential(store.Credential{ID: pub, Kind: auth.KindNode, Name: req.NodeName, Hash: hash})
+		}
+		if err != nil {
+			failErr(w, err)
+			return
+		}
+		resp.NodeName, resp.NodeToken, resp.PodCIDR = req.NodeName, tok, podCIDR.String()
+		resp.ClusterCIDR, resp.ServiceCIDR = s.ClusterCIDR.String(), s.ServiceCIDR.String()
 	}
-	// A node has one credential: joining again replaces the old one.
-	if _, err := s.Store.DeleteCredentials(auth.KindNode, req.NodeName); err != nil {
-		failErr(w, err)
-		return
+	// Privileged grants deliver cluster secrets once. Legacy worker grants
+	// remain reusable until expiry.
+	if req.Role != ha.RoleWorker {
+		if err := s.Store.DeleteCredential(id.CredentialID); err != nil {
+			failErr(w, err)
+			return
+		}
 	}
-	nodeToken, pub, hash, err := auth.NewToken(auth.KindNode)
-	if err == nil {
-		err = s.Store.PutCredential(store.Credential{ID: pub, Kind: auth.KindNode, Name: req.NodeName, Hash: hash})
+	if req.Role != ha.RoleWitness {
+		s.Live.Seen(req.NodeName)
 	}
-	if err != nil {
-		failErr(w, err)
-		return
+	if s.ControlPlanes != nil {
+		resp.ControlPlanes = s.ControlPlanes()
 	}
-	s.Live.Seen(req.NodeName)
-	s.logf("node %s joined from %s with pod range %s (join token %s)", req.NodeName, req.InternalIP, podCIDR, id.CredentialID)
-	writeJSON(w, http.StatusOK, JoinResponse{NodeName: req.NodeName, NodeToken: nodeToken, PodCIDR: podCIDR.String(),
-		ClusterCIDR: s.ClusterCIDR.String(), ServiceCIDR: s.ServiceCIDR.String(), ServingCert: string(cert)})
+	s.logf("%s %s joined from %s (join token %s)", req.Role, req.NodeName, req.InternalIP, id.CredentialID)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 var nodesRes = apis.Lookup("", "v1", "nodes")

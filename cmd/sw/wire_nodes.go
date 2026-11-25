@@ -17,6 +17,7 @@ import (
 
 	"shearwater/internal/apis"
 	"shearwater/internal/auth"
+	"shearwater/internal/ha"
 	"shearwater/internal/node"
 	"shearwater/internal/nodeapi"
 	"shearwater/internal/pki"
@@ -32,7 +33,8 @@ const (
 )
 
 type joinTokenRequest struct {
-	TTLSeconds int64 `json:"ttlSeconds"`
+	Role       string `json:"role,omitempty"`
+	TTLSeconds int64  `json:"ttlSeconds"`
 }
 
 type joinTokenResponse struct {
@@ -57,6 +59,9 @@ func wireNodes(w *wiring, server string) *nodeapi.Server {
 	ns := &nodeapi.Server{Store: w.Store, Auth: w.Server.Auth, ConfigDir: w.ConfigDir,
 		ClusterCIDR: apis.ClusterCIDR, ServiceCIDR: apis.ServiceCIDR, ReservedCIDR: apis.PodCIDR,
 		Live: nodeapi.NewLiveness()}
+	if w.HA != nil {
+		ns.JoinHA, ns.ControlPlanes = w.HA.Join, w.HA.ControlPlanes
+	}
 	w.Server.NodeAPI = ns
 
 	w.Admin.HandleFunc(joinTokensPath, func(rw http.ResponseWriter, r *http.Request) {
@@ -72,6 +77,24 @@ func wireNodes(w *wiring, server string) *nodeapi.Server {
 		var req joinTokenRequest
 		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 			adminFail(rw, http.StatusBadRequest, "the body is not valid JSON: %v", err)
+			return
+		}
+		var roleFlag string
+		switch req.Role {
+		case "", ha.RoleWorker:
+			req.Role = ha.RoleWorker
+		case ha.RoleControlPlane, ha.RoleWitness:
+			if w.HA == nil {
+				adminFail(rw, http.StatusConflict, "start the control plane with --advertise-address to enable HA")
+				return
+			}
+			if err := w.HA.Enable(); err != nil {
+				adminFail(rw, http.StatusServiceUnavailable, "cannot enable HA: %v", err)
+				return
+			}
+			roleFlag = " --" + req.Role
+		default:
+			adminFail(rw, http.StatusBadRequest, "unknown join role %q", req.Role)
 			return
 		}
 		ttl := 24 * time.Hour
@@ -94,12 +117,13 @@ func wireNodes(w *wiring, server string) *nodeapi.Server {
 			return
 		}
 		expires := time.Now().Add(ttl).UTC().Truncate(time.Second)
-		if err := w.Store.PutCredential(store.Credential{ID: id, Kind: auth.KindJoin, Name: "join", Hash: h, Expires: expires}); err != nil {
+		data, _ := json.Marshal(map[string]string{"role": req.Role})
+		if err := w.Store.PutCredential(store.Credential{ID: id, Kind: auth.KindJoin, Name: "join", Hash: h, Expires: expires, Data: data}); err != nil {
 			adminFail(rw, http.StatusInternalServerError, "%v", err)
 			return
 		}
 		writeAdminJSON(rw, joinTokenResponse{Token: tok, CAHash: hash, Server: server, Expires: expires,
-			Command: fmt.Sprintf("sudo sw join %s --token %s --ca-hash %s", server, tok, hash)})
+			Command: fmt.Sprintf("sudo sw join %s --token %s --ca-hash %s%s", server, tok, hash, roleFlag)})
 	})
 
 	w.Admin.HandleFunc(nodesPath+"/", func(rw http.ResponseWriter, r *http.Request) {

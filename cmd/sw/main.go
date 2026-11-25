@@ -51,6 +51,7 @@ const usage = `sw - Shearwater ` + api.Version + `
   sw capabilities show supported agent operations and their limits
   sw server      run the API server in the foreground
   sw kubeconfig  print a kubeconfig for kubectl
+  sw ha          show HA status, promote a standby or run the witness
   sw node        print a join command, list or remove the servers of this cluster
   sw join        make this server a worker of a cluster (run the command sw node token prints)
   sw user        add, list, remove users or rotate their tokens
@@ -144,6 +145,8 @@ func main() {
 		err = runServer(args)
 	case "kubeconfig":
 		err = runKubeconfig(args)
+	case "ha":
+		err = runHA(args, os.Stdout)
 	case "node":
 		err = runNode(args)
 	case "join":

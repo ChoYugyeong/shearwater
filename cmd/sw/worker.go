@@ -31,6 +31,7 @@ import (
 const nodeConfigFile = "node.json"
 
 type nodeConfig struct {
+	Servers     []string  `json:"servers,omitempty"`
 	Server      string    `json:"server"`
 	NodeName    string    `json:"nodeName"`
 	NodeIP      string    `json:"nodeIP"`
@@ -84,6 +85,23 @@ func readWorkerFiles(dir string) (workerFiles, error) {
 		return f, fmt.Errorf("%s is damaged: %w", filepath.Join(dir, nodeConfigFile), err)
 	}
 	return f, nil
+}
+
+func (f workerFiles) client(dir string, logf func(string, ...any)) (*nodeapi.Client, error) {
+	client, err := nodeapi.NewClient(f.cfg.Server, f.token, f.ca, f.podCIDR)
+	if err != nil {
+		return nil, err
+	}
+	client.Logf, client.URLs = logf, f.cfg.Servers
+	// This copy belongs to the serialized membership callback.
+	cfg := f.cfg
+	client.OnControlPlanes = func(servers []string) {
+		cfg.Servers = servers
+		if err := atomicJSON(filepath.Join(dir, nodeConfigFile), cfg); err != nil {
+			logf("save control planes: %v", err)
+		}
+	}
+	return client, nil
 }
 
 // runWorker runs this server as a worker node: node agent, service proxy,
@@ -147,14 +165,13 @@ func runWorkerWith(o opsOptions, instance string, x workerExtras) error {
 			return err
 		}
 	}
-	client, err := nodeapi.NewClient(f.cfg.Server, f.token, f.ca, f.podCIDR)
-	if err != nil {
-		return err
-	}
 	logf := func(prefix string) func(string, ...any) {
 		return func(format string, args ...any) { fmt.Fprintf(os.Stderr, prefix+format+"\n", args...) }
 	}
-	client.Logf = logf("control plane: ")
+	client, err := f.client(o.ConfigDir, logf("control plane: "))
+	if err != nil {
+		return err
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

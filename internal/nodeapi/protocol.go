@@ -7,14 +7,18 @@ package nodeapi
 import (
 	"encoding/json"
 
+	"shearwater/internal/ha"
 	"shearwater/internal/store"
 )
 
 // Prefix is where the node API is served.
 const Prefix = "/shearwater/node/v1/"
 
+const controlPlanesHeader = "X-Shearwater-Control-Planes"
+
 // JoinRequest is what a server sends to join (authenticated by a join token).
 type JoinRequest struct {
+	Role       string `json:"role,omitempty"`
 	NodeName   string `json:"nodeName"`
 	InternalIP string `json:"internalIP"`
 	CSR        string `json:"csr"` // PEM request for the node's serving certificate
@@ -22,12 +26,14 @@ type JoinRequest struct {
 
 // JoinResponse gives a joined node everything it needs to run.
 type JoinResponse struct {
-	NodeName    string `json:"nodeName"`
-	NodeToken   string `json:"nodeToken"`
-	PodCIDR     string `json:"podCIDR"`
-	ClusterCIDR string `json:"clusterCIDR"`
-	ServiceCIDR string `json:"serviceCIDR"`
-	ServingCert string `json:"servingCert"` // PEM, signed by the cluster CA
+	ControlPlanes []string   `json:"controlPlanes,omitempty"`
+	HA            *ha.Bundle `json:"ha,omitempty"`
+	NodeName      string     `json:"nodeName,omitempty"`
+	NodeToken     string     `json:"nodeToken,omitempty"`
+	PodCIDR       string     `json:"podCIDR,omitempty"`
+	ClusterCIDR   string     `json:"clusterCIDR,omitempty"`
+	ServiceCIDR   string     `json:"serviceCIDR,omitempty"`
+	ServingCert   string     `json:"servingCert,omitempty"` // PEM, signed by the cluster CA
 }
 
 type wireKey struct {
@@ -135,10 +141,12 @@ const (
 	codeForbidden = "Forbidden"
 	codeInvalid   = "Invalid"
 	codeAuth      = "Unauthorized"
+	codeNotLeader = "NOT_LEADER"
 	codeInternal  = "Internal"
 )
 
 type errorResponse struct {
+	Retry   string `json:"retry,omitempty"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }

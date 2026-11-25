@@ -8,11 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,15 +27,19 @@ import (
 // plane. It implements store.Backend (node agent) and store.NetworkReader
 // (service proxy), so those run unchanged on a worker.
 type Client struct {
-	URL     string // https://host:port of the control plane
-	Token   string // the node credential
-	PodCIDR netip.Prefix
-	HTTP    *http.Client
-	Logf    func(format string, args ...any)
+	URL             string         // default address for a single control plane
+	URLs            []string       // advertised control planes, leader first; initialize before use
+	OnControlPlanes func([]string) // called in order when the advertised list changes
+	Token           string         // the node credential
+	PodCIDR         netip.Prefix
+	HTTP            *http.Client
+	Logf            func(format string, args ...any)
 
-	mu   sync.Mutex
-	wake chan struct{}
-	rev  int64
+	mu        sync.Mutex
+	pending   [][]string // membership callbacks still to deliver, in order
+	preferred string     // first address to try, guarded by mu
+	wake      chan struct{}
+	rev       int64
 	// lastOK is when the control plane last answered (status reporting).
 	lastOK time.Time
 }
@@ -48,9 +55,18 @@ func NewClient(baseURL, token string, caPEM []byte, podCIDR netip.Prefix) (*Clie
 	if err != nil {
 		return nil, err
 	}
-	return &Client{URL: baseURL, Token: token, PodCIDR: podCIDR, wake: make(chan struct{}),
-		HTTP: &http.Client{Transport: &http.Transport{TLSClientConfig: cfg, MaxIdleConnsPerHost: 8,
-			IdleConnTimeout: 90 * time.Second, ResponseHeaderTimeout: 70 * time.Second}}}, nil
+	transport := &http.Transport{
+		TLSClientConfig:       cfg,
+		MaxIdleConnsPerHost:   8,
+		DialContext:           (&net.Dialer{Timeout: 3 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   3 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		ResponseHeaderTimeout: 70 * time.Second,
+	}
+	return &Client{URL: baseURL, Token: token, PodCIDR: podCIDR, wake: make(chan struct{}), HTTP: &http.Client{
+		Transport:     transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}}, nil
 }
 
 func (c *Client) logf(format string, args ...any) {
@@ -78,63 +94,170 @@ func (e *Error) Unwrap() error {
 		return store.ErrExists
 	case codeConflict:
 		return store.ErrConflict
+	case codeNotLeader:
+		return store.ErrUnavailable
 	case codeCompacted:
 		return store.ErrCompacted
 	}
 	return nil
 }
 
-func (c *Client) do(ctx context.Context, method, op string, q url.Values, in, out any) error {
-	u := c.URL + Prefix + op
-	if len(q) > 0 {
-		u += "?" + q.Encode()
+// addresses returns a private snapshot for one pass through the members.
+func (c *Client) addresses() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	urls := slices.Clone(c.URLs)
+	if len(urls) == 0 {
+		return []string{c.URL}
 	}
-	var body io.Reader
+	if i := slices.Index(urls, c.preferred); i > 0 {
+		copy(urls[1:i+1], urls[:i])
+		urls[0] = c.preferred
+	}
+	return urls
+}
+
+// Move on even if a stalled long-poll used its entire context deadline.
+func (c *Client) failed(base string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.URLs) < 2 {
+		return
+	}
+	i := slices.Index(c.URLs, c.preferred)
+	if i < 0 {
+		i = 0
+	}
+	if c.URLs[i] == base {
+		c.preferred = c.URLs[(i+1)%len(c.URLs)]
+	}
+}
+
+func (c *Client) learn(base, header string) {
+	if header == "" {
+		return
+	}
+	var urls []string
+	for _, raw := range strings.Split(header, ",") {
+		addr := strings.TrimRight(strings.TrimSpace(raw), "/")
+		u, err := url.Parse(addr)
+		if err != nil || u.Host == "" || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+			return
+		}
+		if u.Scheme != "https" && !(u.Scheme == "http" && strings.HasPrefix(base, "http://")) {
+			return
+		}
+		if !slices.Contains(urls, addr) {
+			urls = append(urls, addr)
+		}
+	}
+	c.mu.Lock()
+	if slices.Equal(c.URLs, urls) {
+		c.mu.Unlock()
+		return
+	}
+	c.URLs = urls
+	if c.OnControlPlanes != nil {
+		c.pending = append(c.pending, urls)
+		// The caller that enqueued the first change drains the queue. Disk
+		// writes finish in order, without holding the client lock during I/O.
+		if len(c.pending) == 1 {
+			for len(c.pending) != 0 {
+				next := slices.Clone(c.pending[0])
+				c.mu.Unlock()
+				c.OnControlPlanes(next)
+				c.mu.Lock()
+				c.pending = c.pending[1:]
+			}
+			c.pending = nil
+		}
+	}
+	c.mu.Unlock()
+}
+
+func (c *Client) do(ctx context.Context, method, op string, q url.Values, in, out any) error {
+	path := Prefix + op
+	if len(q) > 0 {
+		path += "?" + q.Encode()
+	}
+	var body []byte
+	var err error
 	if in != nil {
-		b, err := json.Marshal(in)
-		if err != nil {
+		if body, err = json.Marshal(in); err != nil {
 			return err
 		}
-		body = bytes.NewReader(b)
 	}
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 	}
-	req, err := http.NewRequestWithContext(ctx, method, u, body)
+	urls := c.addresses()
+	tried := make(map[string]bool)
+	// A 503 may be our first news of a new leader. Refresh the snapshot
+	// once, never retrying an address within this request.
+	for pass := 0; pass < 2; pass++ {
+		for _, base := range urls {
+			if tried[base] {
+				continue
+			}
+			tried[base] = true
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			var retry bool
+			retry, err = c.attempt(ctx, method, base, path, body, out)
+			if !retry {
+				return err
+			}
+			c.failed(base)
+		}
+		urls = c.addresses()
+	}
+	return err
+}
+
+func (c *Client) attempt(ctx context.Context, method, base, path string, body []byte, out any) (bool, error) {
+	req, err := http.NewRequestWithContext(ctx, method, base+path, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return false, err
+	}
+	if strings.HasPrefix(c.URL, "https://") && req.URL.Scheme != "https" {
+		return true, fmt.Errorf("control plane address must use HTTPS: %q", base)
 	}
 	if c.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 	}
-	if in != nil {
+	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return err
+		return true, err
 	}
 	defer resp.Body.Close()
+	c.learn(base, resp.Header.Get(controlPlanesHeader))
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
-		return err
+		return true, err
 	}
-	c.mu.Lock()
-	c.lastOK = time.Now()
-	c.mu.Unlock()
+	retry := resp.StatusCode == http.StatusServiceUnavailable
+	if !retry {
+		c.mu.Lock()
+		c.lastOK, c.preferred = time.Now(), base
+		c.mu.Unlock()
+	}
 	if resp.StatusCode >= 300 {
 		var e errorResponse
 		if json.Unmarshal(data, &e) != nil || e.Code == "" {
 			e = errorResponse{Code: codeInternal, Message: resp.Status}
 		}
-		return &Error{Status: resp.StatusCode, Code: e.Code, Msg: e.Message}
+		return retry, &Error{Status: resp.StatusCode, Code: e.Code, Msg: e.Message}
 	}
 	if out != nil && len(data) > 0 {
-		return json.Unmarshal(data, out)
+		return false, json.Unmarshal(data, out)
 	}
-	return nil
+	return false, nil
 }
 
 // LastContact is when the control plane last answered.
