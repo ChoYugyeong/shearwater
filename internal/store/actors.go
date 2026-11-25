@@ -27,14 +27,27 @@ type Actor struct {
 // InitActors creates the attribution table. Writes before it (or on a store
 // opened by a tool that never calls it) are not attributed.
 func (s *Store) InitActors() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, err := s.w.Exec(`CREATE TABLE IF NOT EXISTS change_actors (
-		rev INTEGER PRIMARY KEY, actor TEXT NOT NULL, via TEXT NOT NULL)`); err != nil {
+	if err := s.createTable(`CREATE TABLE IF NOT EXISTS change_actors (
+		rev INTEGER PRIMARY KEY, actor TEXT NOT NULL, via TEXT NOT NULL)`, "change_actors"); err != nil {
 		return err
 	}
+	s.mu.Lock()
 	s.actors = true
+	s.mu.Unlock()
 	return nil
+}
+
+// createTable creates a table added after the first release. It writes (and
+// replicates) only when the table is missing, so opening an up-to-date
+// database stays free of writes.
+func (s *Store) createTable(ddl, name string) error {
+	if ok, err := hasTable(s.r, name); err != nil || ok {
+		return err
+	}
+	return s.Write(false, func(tx *Tx) error {
+		_, err := tx.execBookkeeping(ddl)
+		return err
+	})
 }
 
 func hasTable(q querier, name string) (bool, error) {

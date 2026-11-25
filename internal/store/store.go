@@ -147,6 +147,15 @@ type Store struct {
 	// their maker and compaction trims it with the change log (actors.go).
 	actors bool
 
+	// Replication (replog.go). replicating: every write is logged as a batch
+	// and handed to replicator before it commits. standby: the store only
+	// changes through Apply. fenced: writes are refused with this reason.
+	replicating bool
+	standby     bool
+	replicator  Replicator
+	seq, epoch  int64
+	fenced      string
+
 	// The watch hub: wake is closed after every commit and replaced. It carries
 	// no data; watchers read the change log themselves.
 	hubMu sync.Mutex
@@ -301,6 +310,8 @@ type Tx struct {
 	bookkeepingChanged bool
 	actor              Actor // recorded for each change when actors is set
 	actors             bool
+	capture            bool   // record statements for the replication log
+	stmts              []Stmt // the statements recorded so far
 }
 
 // Write runs fn in one transaction. Errors, dry runs and no-ops roll back all
@@ -313,6 +324,12 @@ func (s *Store) Write(dryRun bool, fn func(tx *Tx) error) error {
 func (s *Store) write(a Actor, dryRun bool, fn func(tx *Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	switch {
+	case s.fenced != "":
+		return fmt.Errorf("%w: %s", ErrUnavailable, s.fenced)
+	case s.standby:
+		return fmt.Errorf("%w: this control plane is a standby; the leader takes writes", ErrUnavailable)
+	}
 	sqlTx, err := s.w.Begin()
 	if err != nil {
 		return err
@@ -322,30 +339,58 @@ func (s *Store) write(a Actor, dryRun bool, fn func(tx *Tx) error) error {
 	if err != nil {
 		return err
 	}
-	t := &Tx{tx: sqlTx, rev: rev, start: rev, now: time.Now().UTC().Format(time.RFC3339), actor: a, actors: s.actors}
+	t := &Tx{tx: sqlTx, rev: rev, start: rev, now: time.Now().UTC().Format(time.RFC3339), actor: a, actors: s.actors,
+		capture: s.replicating}
 	if err := fn(t); err != nil {
 		return err
 	}
 	if dryRun {
 		return nil
 	}
-	if t.rev == t.start {
-		if t.bookkeepingChanged {
-			return sqlTx.Commit() // Internal bookkeeping has no watch event.
-		}
+	objects := t.rev != t.start
+	if !objects && !t.bookkeepingChanged {
 		return nil
 	}
-	if _, err := sqlTx.Exec(`UPDATE meta SET value = ? WHERE key = 'rev'`, strconv.FormatInt(t.rev, 10)); err != nil {
-		return err
-	}
-	if now := time.Now(); now.Sub(s.lastCompact) >= s.CompactEvery {
-		if err := t.compact(s.KeepChanges, now.Add(-s.KeepFor)); err != nil {
+	compacted := time.Time{}
+	if objects {
+		if _, err := t.exec(`UPDATE meta SET value = ? WHERE key = 'rev'`, strconv.FormatInt(t.rev, 10)); err != nil {
 			return err
 		}
-		s.lastCompact = now
+		if now := time.Now(); now.Sub(s.lastCompact) >= s.CompactEvery {
+			if err := t.compact(s.KeepChanges, now.Add(-s.KeepFor)); err != nil {
+				return err
+			}
+			compacted = now
+		}
+	}
+	var batch Batch
+	if s.replicating {
+		if batch, err = s.logBatch(t); err != nil {
+			return err
+		}
+		// The standby confirms before anything commits here, so what this
+		// control plane serves is already on its standby (design 3.4).
+		if s.replicator != nil {
+			if err := s.replicator.Replicate(batch); err != nil {
+				return fmt.Errorf("%w: %v", ErrUnavailable, err)
+			}
+		}
 	}
 	if err := sqlTx.Commit(); err != nil {
+		if s.replicating && s.replicator != nil {
+			// The standby has a batch this file does not: never continue.
+			s.fenced = "a confirmed batch could not be committed locally: " + err.Error()
+		}
 		return err
+	}
+	if !compacted.IsZero() {
+		s.lastCompact = compacted
+	}
+	if s.replicating {
+		s.seq = batch.Seq
+	}
+	if !objects {
+		return nil // Internal bookkeeping has no watch event.
 	}
 	s.hubMu.Lock()
 	close(s.wake)
@@ -381,15 +426,15 @@ func (t *Tx) compact(keep int64, cutoff time.Time) error {
 	if err != nil || to <= compacted {
 		return err
 	}
-	if _, err := t.tx.Exec(`DELETE FROM changes WHERE rev <= ?`, to); err != nil {
+	if _, err := t.exec(`DELETE FROM changes WHERE rev <= ?`, to); err != nil {
 		return err
 	}
 	if t.actors {
-		if _, err := t.tx.Exec(`DELETE FROM change_actors WHERE rev <= ?`, to); err != nil {
+		if _, err := t.exec(`DELETE FROM change_actors WHERE rev <= ?`, to); err != nil {
 			return err
 		}
 	}
-	_, err = t.tx.Exec(`UPDATE meta SET value = ? WHERE key = 'compacted_rev'`, strconv.FormatInt(to, 10))
+	_, err = t.exec(`UPDATE meta SET value = ? WHERE key = 'compacted_rev'`, strconv.FormatInt(to, 10))
 	return err
 }
 
@@ -470,7 +515,7 @@ func (t *Tx) DeploymentRevision(uid string) (int64, error) {
 }
 
 func (t *Tx) SetDeploymentRevision(uid string, revision int64) error {
-	_, err := t.tx.Exec(`INSERT INTO meta (key, value) VALUES (?, ?)
+	_, err := t.exec(`INSERT INTO meta (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 		"deployment_revision/"+uid, strconv.FormatInt(revision, 10))
 	t.bookkeepingChanged = t.bookkeepingChanged || err == nil
@@ -505,25 +550,25 @@ func (t *Tx) NamespaceEmpty(ns string) (bool, error) {
 }
 
 func (t *Tx) logChange(k Key, rev int64, typ string, data, prev []byte) error {
-	if _, err := t.tx.Exec(`INSERT INTO changes (rev, grp, resource, namespace, name, type, data, prev_data, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	if _, err := t.exec(`INSERT INTO changes (rev, grp, resource, namespace, name, type, data, prev_data, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rev, k.Group, k.Resource, k.Namespace, k.Name, typ, data, prev, t.now); err != nil {
 		return err
 	}
 	if !t.actors || t.actor.Name == "" {
 		return nil
 	}
-	_, err := t.tx.Exec(`INSERT INTO change_actors (rev, actor, via) VALUES (?, ?, ?)`, rev, t.actor.Name, t.actor.Via)
+	_, err := t.exec(`INSERT INTO change_actors (rev, actor, via) VALUES (?, ?, ?)`, rev, t.actor.Name, t.actor.Via)
 	return err
 }
 
 func (t *Tx) setOwners(uid string, owners []string, isNew bool) error {
 	if !isNew {
-		if _, err := t.tx.Exec(`DELETE FROM owners WHERE child_uid = ?`, uid); err != nil {
+		if _, err := t.exec(`DELETE FROM owners WHERE child_uid = ?`, uid); err != nil {
 			return err
 		}
 	}
 	for _, o := range owners {
-		if _, err := t.tx.Exec(`INSERT OR IGNORE INTO owners (owner_uid, child_uid) VALUES (?, ?)`, o, uid); err != nil {
+		if _, err := t.exec(`INSERT OR IGNORE INTO owners (owner_uid, child_uid) VALUES (?, ?)`, o, uid); err != nil {
 			return err
 		}
 	}
@@ -543,7 +588,7 @@ func (t *Tx) Create(p Put) (Record, error) {
 		return Record{}, err
 	}
 	k := p.Key
-	if _, err := t.tx.Exec(`INSERT INTO objects (grp, resource, namespace, name, uid, rev, generation, deleting, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	if _, err := t.exec(`INSERT INTO objects (grp, resource, namespace, name, uid, rev, generation, deleting, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		k.Group, k.Resource, k.Namespace, k.Name, p.UID, rev, p.Generation, p.Deleting, data); err != nil {
 		return Record{}, err
 	}
@@ -581,7 +626,7 @@ func (t *Tx) Update(p Put, expectRev int64) (rec Record, changed bool, err error
 		return Record{}, false, err
 	}
 	k := p.Key
-	res, err := t.tx.Exec(`UPDATE objects SET rev = ?, generation = ?, deleting = ?, data = ? WHERE grp = ? AND resource = ? AND namespace = ? AND name = ? AND rev = ?`,
+	res, err := t.exec(`UPDATE objects SET rev = ?, generation = ?, deleting = ?, data = ? WHERE grp = ? AND resource = ? AND namespace = ? AND name = ? AND rev = ?`,
 		rev, p.Generation, p.Deleting, data, k.Group, k.Resource, k.Namespace, k.Name, old.Rev)
 	if err != nil {
 		return Record{}, false, err
@@ -615,14 +660,14 @@ func (t *Tx) Delete(k Key, expectRev int64, encode func(rev int64) ([]byte, erro
 	if err != nil {
 		return Record{}, err
 	}
-	if _, err := t.tx.Exec(`DELETE FROM objects WHERE grp = ? AND resource = ? AND namespace = ? AND name = ?`,
+	if _, err := t.exec(`DELETE FROM objects WHERE grp = ? AND resource = ? AND namespace = ? AND name = ?`,
 		k.Group, k.Resource, k.Namespace, k.Name); err != nil {
 		return Record{}, err
 	}
 	if err := t.logChange(k, rev, "DELETED", data, old.Data); err != nil {
 		return Record{}, err
 	}
-	if _, err := t.tx.Exec(`DELETE FROM owners WHERE child_uid = ?`, old.UID); err != nil {
+	if _, err := t.exec(`DELETE FROM owners WHERE child_uid = ?`, old.UID); err != nil {
 		return Record{}, err
 	}
 	if k.Group == "" && k.Resource == "services" {
@@ -631,12 +676,12 @@ func (t *Tx) Delete(k Key, expectRev int64, encode func(rev int64) ([]byte, erro
 		// Release by UID so that deleting an old object can never return
 		// the IP of a different Service. The proxy checks the committed owner
 		// to fence a listener that still has this IP bound after the commit.
-		if _, err := t.tx.Exec(`DELETE FROM ip_alloc WHERE kind = 'service' AND owner_uid = ?`, old.UID); err != nil {
+		if _, err := t.exec(`DELETE FROM ip_alloc WHERE kind = 'service' AND owner_uid = ?`, old.UID); err != nil {
 			return Record{}, err
 		}
 	}
 	if k.Group == "apps" && k.Resource == "deployments" {
-		if _, err := t.tx.Exec(`DELETE FROM meta WHERE key = ?`, "deployment_revision/"+old.UID); err != nil {
+		if _, err := t.exec(`DELETE FROM meta WHERE key = ?`, "deployment_revision/"+old.UID); err != nil {
 			return Record{}, err
 		}
 	}
@@ -693,7 +738,7 @@ func (t *Tx) AllocIP(kind, uid, requested string, candidates func(yield func(str
 	// without swallowing unrelated SQLite errors. Write holds the SQLite
 	// writer transaction through both this insert and the object change.
 	for ip := range candidates {
-		res, err := t.tx.Exec(`INSERT INTO ip_alloc (ip, kind, owner_uid) VALUES (?, ?, ?) ON CONFLICT(ip) DO NOTHING`,
+		res, err := t.exec(`INSERT INTO ip_alloc (ip, kind, owner_uid) VALUES (?, ?, ?) ON CONFLICT(ip) DO NOTHING`,
 			ip, kind, uid)
 		if err != nil {
 			return "", err
@@ -716,10 +761,18 @@ func (t *Tx) AllocIP(kind, uid, requested string, candidates func(yield func(str
 // ReleaseIP returns a Pod address after node cleanup. Holding none is fine.
 // Service addresses are released by Tx.Delete with the object.
 func (s *Store) ReleaseIP(uid string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.w.Exec(`DELETE FROM ip_alloc WHERE kind = 'pod' AND owner_uid = ?`, uid)
-	return err
+	return s.Write(false, func(tx *Tx) error {
+		res, err := tx.exec(`DELETE FROM ip_alloc WHERE kind = 'pod' AND owner_uid = ?`, uid)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n > 0 {
+			tx.bookkeepingChanged = true
+		}
+		return nil
+	})
 }
 
 // IPs returns the allocations of one kind: owner uid -> address.

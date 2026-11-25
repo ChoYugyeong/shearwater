@@ -25,12 +25,9 @@ type Credential struct {
 }
 
 func (s *Store) InitCredentials() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.w.Exec(`CREATE TABLE IF NOT EXISTS credentials (
+	return s.createTable(`CREATE TABLE IF NOT EXISTS credentials (
 		id TEXT PRIMARY KEY, kind TEXT NOT NULL, name TEXT NOT NULL, groups TEXT NOT NULL,
-		hash TEXT NOT NULL, created TEXT NOT NULL, expires TEXT NOT NULL, data BLOB) WITHOUT ROWID`)
-	return err
+		hash TEXT NOT NULL, created TEXT NOT NULL, expires TEXT NOT NULL, data BLOB) WITHOUT ROWID`, "credentials")
 }
 
 const credentialColumns = `id, kind, name, groups, hash, created, expires, data`
@@ -116,33 +113,39 @@ func (s *Store) PutCredential(c Credential) error {
 	if c.Created.IsZero() {
 		c.Created = time.Now()
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err = s.w.Exec(`INSERT INTO credentials (`+credentialColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	return s.Write(false, func(tx *Tx) error {
+		_, err := tx.execBookkeeping(`INSERT INTO credentials (`+credentialColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, name = excluded.name, groups = excluded.groups,
 		hash = excluded.hash, created = excluded.created, expires = excluded.expires, data = excluded.data`,
-		c.ID, c.Kind, c.Name, string(groups), c.Hash, c.Created.UTC().Format(time.RFC3339), expires, []byte(c.Data))
-	return err
+			c.ID, c.Kind, c.Name, string(groups), c.Hash, c.Created.UTC().Format(time.RFC3339), expires, []byte(c.Data))
+		return err
+	})
 }
 
 // DeleteCredential removes one credential. A missing one is not an error.
 func (s *Store) DeleteCredential(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.w.Exec(`DELETE FROM credentials WHERE id = ?`, id)
+	_, err := s.deleteCredentials(`DELETE FROM credentials WHERE id = ?`, id)
 	return err
 }
 
 // DeleteCredentials removes every credential of one kind and name and says
 // how many there were.
 func (s *Store) DeleteCredentials(kind, name string) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	res, err := s.w.Exec(`DELETE FROM credentials WHERE kind = ? AND name = ?`, kind, name)
-	if err != nil {
-		return 0, err
-	}
-	n, err := res.RowsAffected()
+	return s.deleteCredentials(`DELETE FROM credentials WHERE kind = ? AND name = ?`, kind, name)
+}
+
+func (s *Store) deleteCredentials(query string, args ...any) (int, error) {
+	var n int64
+	err := s.Write(false, func(tx *Tx) error {
+		res, err := tx.exec(query, args...)
+		if err != nil {
+			return err
+		}
+		if n, err = res.RowsAffected(); err == nil && n > 0 {
+			tx.bookkeepingChanged = true
+		}
+		return err
+	})
 	return int(n), err
 }
 
