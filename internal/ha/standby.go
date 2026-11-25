@@ -218,14 +218,15 @@ func (s *Standby) promoteRequested() bool {
 func (s *Standby) takeOver(ctx context.Context, forced bool) error {
 	s.mu.Lock()
 	epoch := max(s.follow, s.Config.Epoch) + 1
+	witness := s.Witness
 	s.mu.Unlock()
 	if !forced {
-		if s.Witness == nil {
+		if witness == nil {
 			s.logEvery("the leader has been silent for %s; without a witness this standby does not take over (sw ha promote --force)", FailAfter)
 			return nil
 		}
 		ctx2, cancel := context.WithTimeout(ctx, CallTimeout)
-		reply, err := s.Witness.Call(ctx2, "vote", WitnessRequest{Epoch: epoch, Candidate: s.Config.Self})
+		reply, err := witness.Call(ctx2, "vote", WitnessRequest{Epoch: epoch, Candidate: s.Config.Self})
 		cancel()
 		if err != nil {
 			s.logEvery("the leader is silent and the witness does not answer: %v", err)

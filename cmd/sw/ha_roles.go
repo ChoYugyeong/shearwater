@@ -108,6 +108,11 @@ func reexec(nonce string) error {
 // promoteSelf records that this control plane won epoch and starts it again
 // as the leader.
 func promoteSelf(configDir string, cfg ha.Config, epoch int64) error {
+	// The standby saves members and a witness it learns from the leader;
+	// keep those rather than what it started with.
+	if cur, err := ha.Load(configDir); err == nil {
+		cfg = cur
+	}
 	b := make([]byte, 16)
 	rand.Read(b)
 	cfg.Role, cfg.Epoch, cfg.Nonce = ha.RoleLeader, epoch, hex.EncodeToString(b)
