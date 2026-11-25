@@ -49,6 +49,7 @@ type Standby struct {
 	follow  int64 // the leader epoch the replica follows
 	contact time.Time
 	leader  string
+	seen    int64                // the last stream reply, echoed in the next poll
 	lastLog map[string]time.Time // logEvery, per message
 }
 
@@ -88,11 +89,12 @@ func (s *Standby) Status() StandbyStatus {
 func (s *Standby) LeaderAddr() string {
 	s.mu.Lock()
 	following := s.st != nil && time.Since(s.contact) < FailAfter
+	p, _ := s.Config.Peer()
 	s.mu.Unlock()
 	if !following {
 		return ""
 	}
-	u, err := url.Parse(s.LeaderURL())
+	u, err := url.Parse(p.URL)
 	if err != nil {
 		return ""
 	}
@@ -115,6 +117,8 @@ func (s *Standby) WriteStatus(ctx context.Context) {
 
 // LeaderURL is the API address of the control plane this standby follows.
 func (s *Standby) LeaderURL() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	p, ok := s.Config.Peer()
 	if !ok {
 		return ""
@@ -137,6 +141,7 @@ func (s *Standby) Run(ctx context.Context) error {
 			s.logf("the witness let this control plane lead again at epoch %d", s.Config.Epoch+1)
 			return s.Promote(s.Config.Epoch + 1)
 		}
+		s.learnEpoch(reply.State.Epoch)
 		s.logf("not leading again (%v %s); following the leader", err, reply.Reason)
 	}
 	for ctx.Err() == nil {
@@ -233,6 +238,10 @@ func (s *Standby) takeOver(ctx context.Context, forced bool) error {
 			return nil
 		}
 		if !reply.OK {
+			// Ask for the next free epoch next time: a vote this standby did
+			// not hear back about, or a leader it never followed, may have
+			// used this one. The witness still checks who is in sync.
+			s.learnEpoch(reply.State.Epoch)
 			s.logEvery("the witness refused epoch %d: %s", epoch, reply.Reason)
 			return nil
 		}
@@ -243,6 +252,15 @@ func (s *Standby) takeOver(ctx context.Context, forced bool) error {
 	}
 	s.closeStore()
 	return s.Promote(epoch)
+}
+
+// learnEpoch remembers an epoch the witness reported as used.
+func (s *Standby) learnEpoch(e int64) {
+	s.mu.Lock()
+	if e > s.follow {
+		s.follow = e
+	}
+	s.mu.Unlock()
 }
 
 func (s *Standby) closeStore() {
@@ -326,8 +344,19 @@ func (s *Standby) bootstrap(ctx context.Context) error {
 	}
 	seq, _ := st.ReplicationState()
 	s.mu.Lock()
-	s.st, s.follow = st, follow
+	s.st, s.follow, s.seen = st, follow, 0
+	persist := follow > s.Config.Epoch
+	if persist {
+		s.Config.Epoch = follow
+	}
+	cfg := s.Config
 	s.mu.Unlock()
+	if persist {
+		// A restart while the leader is away must still ask for a later epoch.
+		if err := cfg.Save(s.ConfigDir); err != nil {
+			s.logf("cannot save %s: %v", ConfigFile, err)
+		}
+	}
 	s.logf("following the leader at epoch %d from batch %d (snapshot of %d bytes)", follow, seq, n)
 	return nil
 }
@@ -349,13 +378,13 @@ func setAside(db string, now time.Time) error {
 // poll asks for the batches after the last applied one and applies them.
 func (s *Standby) poll(ctx context.Context) (int, error) {
 	s.mu.Lock()
-	st, follow := s.st, s.follow
+	st, follow, seen := s.st, s.follow, s.seen
 	s.mu.Unlock()
 	seq, _ := st.ReplicationState()
 	ctx, cancel := context.WithTimeout(ctx, 3*BeatEvery)
 	defer cancel()
 	res, err := s.get(ctx, "stream", url.Values{"member": {s.Config.Self}, "after": {strconv.FormatInt(seq, 10)},
-		"epoch": {strconv.FormatInt(follow, 10)}})
+		"epoch": {strconv.FormatInt(follow, 10)}, "seen": {strconv.FormatInt(seen, 10)}})
 	if err != nil {
 		return 0, err
 	}
@@ -380,11 +409,11 @@ func (s *Standby) poll(ctx context.Context) (int, error) {
 		}
 	}
 	s.mu.Lock()
-	s.leader = reply.Leader
+	s.leader, s.seen = reply.Leader, reply.Reply
 	changed := reply.Witness != s.Config.Witness || !sameMembers(reply.Members, s.Config.Members)
 	if changed {
 		s.Config.Witness, s.Config.Members = reply.Witness, reply.Members
-		if s.Witness == nil && reply.Witness != "" {
+		if reply.Witness != "" && (s.Witness == nil || s.Witness.URL != reply.Witness) {
 			s.Witness = &WitnessClient{URL: reply.Witness, Token: s.Config.Token, Client: s.Client}
 		}
 	}

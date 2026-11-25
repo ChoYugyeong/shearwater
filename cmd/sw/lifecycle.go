@@ -22,6 +22,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"shearwater/internal/apis"
+	"shearwater/internal/ha"
 	"shearwater/internal/pki"
 	"shearwater/internal/runtime"
 	"shearwater/internal/store"
@@ -443,10 +444,27 @@ func upWith(o opsOptions) error {
 
 // readyCheck and printReady pick the control plane's or the worker's form.
 func readyCheck(ctx context.Context, o opsOptions) error {
+	check := apiReady
 	if isWorker(o.ConfigDir) {
-		return workerReady(ctx, o)
+		check = workerReady
 	}
-	return apiReady(ctx, o)
+	err := check(ctx, o)
+	if err != nil && standbyRunning(o.ConfigDir) {
+		// A standby control plane is up while it reports its state, even when
+		// the leader it passes connections to is away: then it may be the one
+		// to take over, and must not be stopped for being unready.
+		return nil
+	}
+	return err
+}
+
+// standbyRunning: ha.json exists and the standby wrote its state just now.
+func standbyRunning(configDir string) bool {
+	if _, err := os.Stat(filepath.Join(configDir, ha.ConfigFile)); err != nil {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(configDir, ha.StatusFile))
+	return err == nil && time.Since(info.ModTime()) < 10*time.Second
 }
 
 func printReady(o opsOptions, state string) error {

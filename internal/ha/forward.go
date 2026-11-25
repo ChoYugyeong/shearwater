@@ -50,19 +50,17 @@ func Forward(ctx context.Context, ln net.Listener, target func() string, logf fu
 			}
 			defer up.Close()
 			done := make(chan struct{}, 2)
-			go func() { io.Copy(up, c); closeWrite(up); done <- struct{}{} }()
-			go func() { io.Copy(c, up); closeWrite(c); done <- struct{}{} }()
+			go func() { io.Copy(up, c); done <- struct{}{} }()
+			go func() { io.Copy(c, up); done <- struct{}{} }()
+			// TLS and HTTP do not need a half-closed connection: when one
+			// direction ends, end both, so a stalled peer cannot hold it.
 			select {
 			case <-done:
-				<-done
 			case <-ctx.Done():
 			}
+			c.Close()
+			up.Close()
+			<-done
 		}()
-	}
-}
-
-func closeWrite(c net.Conn) {
-	if tc, ok := c.(*net.TCPConn); ok {
-		tc.CloseWrite()
 	}
 }

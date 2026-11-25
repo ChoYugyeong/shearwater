@@ -22,6 +22,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -197,8 +198,9 @@ func (h *haWiring) Join(role, name, internalIP string) (*ha.Bundle, error) {
 			return nil, err
 		}
 		// Clients that name the standby reach this leader through it, so
-		// this certificate must carry the standby's address too.
-		if err := pki.EnsureServerAddresses(h.w.ConfigDir, []net.IP{net.IP(ip.AsSlice())}); err != nil {
+		// this certificate must carry the standby's address too. The
+		// certificate is reissued for exactly these addresses (and loopback).
+		if err := pki.EnsureServerAddresses(h.w.ConfigDir, []net.IP{net.IP(h.advertise.AsSlice()), net.IP(ip.AsSlice())}); err != nil {
 			return nil, err
 		}
 		if h.reloadTLS != nil {
@@ -225,7 +227,7 @@ func (h *haWiring) Join(role, name, internalIP string) (*ha.Bundle, error) {
 		}
 		witness := cfg
 		witness.Self, witness.Role, witness.Nonce = name, ha.RoleStandby, ""
-		witness.Members = append(witness.Members, ha.Member{Name: name, URL: cfg.Witness})
+		witness.Members = append(slices.Clone(witness.Members), ha.Member{Name: name, URL: cfg.Witness})
 		return &ha.Bundle{Config: witness, CACert: string(ca), ServingCert: string(certPEM), ServingKey: string(keyPEM), Listen: listen}, nil
 	}
 	return nil, fmt.Errorf("unknown role %q", role)

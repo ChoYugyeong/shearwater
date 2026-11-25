@@ -238,8 +238,11 @@ func runStandby(o opsOptions, instance string, cfg ha.Config, advertise netip.Ad
 					go ha.Forward(ctx, ln, sb.LeaderAddr, logf)
 				}
 			}
-			if err := sb.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				logf("stopped following: %v", err)
+			if err := sb.Run(ctx); err != nil && !errors.Is(err, context.Canceled) && ctx.Err() == nil {
+				// A worker that no longer follows or takes over is half a
+				// standby: stop, so the service manager starts it again.
+				logf("stopped following: %v; exiting", err)
+				os.Exit(1)
 			}
 		}}
 	return runWorkerWith(o, instance, x)

@@ -26,7 +26,8 @@ import (
 type StreamReply struct {
 	Epoch   int64         `json:"epoch"`
 	Leader  string        `json:"leader"`
-	Seq     int64         `json:"seq"` // the leader's last committed batch
+	Seq     int64         `json:"seq"`   // the leader's last committed batch
+	Reply   int64         `json:"reply"` // echo it as seen in the next poll
 	Members []Member      `json:"members"`
 	Witness string        `json:"witness,omitempty"`
 	Batches []store.Batch `json:"batches"`
@@ -50,12 +51,15 @@ type Leader struct {
 	beating bool // heartbeats and the lease watch run
 
 	mu          sync.Mutex
-	acked       int64         // highest seq the standby confirmed
-	ackCh       chan struct{} // closed and replaced when acked moves
-	batchCh     chan struct{} // closed and replaced when a batch is offered
-	pending     *store.Batch  // the batch waiting for confirmation, not yet committed
-	sync        bool          // writes wait for the standby
-	standbySeen time.Time     // when the standby last polled in this epoch
+	replies     int64          // stream replies sent in this epoch
+	sentAt      [16]replyStamp // when the last replies were sent
+	nudging     bool           // an idle resync write is under way
+	acked       int64          // highest seq the standby confirmed
+	ackCh       chan struct{}  // closed and replaced when acked moves
+	batchCh     chan struct{}  // closed and replaced when a batch is offered
+	pending     *store.Batch   // the batch waiting for confirmation, not yet committed
+	sync        bool           // writes wait for the standby
+	standbySeen time.Time      // when the standby last polled in this epoch
 	leaseUntil  time.Time
 	stepped     bool
 }
@@ -147,25 +151,33 @@ func (l *Leader) Replicate(b store.Batch) error {
 	}()
 
 	if !insync {
-		if !active || l.peer() == "" {
-			return nil // alone: the batch waits in the log
+		l.mu.Lock()
+		near := l.acked >= b.Seq-1-catchUpWindow
+		l.mu.Unlock()
+		if !active || !near || l.peer() == "" {
+			return nil // alone, or far behind: the batch waits in the log
 		}
-		// The standby is polling. No other batch can arrive while this one
-		// waits, so give it a moment to confirm every committed batch, then
-		// ask the witness to count it in again and wait for it like any
-		// synchronous write. A standby still behind stays out for now.
+		// The standby is polling and nearly caught up. No other batch can
+		// arrive while this one waits, so give it a moment to confirm every
+		// committed batch, then ask the witness to count it in again and wait
+		// for it like any synchronous write. A standby still behind stays out.
 		if !l.waitAck(b.Seq-1, SyncTimeout) {
 			return nil
 		}
+		sent := time.Now()
 		if l.witness() != nil {
 			if err := l.witnessCall("resync"); err != nil {
+				if l.Stepped() {
+					// The witness says this epoch is over: nothing may commit.
+					return err
+				}
 				l.logf("standby %s caught up but the witness did not take it back in sync: %v", l.peer(), err)
 				return nil
 			}
 		}
 		l.mu.Lock()
 		l.sync = true
-		l.leaseUntil = time.Now().Add(LeaseFor)
+		l.leaseUntil = sent.Add(LeaseFor)
 		l.mu.Unlock()
 		l.logf("standby %s is in sync again from batch %d", l.peer(), b.Seq)
 	}
@@ -366,6 +378,7 @@ func (l *Leader) serveStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	received := time.Now()
+	seen, _ := strconv.ParseInt(q.Get("seen"), 10, 64)
 	l.mu.Lock()
 	if l.stepped {
 		l.mu.Unlock()
@@ -378,9 +391,20 @@ func (l *Leader) serveStream(w http.ResponseWriter, r *http.Request) {
 		l.ackCh = make(chan struct{})
 	}
 	l.standbySeen = received
+	// A poll proves the standby received the reply it names, so the lease
+	// runs from when that reply was sent, not from when this poll arrived:
+	// a standby whose replies are lost stops renewing it.
+	var sentAt time.Time
+	if s := l.sentAt[seen%int64(len(l.sentAt))]; seen > 0 && s.n == seen {
+		sentAt = s.at
+	}
+	caughtUp := !l.sync && seen > 0
 	l.mu.Unlock()
-	if l.witness() != nil {
-		l.extend(received)
+	if !sentAt.IsZero() && l.witness() != nil {
+		l.extend(sentAt)
+	}
+	if seq, _ := l.Store.ReplicationState(); caughtUp && after == seq {
+		l.nudge()
 	}
 
 	wait := time.NewTimer(BeatEvery)
@@ -426,8 +450,47 @@ func (l *Leader) reply(w http.ResponseWriter, batches []store.Batch) {
 	if batches == nil {
 		batches = []store.Batch{}
 	}
-	writeJSON(w, http.StatusOK, StreamReply{Epoch: l.conf().Epoch, Leader: l.conf().Self, Seq: seq,
+	l.mu.Lock()
+	l.replies++
+	n := l.replies
+	l.sentAt[n%int64(len(l.sentAt))] = replyStamp{n: n, at: time.Now()}
+	l.mu.Unlock()
+	writeJSON(w, http.StatusOK, StreamReply{Epoch: l.conf().Epoch, Leader: l.conf().Self, Seq: seq, Reply: n,
 		Members: l.conf().Members, Witness: l.conf().Witness, Batches: batches})
+}
+
+// replyStamp remembers when a stream reply was sent.
+type replyStamp struct {
+	n  int64
+	at time.Time
+}
+
+// catchUpWindow: a write waits for a standby that is at most this many
+// batches behind; one further behind catches up from the log meanwhile.
+const catchUpWindow = 64
+
+// nudge brings a standby that caught up back in sync on an idle cluster: an
+// empty bookkeeping write goes through Replicate, which asks the witness to
+// count the standby in again. Without it a standby would wait for the next
+// real write, and the witness would not elect it if the leader died first.
+func (l *Leader) nudge() {
+	l.mu.Lock()
+	if l.nudging || l.sync || l.stepped {
+		l.mu.Unlock()
+		return
+	}
+	l.nudging = true
+	l.mu.Unlock()
+	go func() {
+		defer func() {
+			l.mu.Lock()
+			l.nudging = false
+			l.mu.Unlock()
+		}()
+		if err := l.Store.Touch("ha_sync", time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+			l.logf("cannot bring the standby back in sync: %v", err)
+		}
+	}()
 }
 
 func (l *Leader) serveSnapshot(w http.ResponseWriter, r *http.Request) {

@@ -310,6 +310,16 @@ func (s *Store) Apply(b Batch) error {
 	return nil
 }
 
+// Touch writes one bookkeeping value as its own batch (a leader uses it to
+// bring an idle standby back in sync).
+func (s *Store) Touch(key, value string) error {
+	return s.Write(false, func(tx *Tx) error {
+		_, err := tx.execBookkeeping(`INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+			"touch/"+key, value)
+		return err
+	})
+}
+
 // Batches returns committed batches after seq after, oldest first, at most
 // limit. ErrCompacted means the log no longer reaches back that far: the
 // standby must start from a snapshot.

@@ -376,6 +376,11 @@ func (s *Store) write(a Actor, dryRun bool, fn func(tx *Tx) error) error {
 				return fmt.Errorf("%w: %v", ErrUnavailable, err)
 			}
 		}
+		// The replicator may have learned meanwhile that this control
+		// plane is no longer the leader.
+		if f := s.fenced.Load(); f != nil {
+			return fmt.Errorf("%w: %s", ErrUnavailable, *f)
+		}
 	}
 	if err := sqlTx.Commit(); err != nil {
 		if s.replicating && s.replicator != nil {

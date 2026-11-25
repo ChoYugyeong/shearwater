@@ -140,9 +140,14 @@ func NewToken() string {
 // writeFileSync replaces path with data and makes the replacement durable
 // before returning: a vote or an epoch must not be forgotten after a crash.
 func writeFileSync(path string, data []byte) error {
-	tmp := path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
 	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp) // left only when the rename failed
+	if err := f.Chmod(0o600); err != nil {
+		f.Close()
 		return err
 	}
 	if _, err := f.Write(data); err != nil {

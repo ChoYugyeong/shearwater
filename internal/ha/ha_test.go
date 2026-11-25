@@ -406,3 +406,89 @@ func TestConfigSaveLoad(t *testing.T) {
 		t.Fatal("saved a config whose self is not a member")
 	}
 }
+
+func TestIdleStandbyComesBackInSync(t *testing.T) {
+	fastTimers(t)
+	c := newCluster(t)
+	a, b := c.nodes["a"], c.nodes["b"]
+	stepped := make(chan string, 4)
+	c.lead(a, 1, stepped)
+	if err := put(a.st, "before"); err != nil {
+		t.Fatal(err)
+	}
+	sb := &Standby{Config: c.config("b", RoleStandby, 1), ConfigDir: b.dir, DataDir: b.dir, Client: http.DefaultClient,
+		Witness: c.witnessClient(), Logf: c.logf, Promote: func(int64) error { return errors.New("stop") }}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go sb.Run(ctx)
+	// No write after the standby joins: the leader still takes it back in
+	// sync, so the witness could elect it.
+	waitFor(t, "an idle standby in sync", 5*time.Second, func() bool { return a.leader.Status().InSync })
+	st, err := c.witnessClient().Call(context.Background(), "state", WitnessRequest{})
+	if err != nil || len(st.State.InSync) != 2 {
+		t.Fatalf("witness: %+v %v\n%s", st, err, strings.Join(c.logs, "\n"))
+	}
+}
+
+func TestRefusedStandbyAsksForTheNextFreeEpoch(t *testing.T) {
+	fastTimers(t)
+	dir := t.TempDir()
+	// The witness already gave epoch 5 to b (a vote b never heard back
+	// about), and b's ha.json still says epoch 1.
+	path := filepath.Join(dir, "witness-state.json")
+	if err := writeFileSync(path, []byte(`{"epoch":5,"leader":"b","inSync":["b"]}`)); err != nil {
+		t.Fatal(err)
+	}
+	token := NewToken()
+	w := httptest.NewServer(&Witness{Path: path, Token: token})
+	defer w.Close()
+	promoted := make(chan int64, 1)
+	sb := &Standby{Config: Config{Self: "b", Role: RoleStandby, Epoch: 1, Token: token, Witness: w.URL,
+		Members: []Member{{"a", "http://127.0.0.1:1"}, {"b", "http://127.0.0.1:2"}}},
+		ConfigDir: dir, DataDir: dir, Client: http.DefaultClient, Witness: &WitnessClient{URL: w.URL, Token: token, Client: http.DefaultClient},
+		Promote: func(e int64) error { promoted <- e; return errors.New("promoted") }}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go sb.Run(ctx)
+	select {
+	case e := <-promoted:
+		if e != 6 {
+			t.Fatalf("promoted at epoch %d, want 6", e)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a standby refused once never took over")
+	}
+}
+
+func TestNoCommitAfterTheWitnessEndsTheEpoch(t *testing.T) {
+	fastTimers(t)
+	c := newCluster(t)
+	a, b := c.nodes["a"], c.nodes["b"]
+	stepped := make(chan string, 4)
+	c.lead(a, 1, stepped)
+	if err := put(a.st, "first"); err != nil {
+		t.Fatal(err)
+	}
+	// Another control plane won epoch 2 meanwhile, as far as the witness
+	// knows; the leader learns it when it asks to take its standby back in
+	// sync, inside a write. That write must not commit.
+	w := &Witness{Path: filepath.Join(t.TempDir(), "w.json"), Token: c.token}
+	w.handle("heartbeat", WitnessRequest{Epoch: 2, Leader: "x"})
+	c.witness.Config.Handler = w
+	sb := &Standby{Config: c.config("b", RoleStandby, 1), ConfigDir: b.dir, DataDir: b.dir, Client: http.DefaultClient,
+		Logf: c.logf, Promote: func(int64) error { return errors.New("stop") }}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go sb.Run(ctx)
+	select {
+	case <-stepped:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("no step-down\n%s", strings.Join(c.logs, "\n"))
+	}
+	if err := put(a.st, "after-the-epoch"); !errors.Is(err, store.ErrUnavailable) {
+		t.Fatalf("a leader whose epoch ended committed a write: %v", err)
+	}
+	if got, _ := a.st.ReplicationState(); got != 1 {
+		t.Fatalf("batches committed after the epoch ended: last batch %d, want 1", got)
+	}
+}

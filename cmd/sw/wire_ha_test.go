@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -36,6 +37,10 @@ func certIPs(t *testing.T, certPEM []byte) []string {
 func TestHAWiringEnableAndJoin(t *testing.T) {
 	cfgDir, dataDir := t.TempDir(), t.TempDir()
 	if _, err := pki.Ensure(cfgDir); err != nil {
+		t.Fatal(err)
+	}
+	// runServer gives the leader's certificate its advertised address.
+	if err := pki.EnsureServerAddresses(cfgDir, []net.IP{net.ParseIP("192.168.77.10")}); err != nil {
 		t.Fatal(err)
 	}
 	st, err := store.Open(filepath.Join(dataDir, "state.db"))
@@ -100,7 +105,7 @@ func TestHAWiringEnableAndJoin(t *testing.T) {
 		t.Fatal("control plane bundle lacks the CA key, the administrator token or the CA")
 	}
 	srv, _ := os.ReadFile(filepath.Join(cfgDir, "server.crt"))
-	if !slices.Contains(certIPs(t, srv), "192.168.77.11") || reloaded != 1 {
+	if ips := certIPs(t, srv); !slices.Contains(ips, "192.168.77.11") || !slices.Contains(ips, "192.168.77.10") || reloaded != 1 {
 		t.Fatalf("the leader's certificate lacks the standby's address (reloaded %d): %v", reloaded, certIPs(t, srv))
 	}
 	if got := h.ControlPlanes(); !slices.Equal(got, []string{"https://192.168.77.10:6443", "https://192.168.77.11:6443"}) {

@@ -177,6 +177,8 @@ func (w *Witness) handle(op string, req WitnessRequest) (WitnessReply, error) {
 		if req.Member == "" || req.Member == req.Leader {
 			return refuse("name the standby")
 		}
+		// Only the current leader gets here: it is alive.
+		w.lastBeat = w.now()
 		in := slices.Contains(w.st.InSync, req.Member)
 		if op == "desync" && in {
 			w.st.InSync = slices.DeleteFunc(slices.Clone(w.st.InSync), func(m string) bool { return m == req.Member })
