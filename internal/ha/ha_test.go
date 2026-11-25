@@ -492,3 +492,44 @@ func TestNoCommitAfterTheWitnessEndsTheEpoch(t *testing.T) {
 		t.Fatalf("batches committed after the epoch ended: last batch %d, want 1", got)
 	}
 }
+
+func TestWitnessAddedLaterLearnsTheStandbyIsInSync(t *testing.T) {
+	fastTimers(t)
+	c := newCluster(t)
+	a, b := c.nodes["a"], c.nodes["b"]
+	// The leader starts without a witness: the standby gets in sync with it alone.
+	st, err := store.Open(filepath.Join(a.dir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	cfg := c.config("a", RoleLeader, 1)
+	cfg.Witness = ""
+	l := &Leader{Store: st, Config: cfg, DataDir: a.dir, HTTP: http.DefaultClient, Logf: c.logf}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := l.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	srv := &httptest.Server{Listener: a.ln, Config: &http.Server{Handler: l}}
+	srv.Start()
+	defer srv.Close()
+	sbCfg := c.config("b", RoleStandby, 1)
+	sbCfg.Witness = ""
+	sb := &Standby{Config: sbCfg, ConfigDir: b.dir, DataDir: b.dir, Client: http.DefaultClient,
+		Logf: c.logf, Promote: func(int64) error { return errors.New("stop") }}
+	go sb.Run(ctx)
+	if err := put(st, "x"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "sync without a witness", 5*time.Second, func() bool { return l.Status().InSync })
+	// The witness joins: it must end up counting the standby in sync too.
+	cfg.Witness = c.witness.URL
+	if err := l.SetConfig(cfg, ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the new witness to count the standby", 5*time.Second, func() bool {
+		ws, err := c.witnessClient().Call(context.Background(), "state", WitnessRequest{})
+		return err == nil && len(ws.State.InSync) == 2 && l.Status().InSync
+	})
+}

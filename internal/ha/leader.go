@@ -111,10 +111,20 @@ func (l *Leader) SetConfig(c Config, ctx context.Context) error {
 		return errors.New("ha: SetConfig may change only the members and the witness")
 	}
 	l.Config = c
-	if c.Witness != "" && (l.Witness == nil || l.Witness.URL != c.Witness) {
+	newWitness := c.Witness != "" && (l.Witness == nil || l.Witness.URL != c.Witness)
+	if newWitness {
 		l.Witness = &WitnessClient{URL: c.Witness, Token: c.Token, Client: l.HTTP}
 	}
 	l.cfgMu.Unlock()
+	if newWitness {
+		// A new witness counts only this leader in sync. Take the standby out
+		// here too, so it is brought back in sync through the witness (the
+		// next write or the standby's next poll); until then the witness would
+		// not elect it, and this leader writes alone with no lease to lose.
+		l.mu.Lock()
+		l.sync = false
+		l.mu.Unlock()
+	}
 	l.beat()
 	return nil
 }
@@ -245,8 +255,12 @@ func (l *Leader) witnessCall(op string) error {
 func (l *Leader) heartbeats(ctx context.Context) {
 	for ctx.Err() == nil && !l.Stepped() {
 		sent := time.Now()
+		w := l.witness()
+		if w == nil {
+			return
+		}
 		ctx2, cancel := context.WithTimeout(ctx, CallTimeout)
-		reply, err := l.witness().Call(ctx2, "heartbeat", WitnessRequest{Epoch: l.conf().Epoch, Leader: l.conf().Self})
+		reply, err := w.Call(ctx2, "heartbeat", WitnessRequest{Epoch: l.conf().Epoch, Leader: l.conf().Self})
 		cancel()
 		switch {
 		case err != nil:
