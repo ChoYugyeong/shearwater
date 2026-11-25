@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
+
+	"shearwater/internal/agent"
 )
 
 func TestPlanVerificationReadyAndIncompleteEvidence(t *testing.T) {
@@ -61,5 +63,25 @@ func TestPlanVerificationReadyAndIncompleteEvidence(t *testing.T) {
 				t.Fatal(v, err)
 			}
 		})
+	}
+}
+
+func TestSingleGoalNamespace(t *testing.T) {
+	if got := singleGoalNamespace(nil); got != "" {
+		t.Fatalf("empty goals = %q", got)
+	}
+	same := []agent.ReadinessGoal{
+		{Namespace: "team-a", Resource: "deploy/web", UID: "u1", Generation: 1},
+		{Namespace: "team-a", Resource: "svc/web", UID: "u2", Generation: 1},
+	}
+	if got := singleGoalNamespace(same); got != "team-a" {
+		t.Fatalf("same namespace goals = %q, want team-a", got)
+	}
+	mixed := append(same, agent.ReadinessGoal{Namespace: "team-b", Resource: "pod/p", UID: "u3", Generation: 1})
+	if got := singleGoalNamespace(mixed); got != "" {
+		t.Fatalf("mixed namespace goals = %q, want empty", got)
+	}
+	if got := singleGoalNamespace([]agent.ReadinessGoal{{Namespace: "Bad!"}}); got != "" {
+		t.Fatalf("invalid namespace goal = %q, want empty", got)
 	}
 }

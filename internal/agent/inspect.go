@@ -12,10 +12,16 @@ import (
 	"shearwater/internal/apis"
 )
 
+// NodesHiddenNotice is included in inspection outputs when the caller's
+// identity is forbidden from reading cluster-scoped Node objects.
+const NodesHiddenNotice = "nodes: not visible to this identity"
+
 // Snapshot contains API lists with the same store-wide revision. An object's
 // own resourceVersion can be older because it records that object's last edit.
 type Snapshot struct {
 	Revision       string
+	Namespace      string // non-empty when lists were read from one namespace only
+	NodesHidden    bool   // true when /api/v1/nodes returned HTTP 403
 	Nodes          []apis.Node
 	Pods           []apis.Pod
 	Namespaces     []apis.Namespace
@@ -25,17 +31,24 @@ type Snapshot struct {
 	EndpointSlices []apis.EndpointSlice
 }
 
-// Summary is cluster-wide even when the tree below it is filtered.
+// Summary is cluster-wide unless the snapshot was read for a single namespace
+// without cluster-wide node visibility.
 func (s Snapshot) Summary() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "cluster shearwater rev=%s", s.Revision)
-	nodes := slices.Clone(s.Nodes)
-	slices.SortFunc(nodes, func(a, b apis.Node) int { return cmp.Compare(a.Metadata.Name, b.Metadata.Name) })
-	if len(nodes) == 0 {
-		b.WriteString(" node=<none>")
-	}
-	for _, node := range nodes {
-		fmt.Fprintf(&b, " node=%s %s", node.Metadata.Name, inspectNodeState(node))
+	if s.NodesHidden {
+		if s.Namespace != "" {
+			fmt.Fprintf(&b, " ns=%s", s.Namespace)
+		}
+	} else {
+		nodes := slices.Clone(s.Nodes)
+		slices.SortFunc(nodes, func(a, b apis.Node) int { return cmp.Compare(a.Metadata.Name, b.Metadata.Name) })
+		if len(nodes) == 0 {
+			b.WriteString(" node=<none>")
+		}
+		for _, node := range nodes {
+			fmt.Fprintf(&b, " node=%s %s", node.Metadata.Name, inspectNodeState(node))
+		}
 	}
 	ready := 0
 	for i := range s.Pods {
@@ -44,6 +57,9 @@ func (s Snapshot) Summary() string {
 		}
 	}
 	fmt.Fprintf(&b, " pods=%d/%d", ready, len(s.Pods))
+	if s.NodesHidden {
+		fmt.Fprintf(&b, " (%s)", NodesHiddenNotice)
+	}
 	return b.String()
 }
 
@@ -96,6 +112,9 @@ func (s Snapshot) Tree(options TreeOptions) (string, error) {
 		return namespaces[name]
 	}
 	visible := func(namespace string) bool { return options.Namespace == "" || options.Namespace == namespace }
+	if s.Namespace != "" && visible(s.Namespace) {
+		namespaceRow(s.Namespace)
+	}
 	for _, ns := range s.Namespaces {
 		if visible(ns.Metadata.Name) {
 			row := namespaceRow(ns.Metadata.Name)

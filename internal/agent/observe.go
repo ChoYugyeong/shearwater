@@ -41,6 +41,7 @@ type Observation struct {
 	Items        []ObservationItem `json:"items"`
 	Next         *ObserveOptions   `json:"next,omitempty"`
 	Reachability string            `json:"reachability"`
+	Notes        []string          `json:"notes,omitempty"`
 }
 
 // Observe paginates a consistent API snapshot, not a live stream. The next page
@@ -58,6 +59,9 @@ func (s Snapshot) Observe(o ObserveOptions, now time.Time) (Observation, error) 
 	}
 	r := Observation{Format: "shearwater.observation/v1", ObservedAt: now.UTC(), Revision: s.Revision,
 		Scope: o, States: map[string]int{}, Items: []ObservationItem{}, Reachability: "not_checked"}
+	if s.NodesHidden {
+		r.Notes = []string{NodesHiddenNotice}
+	}
 	var items []ObservationItem
 	add := func(kind string, m *apis.ObjectMeta, state string, reasons []string, counts map[string]int64) {
 		ref := kind + "/" + m.Name

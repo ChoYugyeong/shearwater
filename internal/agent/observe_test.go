@@ -102,3 +102,28 @@ func TestRunningPodAndUnversionedServiceAreNotVerified(t *testing.T) {
 		t.Fatal(v, err)
 	}
 }
+
+func TestObserveNotesWhenNodesHidden(t *testing.T) {
+	s := observationFixture()
+	o, err := s.Observe(ObserveOptions{Namespace: "default", Limit: 10}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(o)
+	if len(o.Notes) != 0 || strings.Contains(string(b), `"notes"`) {
+		t.Fatalf("admin observation should omit notes: %s", string(b))
+	}
+	s.Namespace = "default"
+	s.NodesHidden = true
+	o, err = s.Observe(ObserveOptions{Namespace: "default", Limit: 10}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(o.Notes) != 1 || o.Notes[0] != NodesHiddenNotice {
+		t.Fatalf("expected hidden nodes notice, got %v", o.Notes)
+	}
+	v, err := s.Verify(ReadinessGoal{Namespace: "default", Resource: "deploy/web", UID: "deploy-a", Generation: 2}, time.Now())
+	if err != nil || v.State != "met" || len(v.Observation.Notes) != 1 || v.Observation.Notes[0] != NodesHiddenNotice {
+		t.Fatalf("verify should carry hidden nodes notice: %+v err=%v", v, err)
+	}
+}

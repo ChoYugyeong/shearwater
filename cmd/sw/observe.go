@@ -21,6 +21,20 @@ type planVerification struct {
 	State     string               `json:"state"`
 	Reason    string               `json:"reason"`
 	Targets   []agent.Verification `json:"targets,omitempty"`
+	Notes     []string             `json:"notes,omitempty"`
+}
+
+func singleGoalNamespace(goals []agent.ReadinessGoal) string {
+	if len(goals) == 0 || !apis.IsDNS1123Label(goals[0].Namespace) {
+		return ""
+	}
+	ns := goals[0].Namespace
+	for _, goal := range goals[1:] {
+		if goal.Namespace != ns {
+			return ""
+		}
+	}
+	return ns
 }
 
 func verifyAppliedPlan(ctx context.Context, c *agentClient, config, listen, dir, id string) (planVerification, error) {
@@ -50,9 +64,12 @@ func verifyAppliedPlan(ctx context.Context, c *agentClient, config, listen, dir,
 	if receipt.State != "complete" || len(receipt.Goals) == 0 || len(receipt.Unverified) > 0 || len(receipt.Goals) != len(receipt.Applied) {
 		return v, nil
 	}
-	s, err := readInspection(ctx, c.get, true)
+	s, err := readInspectionNamespace(ctx, c.get, singleGoalNamespace(receipt.Goals), true)
 	if err != nil {
 		return v, err
+	}
+	if s.NodesHidden {
+		v.Notes = []string{agent.NodesHiddenNotice}
 	}
 	v.State, v.Reason = "met", "all_bound_readiness_goals_met; HTTP not checked"
 	rank := map[string]int{"met": 0, "unknown": 1, "not_met": 2, "stale": 3}
@@ -82,7 +99,7 @@ func agentCapabilities(write bool) any {
 
 func validateObserveScope(o *agent.ObserveOptions) error {
 	if o.Namespace != "" && !apis.IsDNS1123Label(o.Namespace) {
-		return fmt.Errorf("invalid namespace")
+		return opsError("INVALID", "never", fmt.Sprintf("invalid namespace %q", o.Namespace), "pass a lowercase DNS label such as default")
 	}
 	if o.Resource != "" {
 		r, err := inspectRoot(o.Resource)
@@ -90,7 +107,7 @@ func validateObserveScope(o *agent.ObserveOptions) error {
 			return err
 		}
 		if len(r) > 3 && r[:3] == "rs/" {
-			return fmt.Errorf("observation supports deploy/NAME, pod/NAME or svc/NAME")
+			return opsError("INVALID", "never", "observation supports deploy/NAME, pod/NAME or svc/NAME", "pass --resource deploy/NAME, pod/NAME, or svc/NAME")
 		}
 		o.Resource = r
 		if o.Namespace == "" {
@@ -104,7 +121,7 @@ func observeAPI(ctx context.Context, c *agentClient, o agent.ObserveOptions, g *
 	if err := validateObserveScope(&o); err != nil {
 		return nil, err
 	}
-	s, err := readInspection(ctx, c.get, true)
+	s, err := readInspectionNamespace(ctx, c.get, o.Namespace, true)
 	if err != nil {
 		return nil, err
 	}

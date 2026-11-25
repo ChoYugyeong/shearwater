@@ -15,7 +15,7 @@ sw agent remove ops-bot
 | 경로 | 용도 |
 | --- | --- |
 | `kubeconfig` | `NS` 네임스페이스에 제한된 kubeconfig(기본 네임스페이스 `NS`). 원격 접속 시 `--server` 또는 컨트롤 플레인의 광고 주소(`--advertise-address`)를 쓴다 |
-| `sw/ca.crt`, `sw/token` | `sw mcp --config-dir <DIR>/sw`와 `sw` CLI가 읽는 에이전트 연결 폴더. **관리자 토큰(`admin.token`)은 절대 들어가지 않는다** |
+| `sw/ca.crt`, `sw/token` | `sw mcp --config-dir <DIR>/sw --namespace NS`와 `sw` CLI가 읽는 에이전트 연결 폴더. **관리자 토큰(`admin.token`)은 절대 들어가지 않는다** |
 | `mcp/claude.json` | Claude Code `.mcp.json` 형식 |
 | `mcp/codex.toml` | Codex CLI `[mcp_servers.shearwater]` 형식 |
 | `mcp/gemini.json` | Gemini CLI `settings.json`의 `mcpServers` 형식 |
@@ -44,21 +44,24 @@ sw agent add NAME --namespace NS \
 
 ## 네임스페이스 제한 토큰으로 동작하는 `sw mcp` 도구
 
-`sw agent add`가 만드는 연결 폴더(`sw/`)는 `admin.token` 대신 `token` 파일에 에이전트 토큰을 둔다. `sw` CLI와 `sw mcp`는 `token` 파일이 있으면 그 토큰만 사용하며, 권한이 부족해도 관리자 토큰으로 폴백하지 않는다.
+`sw agent add`가 만드는 연결 폴더(`sw/`)는 `admin.token` 대신 `token` 파일에 에이전트 토큰을 두고, 생성된 MCP 설정과 연결 명령에 `--namespace NS`를 함께 넣는다. `sw mcp --namespace NS`는 도구 호출에서 `namespace` 인자가 생략될 때 기본값으로 `NS`를 사용한다. `sw` CLI와 `sw mcp`는 `token` 파일이 있으면 그 토큰만 사용하며, 권한이 부족해도 관리자 토큰으로 폴백하지 않는다.
 
 | 도구 | 네임스페이스 제한 토큰 동작 | 비고 |
 | --- | --- | --- |
 | `sw_capabilities` | 동작 | 서버 호출 없음 |
-| `sw_get` | 동작 (`namespace: NS`) | 다른 네임스페이스나 클러스터 자원(`nodes`, `namespaces`)은 HTTP 403 (`UNAUTHORIZED`) |
-| `sw_logs` | 동작 (`namespace: NS`) | `view` 이상에서 `pods`, `pods/log` 조회 허용 |
-| `sw_events` | 동작 (`namespace: NS`) | `view` 이상에서 `events` 조회 허용 |
-| `sw_why` | 동작 (`namespace: NS`) | Pod, Event, 로그 조회 모두 네임스페이스 범위 |
+| `sw_status`, `sw_tree` | 동작 (`NS` 기본값 또는 `namespace: NS`) | `NS` 범위 목록만 읽는다. `/api/v1/nodes`가 403이면 실패하지 않고 `nodes: not visible to this identity`를 표시한다. 네임스페이스 없이 클러스터 전체를 조회하거나 다른 네임스페이스를 지정하면 HTTP 403 (`UNAUTHORIZED`) |
+| `sw_observe`, `sw_verify` | 동작 (`NS` 기본값 또는 `namespace: NS`) | `NS` 범위의 Deployment·ReplicaSet·Pod·Service·EndpointSlice만 읽는다. 노드가 보이지 않으면 `notes`에 `nodes: not visible to this identity`를 남긴다. 다른 네임스페이스는 HTTP 403 |
+| `sw_verify_plan` | 동작 (영수증의 모든 목표가 `NS` 안일 때) | 영수증 목표가 한 네임스페이스에 모여 있으면 그 네임스페이스만 읽는다. 여러 네임스페이스에 걸치거나 다른 네임스페이스 목표는 HTTP 403 |
+| `sw_changes` | 동작 (`NS` 기본값 또는 `namespace: NS`) | 서버가 호출자 RBAC에 따라 볼 수 있는 변경만 필터링해 돌려준다 |
+| `sw_get` | 동작 (`NS` 기본값 또는 `namespace: NS`) | 다른 네임스페이스나 클러스터 자원(`nodes`, `namespaces`)은 HTTP 403 (`UNAUTHORIZED`) |
+| `sw_logs` | 동작 (`NS` 기본값 또는 `namespace: NS`) | `view` 이상에서 `pods`, `pods/log` 조회 허용 |
+| `sw_events` | 동작 (`NS` 기본값 또는 `namespace: NS`) | `view` 이상에서 `events` 조회 허용 |
+| `sw_why` | 동작 (`NS` 기본값 또는 `namespace: NS`) | Pod, Event, 로그 조회 모두 네임스페이스 범위 |
 | `sw_receipt` | 동작 | 로컬 계획 디렉터리의 영수증 조회 |
-| `sw_plan`, `sw_app_plan`, `sw_apply` | `--allow-write` + `edit`/`admin`에서 동작 (`namespace: NS`) | `view` 역할이나 다른 네임스페이스·`Namespace` 종류는 HTTP 403. 로컬 `sw approve`로 정확한 계획 해시 승인 필요 |
+| `sw_plan`, `sw_app_plan`, `sw_apply` | `--allow-write` + `edit`/`admin`에서 동작 (`NS`) | 쓰기 직후 자동 검증(`verifyAppliedPlan`)도 모든 목표가 `NS` 안에 있으면 성공한다. `view` 역할이나 다른 네임스페이스·`Namespace` 종류는 HTTP 403. 로컬 `sw approve`로 정확한 계획 해시 승인 필요 |
 | 집중 도구 (`sw_target_*`) | 동작 (`sw mcp --target=deploy/NAME -n NS`) | 선택한 네임스페이스의 Deployment·ReplicaSet·Pod만 조회 |
-| `sw_status`, `sw_tree`, `sw_observe`, `sw_verify`, `sw_verify_plan` | HTTP 403 (`UNAUTHORIZED`) | 현재 `/api/v1/nodes` 등 클러스터 전체 엔드포인트를 조회하므로 관리자 권한이 필요하다. 실패 시 다른 자격 증명으로 폴백하지 않는다 |
 
-> 참고: `sw_apply`는 `edit`/`admin` 토큰으로 쓰기 자체를 완료하지만, 직후 자동 검증 단계(`verifyAppliedPlan`)가 클러스터 전체 목록을 읽으려다 403을 받아 `verification.state`가 `unknown`으로 남을 수 있다. 이 경우 `sw_get`·`sw_why` 또는 집중 도구로 `NS` 안에서 준비 상태를 확인한다.
+> 관리자 권한이 계속 필요한 작업: 네임스페이스 없는 클러스터 전체 조회(`sw status`, `sw tree`, `sw observe`), 노드 목록·상세(`nodes`), 네임스페이스 목록·생성(`namespaces`), 다른 네임스페이스 접근, 여러 네임스페이스에 걸친 계획·검증, 그리고 `sw user`·`sw agent`·`sw node`·서버 수명주기 관리.
 
 ## 목록과 제거
 

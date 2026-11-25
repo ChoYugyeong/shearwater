@@ -227,7 +227,7 @@ func agentAdd(ctx context.Context, c *agentClient, configDir, listen, server, ou
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "attach to your client:")
 	for _, client := range clients {
-		fmt.Fprintf(out, "  %s\n", agentAttachCommand(client, exe, swDir, listen))
+		fmt.Fprintf(out, "  %s\n", agentAttachCommand(client, exe, swDir, listen, issued.Namespace))
 	}
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "warning: %s holds the agent's credential (kubeconfig and sw/token); keep it private (mode 0700) and out of version control.\n", absDir)
@@ -318,7 +318,7 @@ func writeAgentBundle(absDir, exe, listen, server string, ca []byte, issued issu
 	if err := atomicPrivateFile(filepath.Join(swDir, "token"), []byte(issued.Token+"\n")); err != nil {
 		return nil, err
 	}
-	mcpArgs := []string{"mcp", "--config-dir", swDir, "--listen", listen}
+	mcpArgs := []string{"mcp", "--config-dir", swDir, "--listen", listen, "--namespace", issued.Namespace}
 	mcpFiles := make([]string, 0, len(clients))
 	for _, client := range clients {
 		name, content, err := renderAgentMCPConfig(client, exe, mcpArgs)
@@ -423,8 +423,8 @@ func tomlString(s string) string {
 	return b.String()
 }
 
-func agentAttachCommand(client, exe, swDir, listen string) string {
-	cmd := fmt.Sprintf("%s mcp --config-dir %s --listen %s", shellArg(exe), shellArg(swDir), shellArg(listen))
+func agentAttachCommand(client, exe, swDir, listen, namespace string) string {
+	cmd := fmt.Sprintf("%s mcp --config-dir %s --listen %s --namespace %s", shellArg(exe), shellArg(swDir), shellArg(listen), shellArg(namespace))
 	switch client {
 	case "claude":
 		return "claude mcp add shearwater -- " + cmd
@@ -471,15 +471,16 @@ func renderAgentGuide(issued issuedUser, server, swDir, listen string) string {
 	fmt.Fprintf(&b, "- **Namespace**: `%s`\n", issued.Namespace)
 	fmt.Fprintf(&b, "- **Role**: `%s` (scoped to `%s` only)\n", issued.Role, issued.Namespace)
 	fmt.Fprintf(&b, "- **API server (kubeconfig)**: `%s`\n", server)
-	fmt.Fprintf(&b, "- **Local MCP connection**: `sw mcp --config-dir %s --listen %s`\n", swDir, listen)
+	fmt.Fprintf(&b, "- **Local MCP connection**: `sw mcp --config-dir %s --listen %s --namespace %s`\n", swDir, listen, issued.Namespace)
 	fmt.Fprintf(&b, "- **Operations skill**: `skills/shearwater-ops/SKILL.md`\n\n")
 	fmt.Fprintf(&b, "## Permissions (RBAC)\n\n")
 	fmt.Fprintf(&b, "- **Allowed**: %s\n", allow)
 	fmt.Fprintf(&b, "- **Not allowed**: %s\n", deny)
 	fmt.Fprintf(&b, "- Tenant namespaces enforce `baseline` (or `restricted`) Pod Security and any configured `ResourceQuota`.\n\n")
 	fmt.Fprintf(&b, "## MCP Tools with a Namespace-Scoped Token\n\n")
-	fmt.Fprintf(&b, "- **Works in `%s`**: `sw_capabilities`, `sw_get`, `sw_logs`, `sw_events`, `sw_why`, `sw_receipt`, and (when started with `--allow-write` under role `edit` or `admin`) `sw_plan`, `sw_app_plan`, `sw_apply`. Always pass `namespace: %q`.\n", issued.Namespace, issued.Namespace)
-	fmt.Fprintf(&b, "- **Requires cluster-wide access (returns HTTP 403)**: `sw_status`, `sw_tree`, `sw_observe`, `sw_verify`, and `sw_verify_plan` currently query cluster-wide endpoints such as `/api/v1/nodes` and fail with `UNAUTHORIZED` rather than falling back to another credential. Use `sw_get`, `sw_events`, `sw_logs`, and `sw_why` with `namespace: %q` (or focused `sw mcp --target=deploy/NAME -n %s`) instead.\n\n", issued.Namespace, issued.Namespace)
+	fmt.Fprintf(&b, "- The generated MCP command passes `--namespace %s`, so tools default to `%s` when `namespace` is omitted.\n", issued.Namespace, issued.Namespace)
+	fmt.Fprintf(&b, "- **Works in `%s`**: `sw_capabilities`, `sw_status`, `sw_tree`, `sw_observe`, `sw_verify`, `sw_verify_plan`, `sw_changes`, `sw_get`, `sw_logs`, `sw_events`, `sw_why`, `sw_receipt`, and (when started with `--allow-write` under role `edit` or `admin`) `sw_plan`, `sw_app_plan`, `sw_apply` (including post-apply verification when all targets are in `%s`).\n", issued.Namespace, issued.Namespace)
+	fmt.Fprintf(&b, "- **Node visibility and RBAC boundaries**: Node details (`/api/v1/nodes`) are not visible to a namespace-scoped token (`nodes: not visible to this identity`), while workload inspection still succeeds. Accessing another namespace, cluster-scoped resources (`nodes`, `namespaces`), or multi-namespace plans returns HTTP 403 (`UNAUTHORIZED`) and never falls back to another credential.\n\n")
 	fmt.Fprintf(&b, "## Writes and Human Approval\n\n")
 	fmt.Fprintf(&b, "- Operational writes through `sw task` (or `sw mcp --allow-write` plan tools) prepare a reviewed plan and stop before executing it.\n")
 	fmt.Fprintf(&b, "- A human operator must review the plan and locally approve the **exact plan hash** before execution. A saved plan is never approval.\n")

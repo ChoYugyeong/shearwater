@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -32,8 +33,8 @@ func runInspect(command string, args []string, out io.Writer) error {
 	listen := fs.String("listen", defaultListen, "local HTTPS host:port (127.0.0.1, localhost, or [::1])")
 	tree := command == "tree"
 	var options agent.TreeOptions
+	fs.StringVar(&options.Namespace, "n", "", "namespace to show (default all)")
 	if tree {
-		fs.StringVar(&options.Namespace, "n", "", "namespace to show (default all)")
 		fs.StringVar(&options.Root, "root", "", "show one subtree (deploy/NAME, rs/NAME, pod/NAME, or svc/NAME)")
 		fs.BoolVar(&options.Problems, "problems", false, "show problems and their ancestors")
 	}
@@ -68,7 +69,7 @@ func runInspect(command string, args []string, out io.Writer) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), inspectTimeout)
 	defer cancel()
-	snapshot, err := readInspection(ctx, client.get, tree)
+	snapshot, err := readInspectionNamespace(ctx, client.get, options.Namespace, tree)
 	if err != nil {
 		return err
 	}
@@ -126,8 +127,12 @@ func (l *inspectList[T]) revision() string { return l.Metadata.Revision }
 type inspectGET func(context.Context, string, any) error
 
 func readInspection(ctx context.Context, get inspectGET, tree bool) (agent.Snapshot, error) {
+	return readInspectionNamespace(ctx, get, "", tree)
+}
+
+func readInspectionNamespace(ctx context.Context, get inspectGET, namespace string, tree bool) (agent.Snapshot, error) {
 	for attempt := range inspectAttempts {
-		snapshot, matched, err := readInspectionOnce(ctx, get, tree)
+		snapshot, matched, err := readInspectionOnce(ctx, get, namespace, tree)
 		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
 			return agent.Snapshot{}, inspectTimeoutError()
 		}
@@ -150,7 +155,12 @@ func inspectTimeoutError() error {
 	return opsError("TIMEOUT", "safe", "timed out reading cluster state", "check sw doctor and retry the command")
 }
 
-func readInspectionOnce(ctx context.Context, get inspectGET, tree bool) (agent.Snapshot, bool, error) {
+func isForbiddenError(err error) bool {
+	var op *operationError
+	return errors.As(err, &op) && op.code == "UNAUTHORIZED" && strings.Contains(op.detail, "HTTP 403")
+}
+
+func readInspectionOnce(ctx context.Context, get inspectGET, namespace string, tree bool) (agent.Snapshot, bool, error) {
 	var nodes inspectList[apis.Node]
 	var pods inspectList[apis.Pod]
 	var namespaces inspectList[apis.Namespace]
@@ -159,26 +169,49 @@ func readInspectionOnce(ctx context.Context, get inspectGET, tree bool) (agent.S
 	var services inspectList[apis.Service]
 	var endpoints inspectList[apis.EndpointSlice]
 	type source struct {
-		path string
-		list interface{ revision() string }
+		path          string
+		list          interface{ revision() string }
+		optionalOn403 bool
 	}
-	lists := []source{{"/api/v1/nodes", &nodes}, {"/api/v1/pods", &pods}}
-	if tree {
-		lists = append(lists,
-			source{"/api/v1/namespaces", &namespaces},
-			source{"/apis/apps/v1/deployments", &deployments},
-			source{"/apis/apps/v1/replicasets", &replicaSets},
-			source{"/api/v1/services", &services},
-			source{"/apis/discovery.k8s.io/v1/endpointslices", &endpoints},
-		)
+	var lists []source
+	if namespace == "" {
+		lists = []source{{"/api/v1/nodes", &nodes, false}, {"/api/v1/pods", &pods, false}}
+		if tree {
+			lists = append(lists,
+				source{"/api/v1/namespaces", &namespaces, false},
+				source{"/apis/apps/v1/deployments", &deployments, false},
+				source{"/apis/apps/v1/replicasets", &replicaSets, false},
+				source{"/api/v1/services", &services, false},
+				source{"/apis/discovery.k8s.io/v1/endpointslices", &endpoints, false},
+			)
+		}
+	} else {
+		ns := url.PathEscape(namespace)
+		lists = []source{{"/api/v1/namespaces/" + ns + "/pods", &pods, false}}
+		if tree {
+			lists = append(lists,
+				source{"/apis/apps/v1/namespaces/" + ns + "/deployments", &deployments, false},
+				source{"/apis/apps/v1/namespaces/" + ns + "/replicasets", &replicaSets, false},
+				source{"/api/v1/namespaces/" + ns + "/services", &services, false},
+				source{"/apis/discovery.k8s.io/v1/namespaces/" + ns + "/endpointslices", &endpoints, false},
+			)
+		}
+		// Try node facts without failing the tool when a namespace-scoped
+		// identity is forbidden from reading cluster-scoped nodes.
+		lists = append(lists, source{"/api/v1/nodes", &nodes, true})
 	}
 	// The server reads each list and its store-wide resourceVersion in one
 	// SQLite read transaction. Matching list revisions mean the same committed
 	// state, even when individual objects were last changed at different times.
 	// If a write landed between lists, discard the whole attempt and start over.
 	var revision string
+	var nodesHidden bool
 	for _, list := range lists {
 		if err := get(ctx, list.path, list.list); err != nil {
+			if list.optionalOn403 && isForbiddenError(err) {
+				nodesHidden = true
+				continue
+			}
 			var op *operationError
 			if errors.As(err, &op) || errors.Is(err, context.DeadlineExceeded) {
 				return agent.Snapshot{}, false, err
@@ -195,7 +228,8 @@ func readInspectionOnce(ctx context.Context, get inspectGET, tree bool) (agent.S
 		revision = got
 	}
 	return agent.Snapshot{
-		Revision: revision, Nodes: nodes.Items, Pods: pods.Items, Namespaces: namespaces.Items,
+		Revision: revision, Namespace: namespace, NodesHidden: nodesHidden,
+		Nodes: nodes.Items, Pods: pods.Items, Namespaces: namespaces.Items,
 		Deployments: deployments.Items, ReplicaSets: replicaSets.Items, Services: services.Items, EndpointSlices: endpoints.Items,
 	}, true, nil
 }

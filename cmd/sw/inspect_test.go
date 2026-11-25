@@ -164,6 +164,7 @@ func TestInspectFlags(t *testing.T) {
 		{"tree", []string{"--root", "deploy/bad/name"}},
 		{"tree", []string{"-n", "Bad!"}},
 		{"tree", []string{"extra"}},
+		{"status", []string{"-n", "Bad!"}},
 		{"status", []string{"--problems"}},
 		{"status", []string{"--listen", "192.168.1.10:6443"}},
 	} {
@@ -183,5 +184,51 @@ func assertInspectError(t *testing.T, err error, code, retry string) {
 	t.Helper()
 	if err == nil || !strings.HasPrefix(err.Error(), code+" retry="+retry+": ") || !strings.Contains(err.Error(), "\nhint: ") {
 		t.Fatalf("error %v, want %s retry=%s with a hint", err, code, retry)
+	}
+}
+
+func TestReadInspectionNamespaceAndHiddenNodes(t *testing.T) {
+	var paths []string
+	get := func(_ context.Context, path string, out any) error {
+		paths = append(paths, path)
+		if path == "/api/v1/nodes" {
+			return opsError("UNAUTHORIZED", "never", "https://127.0.0.1:6443 replied HTTP 403 to /api/v1/nodes", "check credentials")
+		}
+		if strings.HasPrefix(path, "/api/v1/namespaces/team-b/") {
+			return opsError("UNAUTHORIZED", "never", "https://127.0.0.1:6443 replied HTTP 403 to "+path, "check credentials")
+		}
+		return json.Unmarshal([]byte(`{"metadata":{"resourceVersion":"21"},"items":[]}`), out)
+	}
+	s, err := readInspectionNamespace(context.Background(), get, "team-a", true)
+	if err != nil {
+		t.Fatalf("namespace-scoped read failed: %v", err)
+	}
+	if s.Revision != "21" || s.Namespace != "team-a" || !s.NodesHidden {
+		t.Fatalf("unexpected snapshot metadata: rev=%q ns=%q hidden=%v", s.Revision, s.Namespace, s.NodesHidden)
+	}
+	for _, forbidden := range []string{"/api/v1/pods", "/api/v1/namespaces", "/apis/apps/v1/deployments"} {
+		for _, got := range paths {
+			if got == forbidden {
+				t.Fatalf("namespace-scoped read must not request cluster-wide %s (paths=%v)", forbidden, paths)
+			}
+		}
+	}
+	// 403 on team-b must fail, never succeed.
+	if _, err := readInspectionNamespace(context.Background(), get, "team-b", true); err == nil {
+		t.Fatal("expected 403 for team-b")
+	} else {
+		assertInspectError(t, err, "UNAUTHORIZED", "never")
+	}
+	// 401 on /api/v1/nodes (invalid/revoked token) must NOT be ignored.
+	get401 := func(_ context.Context, path string, out any) error {
+		if path == "/api/v1/nodes" {
+			return opsError("UNAUTHORIZED", "never", "https://127.0.0.1:6443 replied HTTP 401 to /api/v1/nodes", "check credentials")
+		}
+		return json.Unmarshal([]byte(`{"metadata":{"resourceVersion":"21"},"items":[]}`), out)
+	}
+	if _, err := readInspectionNamespace(context.Background(), get401, "team-a", false); err == nil {
+		t.Fatal("401 on /api/v1/nodes must fail")
+	} else {
+		assertInspectError(t, err, "UNAUTHORIZED", "never")
 	}
 }

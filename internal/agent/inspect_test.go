@@ -176,6 +176,29 @@ func TestTreeServiceEndpointCounts(t *testing.T) {
 	}
 }
 
+func TestSnapshotSummaryAndTreeWithHiddenNodes(t *testing.T) {
+	empty := Snapshot{Revision: "12", Namespace: "team-a", NodesHidden: true}
+	wantSummary := "cluster shearwater rev=12 ns=team-a pods=0/0 (" + NodesHiddenNotice + ")"
+	if got := empty.Summary(); got != wantSummary {
+		t.Fatalf("summary = %q, want %q", got, wantSummary)
+	}
+	if strings.Contains(empty.Summary(), "node=<none>") {
+		t.Fatalf("hidden nodes should not claim node=<none>: %q", empty.Summary())
+	}
+	wantTree := wantSummary + "\nns team-a\n"
+	if got := mustTree(t, empty, TreeOptions{Namespace: "team-a"}); got != wantTree {
+		t.Fatalf("empty scoped tree:\n%s\nwant:\n%s", got, wantTree)
+	}
+	if _, err := empty.Tree(TreeOptions{Namespace: "team-b"}); !errors.Is(err, ErrTreeNotFound) {
+		t.Fatalf("other namespace on scoped snapshot = %v, want ErrTreeNotFound", err)
+	}
+	// Cluster-wide snapshot stays unchanged.
+	admin := Snapshot{Revision: "12"}
+	if got := admin.Summary(); got != "cluster shearwater rev=12 node=<none> pods=0/0" {
+		t.Fatalf("admin summary changed: %q", got)
+	}
+}
+
 func mustTree(t *testing.T, s Snapshot, options TreeOptions) string {
 	t.Helper()
 	got, err := s.Tree(options)

@@ -17,7 +17,7 @@ By default, `sw agent add NAME --namespace NS` creates `./NAME-agent` (mode `070
 | Path | Purpose |
 | --- | --- |
 | `kubeconfig` | Kubeconfig scoped to namespace `NS` (default namespace `NS`). Uses `--server` or the control plane's advertised address (`--advertise-address`) |
-| `sw/ca.crt`, `sw/token` | Connection folder for `sw mcp --config-dir <DIR>/sw` and `sw` CLI commands. **Never contains `admin.token` or the administrator token** |
+| `sw/ca.crt`, `sw/token` | Connection folder for `sw mcp --config-dir <DIR>/sw --namespace NS` and `sw` CLI commands. **Never contains `admin.token` or the administrator token** |
 | `mcp/claude.json` | Claude Code `.mcp.json` configuration |
 | `mcp/codex.toml` | Codex CLI `[mcp_servers.shearwater]` configuration |
 | `mcp/gemini.json` | Gemini CLI `settings.json` `mcpServers` configuration |
@@ -46,21 +46,24 @@ sw agent add NAME --namespace NS \
 
 ## `sw mcp` tools with a namespace-scoped agent token
 
-The agent connection folder (`sw/`) stores the agent token in `token` instead of `admin.token`. `sw` CLI and `sw mcp` read `token` when present and never fall back to another credential when a call is forbidden.
+The agent connection folder (`sw/`) stores the agent token in `token` instead of `admin.token`, and the generated MCP configs and attach commands pass `--namespace NS`. `sw mcp --namespace NS` uses `NS` as the default when a tool call omits `namespace`. `sw` CLI and `sw mcp` read `token` when present and never fall back to another credential when a call is forbidden.
 
 | Tool | Behavior with a namespace-scoped token | Notes |
 | --- | --- | --- |
 | `sw_capabilities` | Works | No API call required |
-| `sw_get` | Works (`namespace: NS`) | Other namespaces and cluster resources (`nodes`, `namespaces`) return HTTP 403 (`UNAUTHORIZED`) |
-| `sw_logs` | Works (`namespace: NS`) | `view` and above can read `pods` and `pods/log` |
-| `sw_events` | Works (`namespace: NS`) | `view` and above can list `events` in `NS` |
-| `sw_why` | Works (`namespace: NS`) | Reads Pod, Events, and logs within `NS` |
+| `sw_status`, `sw_tree` | Works (default `NS` or `namespace: NS`) | Reads only lists in `NS`. If `/api/v1/nodes` returns 403, continues and reports `nodes: not visible to this identity`. Cluster-wide calls without a namespace or calls for another namespace return HTTP 403 (`UNAUTHORIZED`) |
+| `sw_observe`, `sw_verify` | Works (default `NS` or `namespace: NS`) | Reads only Deployments, ReplicaSets, Pods, Services, and EndpointSlices in `NS`. Includes `nodes: not visible to this identity` in `notes` when nodes are hidden. Other namespaces return HTTP 403 |
+| `sw_verify_plan` | Works when every goal in the receipt is in `NS` | Reads only `NS` when all receipt goals share one namespace. Multi-namespace or other-namespace goals return HTTP 403 |
+| `sw_changes` | Works (default `NS` or `namespace: NS`) | Server filters change entries according to the caller's RBAC |
+| `sw_get` | Works (default `NS` or `namespace: NS`) | Other namespaces and cluster resources (`nodes`, `namespaces`) return HTTP 403 (`UNAUTHORIZED`) |
+| `sw_logs` | Works (default `NS` or `namespace: NS`) | `view` and above can read `pods` and `pods/log` |
+| `sw_events` | Works (default `NS` or `namespace: NS`) | `view` and above can list `events` in `NS` |
+| `sw_why` | Works (default `NS` or `namespace: NS`) | Reads Pod, Events, and logs within `NS` |
 | `sw_receipt` | Works | Reads local plan receipt files |
-| `sw_plan`, `sw_app_plan`, `sw_apply` | Works with `--allow-write` under `edit` or `admin` (`namespace: NS`) | Fails with HTTP 403 under `view`, for other namespaces, or for `Namespace` objects. Local `sw approve` of the exact plan hash is still required |
+| `sw_plan`, `sw_app_plan`, `sw_apply` | Works with `--allow-write` under `edit` or `admin` (`NS`) | Immediate post-apply verification (`verifyAppliedPlan`) also succeeds when all goals are in `NS`. Fails with HTTP 403 under `view`, for other namespaces, or for `Namespace` objects. Local `sw approve` of the exact plan hash is still required |
 | Focused tools (`sw_target_*`) | Works (`sw mcp --target=deploy/NAME -n NS`) | Queries only Deployment, ReplicaSet, and Pods in `NS` |
-| `sw_status`, `sw_tree`, `sw_observe`, `sw_verify`, `sw_verify_plan` | Fails with HTTP 403 (`UNAUTHORIZED`) | Currently query cluster-wide endpoints such as `/api/v1/nodes` and therefore require administrator access; never fall back to another credential |
 
-> Note: Under `edit` or `admin`, `sw_apply` completes the writes in `NS`, but its immediate post-apply `verifyAppliedPlan` check queries cluster-wide lists and receives HTTP 403, leaving `verification.state` as `unknown`. Verify readiness inside `NS` with `sw_get`, `sw_why`, or focused `sw mcp --target=deploy/NAME -n NS`.
+> Still requires administrator access: cluster-wide inspection without a namespace (`sw status`, `sw tree`, `sw observe`), node inspection (`nodes`), listing or creating `namespaces`, accessing other namespaces, multi-namespace plans and verification, and `sw user`, `sw agent`, `sw node`, or server lifecycle commands.
 
 ## Listing and removing agents
 

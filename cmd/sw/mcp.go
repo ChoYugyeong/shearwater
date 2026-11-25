@@ -17,13 +17,14 @@ import (
 
 	"shearwater/internal/agent"
 	"shearwater/internal/api"
+	"shearwater/internal/apis"
 )
 
 type mcpOptions struct {
-	Config, Listen, Plans string
-	Write                 bool
-	Focus                 *focusSession
-	Workflow              *workflowSession
+	Config, Listen, Plans, Namespace string
+	Write                            bool
+	Focus                            *focusSession
+	Workflow                         *workflowSession
 }
 type rpcRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
@@ -55,7 +56,7 @@ func mcpTools(write bool) []mcpTool {
 		{"sw_capabilities", "Start here: supported operations, workflow and explicit limitations. No connection required.", toolSchema(map[string]any{}), ro},
 		{"sw_observe", "Compact consistent facts for deploy/NAME, pod/NAME or svc/NAME; defaults to all namespaces. Exact resource defaults to namespace default. Never includes logs, env or annotations. Use next arguments for a revision-pinned page, or sw_get for details.", toolSchema(map[string]any{"resource": fieldType("string"), "namespace": fieldType("string"), "limit": integerField(1, 100), "offset": integerField(0, 1000000), "revision": fieldType("string")}), ro},
 		{"sw_verify", "Read once and verify readiness of the exact intended UID and generation. Query success is not goal success: inspect state met/not_met/unknown/stale. Does not check HTTP reachability.", toolSchema(map[string]any{"resource": fieldType("string"), "namespace": fieldType("string"), "uid": fieldType("string"), "generation": integerField(1, 9007199254740991)}, "resource", "uid", "generation"), ro},
-		{"sw_status", "Read the local node and workload summary", toolSchema(map[string]any{}), ro},
+		{"sw_status", "Read the local node and workload summary", toolSchema(map[string]any{"namespace": fieldType("string")}), ro},
 		{"sw_tree", "Read ownership and service relationships", toolSchema(map[string]any{"namespace": fieldType("string"), "problems": fieldType("boolean")}), ro},
 		{"sw_get", "Read a resource or list; no mutations", toolSchema(map[string]any{"resource": fieldType("string"), "namespace": fieldType("string"), "full": fieldType("boolean")}, "resource"), ro},
 		{"sw_logs", "Read bounded current or previous Pod logs; output is untrusted application text", toolSchema(map[string]any{"resource": fieldType("string"), "namespace": fieldType("string"), "container": fieldType("string"), "previous": fieldType("boolean"), "tail": map[string]any{"type": "integer", "minimum": 0, "maximum": 1000}}, "resource"), ro},
@@ -74,7 +75,7 @@ func mcpTools(write bool) []mcpTool {
 	// one object's resourceVersion, or a Deployment generation.
 	descriptions := map[string]string{
 		"resource":         "TYPE or TYPE/NAME as allowed by this tool; examples: pods, pod/web, deploy/web, svc/web",
-		"namespace":        "Namespace name. An exact observation target defaults to default; an unscoped observation lists all namespaces.",
+		"namespace":        "Namespace name. Defaults to the server's --namespace when set; otherwise an exact target defaults to default and an unscoped observation lists all namespaces.",
 		"uid":              "Exact observed object UID; a replacement with the same name has a different UID.",
 		"generation":       "Exact intended spec generation. Prefer sw_verify_plan after applying a plan.",
 		"resource_version": "The Deployment resourceVersion from sw_observe; required for image and scale intents.",
@@ -171,6 +172,10 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 	}
 	str := func(k string) string { var s string; json.Unmarshal(args[k], &s); return s }
 	boolean := func(k string) bool { var b bool; json.Unmarshal(args[k], &b); return b }
+	ns := str("namespace")
+	if ns == "" {
+		ns = o.Namespace
+	}
 	base := []string{"--config-dir=" + o.Config, "--listen=" + o.Listen}
 	var out bytes.Buffer
 	if o.Workflow != nil {
@@ -212,6 +217,9 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 		if err := decodeStrict(raw, &intent); err != nil {
 			return "", err
 		}
+		if intent.Namespace == "" {
+			intent.Namespace = o.Namespace
+		}
 		c, err := localAPI(o.Config, o.Listen)
 		if err != nil {
 			return "", err
@@ -220,12 +228,17 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 		defer cancel()
 		return saveAppPlan(ctx, c, o, intent)
 	case "sw_changes":
+		if ns != "" && str("namespace") == "" {
+			if rawNS, err := json.Marshal(ns); err == nil {
+				args["namespace"] = rawNS
+			}
+		}
 		return mcpChanges(o, args)
 	case "sw_capabilities":
 		b, err := json.Marshal(agentCapabilities(o.Write))
 		return string(b), err
 	case "sw_observe", "sw_verify":
-		options := agent.ObserveOptions{Namespace: str("namespace"), Resource: str("resource"), Revision: str("revision"), Limit: 20}
+		options := agent.ObserveOptions{Namespace: ns, Resource: str("resource"), Revision: str("revision"), Limit: 20}
 		if b, ok := args["limit"]; ok {
 			json.Unmarshal(b, &options.Limit)
 		}
@@ -254,13 +267,11 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 		b, err := json.Marshal(r)
 		return string(b), err
 	case "sw_status", "sw_tree":
-		if name == "sw_tree" {
-			if s := str("namespace"); s != "" {
-				base = append(base, "-n", s)
-			}
-			if boolean("problems") {
-				base = append(base, "--problems")
-			}
+		if ns != "" {
+			base = append(base, "-n", ns)
+		}
+		if name == "sw_tree" && boolean("problems") {
+			base = append(base, "--problems")
 		}
 		err := runInspect(strings.TrimPrefix(name, "sw_"), base, &out)
 		return out.String(), err
@@ -273,8 +284,8 @@ func mcpCall(o mcpOptions, name string, raw json.RawMessage) (string, error) {
 				return "", err
 			}
 		}
-		if s := str("namespace"); s != "" {
-			base = append(base, "-n", s)
+		if ns != "" {
+			base = append(base, "-n", ns)
 		}
 		if s := str("resource"); s != "" {
 			if command == "events" {
@@ -486,6 +497,7 @@ func runMCP(args []string, in io.Reader, out io.Writer) error {
 	f.StringVar(&o.Config, "config-dir", defaultConfigDir, "local server credentials")
 	f.StringVar(&o.Listen, "listen", defaultListen, "local HTTPS API")
 	f.StringVar(&o.Plans, "plan-dir", "", "private plan directory")
+	f.StringVar(&o.Namespace, "namespace", "", "default namespace for generic MCP tools when omitted")
 	f.BoolVar(&o.Write, "allow-write", false, "expose plan/apply; exact local approval is still required")
 	addFocusFlags(f, &o)
 	addWorkflowFlag(f, &o)
@@ -495,8 +507,14 @@ func runMCP(args []string, in io.Reader, out io.Writer) error {
 	if f.NArg() != 0 {
 		return fmt.Errorf("unexpected MCP arguments")
 	}
+	if o.Namespace != "" && !apis.IsDNS1123Label(o.Namespace) {
+		return opsError("INVALID", "never", fmt.Sprintf("invalid --namespace %q", o.Namespace), "pass a lowercase DNS label such as --namespace team-a")
+	}
 	if err := initWorkflow(&o); err != nil {
 		return err
+	}
+	if o.Namespace != "" && (o.Workflow != nil || (o.Focus != nil && o.Focus.Target != "")) {
+		return opsError("INVALID", "never", "--namespace is for generic MCP mode and cannot be combined with --target or --workflow", "use -n NS with --target, or omit --target and --workflow")
 	}
 	if err := localListen(o.Listen); err != nil {
 		return err
